@@ -105,7 +105,11 @@ struct PanelContainerView<Content: View>: View {
     /// Started on onAppear and on each panel open. Stopped on close/disappear.
     /// Always call stopPolling() before startPolling() to avoid duplicate tasks.
     /// Named "sheetPoll" for Instruments visibility (RG6).
-    @State private var pollTask: Task<Void, Never>?
+    ///
+    /// Typed as `Task<Void, any Error>` because the body contains `try await Task.sleep`,
+    /// which requires a throwing context. `Task(name:operation:)` infers `Failure == any Error`
+    /// when the closure throws; using `Never` here would be a type mismatch.
+    @State private var pollTask: Task<Void, any Error>?
 
     /// Tracks panel open/close state and the transient-hide flag.
     ///
