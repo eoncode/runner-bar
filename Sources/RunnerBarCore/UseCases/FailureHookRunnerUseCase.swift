@@ -285,3 +285,4 @@ public struct FailureHookRunnerUseCase: Sendable {
         str.replacingOccurrences(of: "'", with: "'\\''")
     }
 }
+// swiftlint:disable:this file_length
