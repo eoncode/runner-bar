@@ -2,21 +2,6 @@
 // RunnerBarCore
 import Foundation
 
-// MARK: - ScopePreferencesStoreError
-
-/// Errors thrown by `ScopePreferencesStore`.
-public enum ScopePreferencesStoreError: LocalizedError, Sendable {
-    /// The `ScopePreferences` value could not be encoded to JSON for the given scope.
-    case encodingFailed(String)
-
-    public var errorDescription: String? {
-        switch self {
-        case .encodingFailed(let scope):
-            "ScopePreferencesStore: failed to encode preferences for scope '\(scope)'"
-        }
-    }
-}
-
 // MARK: - ScopePreferencesStore
 
 /// Actor that owns all `UserDefaults` read/write for per-scope preferences.
@@ -89,12 +74,16 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     }
 
     /// Encodes and writes `prefs` for `scope`.
-    /// Throws `ScopePreferencesStoreError.encodingFailed` rather than silently discarding
-    /// data on encode failure (Reach P11 — typed throws at domain boundaries).
-    private func write(_ prefs: ScopePreferences, for scope: String) throws(ScopePreferencesStoreError) {
+    ///
+    /// `JSONEncoder` encoding a flat `Codable` struct of `String?/Bool/Int?` fields
+    /// cannot realistically fail. If it ever does (e.g. OOM), the failure is logged
+    /// and the write is a no-op — the stored blob simply retains its previous value.
+    /// `throws` is intentionally absent: surfacing an error here would require
+    /// changing all `setXxx` protocol signatures to `throws` with no practical benefit.
+    private func write(_ prefs: ScopePreferences, for scope: String) {
         guard let data = try? encoder.encode(prefs) else {
-            log("ScopePreferencesStore › encode failed for scope: \(scope)")
-            throw ScopePreferencesStoreError.encodingFailed(scope)
+            log("ScopePreferencesStore › encode failed for scope: \(scope) — write skipped")
+            return
         }
         store.set(data, forKey: blobKey(for: scope))
         log("ScopePreferencesStore › saved preferences for \(scope)")
@@ -120,7 +109,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.alias = (trimmed?.isEmpty == false) ? trimmed : nil
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › alias for \(scope) = \(prefs.alias ?? "nil (cleared)")")
     }
 
@@ -137,7 +126,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     public func setPollingInterval(_ interval: Int?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.pollingInterval = interval
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › pollingInterval for \(scope) = \(interval.map(String.init) ?? "nil (use global)")")
     }
 
@@ -150,7 +139,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     public func setNotifyOnSuccess(_ value: Bool?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.notifyOnSuccess = value
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › notifyOnSuccess for \(scope) = \(value.map(String.init) ?? "nil (use global)")")
     }
 
@@ -161,7 +150,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     public func setNotifyOnFailure(_ value: Bool?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.notifyOnFailure = value
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › notifyOnFailure for \(scope) = \(value.map(String.init) ?? "nil (use global)")")
     }
 
@@ -174,7 +163,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     public func setFailureHookEnabled(_ enabled: Bool, for scope: String) {
         var prefs = read(scope: scope)
         prefs.failureHookEnabled = enabled
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)")
     }
 
@@ -186,7 +175,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.failureHookCommand = (trimmed?.isEmpty == false) ? trimmed : nil
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")")
     }
 
@@ -198,7 +187,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.localRepoPath = (trimmed?.isEmpty == false) ? trimmed : nil
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")")
     }
 
@@ -209,7 +198,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     public func setFailureHookBranch(_ branch: String?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.failureHookBranch = (branch?.isEmpty == false) ? branch : nil
-        try? write(prefs, for: scope)
+        write(prefs, for: scope)
         log("ScopePreferencesStore › failureHookBranch for \(scope) = \(prefs.failureHookBranch ?? "nil (all branches)")")
     }
 
@@ -263,7 +252,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
             if let v = store.string(forKey: "scope.\(scope).failureHookBranch"), !v.isEmpty {
                 prefs.failureHookBranch = v
             }
-            try? write(prefs, for: scope)
+            write(prefs, for: scope)
             for field in ["alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
                           "failureHookEnabled", "failureHookCommand", "localRepoPath", "failureHookBranch"] {
                 store.removeObject(forKey: "scope.\(scope).\(field)")

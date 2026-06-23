@@ -77,13 +77,9 @@ public protocol ScopePreferencesStoreProtocol: Actor {
 
 // MARK: - TerminalLauncherProtocol
 
-/// Abstracts `TerminalLauncher.open(command:)` so `FailureHookRunnerUseCase` can be
-/// tested without spawning an actual Terminal.app window.
-///
-/// `open(command:)` is `@MainActor` — `NSAppleScript` must run on the main thread.
-/// The protocol has no actor-isolation requirement at the type level; only
-/// `open(command:)` requires `@MainActor`.
+/// Abstracts the terminal-launcher dependency so `FailureHookRunnerUseCase` can
+/// be tested without spawning real processes.
 public protocol TerminalLauncherProtocol: Sendable {
-    /// Opens a Terminal.app window and runs `command`. Must be called on `@MainActor`.
-    @MainActor func open(command: String)
+    /// Opens a terminal application and runs `command`.
+    func open(_ command: String)
 }

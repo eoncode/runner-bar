@@ -57,6 +57,8 @@ struct ScopesView: View {
         }
         // Sheet is presented only once both entry and preferences snapshot are ready.
         // The Binding maps nil/non-nil of selectedScopeEntry to Bool.
+        // The else branch is defensive — both state writes happen in the same
+        // @MainActor turn after the await, so it should never be visible. (#1538)
         .sheet(item: $selectedScopeEntry) { entry in
             if let prefs = selectedScopePreferences {
                 // #992: ScopeEditSheet replaces the old nav drill-down.
@@ -69,6 +71,10 @@ struct ScopesView: View {
                         set: { if !$0 { selectedScopeEntry = nil; selectedScopePreferences = nil } }
                     )
                 )
+            } else {
+                // Preferences not yet fetched — renders an empty sheet rather than
+                // a blank/crashed view in the theoretical race described above.
+                EmptyView()
             }
         }
     }

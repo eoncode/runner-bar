@@ -25,6 +25,7 @@ import SwiftUI
 // #1538: init now receives a pre-fetched ScopePreferences snapshot so seeds are
 //        synchronous. confirmSave() is async — called via plain Task{} to keep
 //        @MainActor isolation after the actor awaits (P9).
+//        Header now shows alias (from snapshot) when set, raw scope otherwise.
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -66,6 +67,10 @@ struct ScopeEditSheet: View {
     /// The NSWindow hosting this sheet, captured early via WindowGrabber so
     /// it is reliably available when openFolderPicker() is called. (#1195)
     @State private var hostWindow: NSWindow?
+    /// Display name shown in the sheet header: alias if set, raw scope string otherwise.
+    /// Derived from the pre-fetched `ScopePreferences` snapshot in `init` so the
+    /// header always reflects the user's alias without an extra actor hop. (#1538)
+    private let headerDisplayName: String
 
     /// Creates the view, seeding `@State` draft values from a pre-fetched
     /// `ScopePreferences` snapshot.
@@ -81,6 +86,8 @@ struct ScopeEditSheet: View {
     init(scopeEntry: ScopeEntry, preferences: ScopePreferences, isPresented: Binding<Bool>) {
         self.scopeEntry = scopeEntry
         self._isPresented = isPresented
+        let alias = preferences.alias.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        self.headerDisplayName = alias ?? scopeEntry.scope
         _hookEnabled = State(initialValue: preferences.failureHookEnabled)
         _hookBranch = State(initialValue: preferences.failureHookBranch)
         // Seed with the persisted value or empty string — never the default command.
@@ -164,10 +171,10 @@ extension ScopeEditSheet {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(Color.rbSurfaceElevated))
                     .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                // Display name is derived from the draft hookBranch / alias seeded in init.
-                // For the header label we fall back to the raw scope string — the alias
-                // field is not editable inside this sheet (it lives in a future alias row).
-                Text(scope)
+                // Shows alias when set, raw scope string otherwise.
+                // `headerDisplayName` is derived from the pre-fetched ScopePreferences
+                // snapshot in init — no extra actor hop needed. (#1538)
+                Text(headerDisplayName)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1).truncationMode(.middle)
             }
