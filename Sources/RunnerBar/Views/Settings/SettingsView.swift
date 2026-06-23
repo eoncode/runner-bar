@@ -121,6 +121,9 @@ struct SettingsView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 sectionsStack
             }
+            // maxHeight: .infinity — fills all space the panel gives us.
+            // AppDelegate caps the panel at 85% visibleFrame. That IS the limit.
+            // ❌ NEVER replace .infinity with a fixed number — the panel cap is the boundary.
             .frame(maxHeight: .infinity)
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
