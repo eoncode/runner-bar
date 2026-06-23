@@ -41,21 +41,15 @@ struct SettingsView: View {
     /// Defaults to `LocalRunnerStore.shared` so call sites that don't own the actor still compile.
     var localRunnerStore: LocalRunnerStore = .shared
 
-    // MARK: - Observed stores
-    // These singleton preference stores are `@Observable` types. The view keeps
-    // stable references to the shared instances with `@State`, while SwiftUI tracks
-    // field reads from the Observation system.
-    // store (RunnerViewModel) is also @Observable and is injected as a plain stored property.
-    //
-    // NOTE: These properties (and the @State vars below) are `internal` rather than
-    // `private` so that SettingsView+Sections.swift can access them from a separate-file
-    // extension. Swift does not allow `private` members to be read across files even
-    // within the same type. See SE-0169. signOutCancellable is the sole exception —
-    // it is not referenced in the extension and intentionally stays `private`.
-    /// App-wide preferences (notifications, update channel, etc.).
-    @State var settings = AppPreferencesStore.shared
+    // MARK: - Injected services
+    /// OAuth service used for sign-in / sign-out flows.
+    /// Defaults to the shared live instance; swap for a fake in tests.
+    let oauthService: OAuthService
+    /// App-wide preference store (notifications, update channel, etc.).
+    /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
+    let settings: AppPreferencesStore
     /// Notification opt-in preferences per scope.
-    @State var notifications = NotificationPreferences.shared
+    let notifications: NotificationPreferences
 
     // MARK: - Local UI state
     /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
@@ -66,12 +60,35 @@ struct SettingsView: View {
     @State var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
     /// `true` while the OAuth sign-in flow is in progress.
     @State var isSigningIn = false
+    /// Retains the sign-in listener Task so it is cancelled when the view disappears.
+    @State private var signInTask: Task<Void, Never>?
     /// Retains the sign-out listener Task so it is cancelled when the view disappears.
     @State private var signOutTask: Task<Void, Never>?
     /// `true` while `LocalRunnersView` is displayed instead of the main settings scroll.
     @State var showLocalRunners = false
     /// `true` while `ScopesView` is displayed instead of the main settings scroll.
     @State var showScopes = false
+
+    // MARK: - Init
+    /// Creates the view with injected dependencies.
+    ///
+    /// Production call sites can omit all service parameters — the defaults wire
+    /// up the shared live instances automatically.
+    init(
+        onBack: @escaping () -> Void,
+        store: RunnerViewModel,
+        localRunnerStore: LocalRunnerStore = .shared,
+        oauthService: OAuthService = .shared,
+        settings: AppPreferencesStore = .shared,
+        notifications: NotificationPreferences = .shared
+    ) {
+        self.onBack = onBack
+        self.store = store
+        self.localRunnerStore = localRunnerStore
+        self.oauthService = oauthService
+        self.settings = settings
+        self.notifications = notifications
+    }
 
     // MARK: - Computed properties
     /// Short version string from `CFBundleShortVersionString`.
@@ -90,7 +107,7 @@ struct SettingsView: View {
         // onAppearAction()/onDisappear fire only when the settings panel itself
         // opens/closes — NOT on every navigation to LocalRunnersView/ScopesView.
         // Attaching them to `settingsBody` caused needless Keychain re-reads and
-        // signOutCancellable recreation on every back-navigation.
+        // Task recreation on every back-navigation.
         Group {
             if showLocalRunners {
                 LocalRunnersView(
@@ -107,11 +124,12 @@ struct SettingsView: View {
         }
         .onAppear(perform: onAppearAction)
         .onDisappear {
-            // Clear the singleton closure so a future SettingsView instance can claim it.
-            // Without this, the last-opened instance permanently owns onCompletion.
-            // Guard: do not clear while an OAuth flow is in progress — the callback must land.
-            if !isSigningIn { OAuthService.shared.onCompletion = nil }
-            // Cancel the sign-out listener — a new Task is started on next onAppear.
+            // Cancel both listener tasks — new Tasks are started on next onAppear.
+            // Guard: do not cancel the sign-in task while a flow is in progress.
+            if !isSigningIn {
+                signInTask?.cancel()
+                signInTask = nil
+            }
             signOutTask?.cancel()
             signOutTask = nil
         }
@@ -162,7 +180,7 @@ struct SettingsView: View {
         .padding(.bottom, 16)
     }
 
-    /// Runs on `.onAppear`: refreshes auth state and starts the sign-out listener.
+    /// Runs on `.onAppear`: refreshes auth state and starts sign-in / sign-out listeners.
     private func onAppearAction() {
         let keychainToken = Keychain.token
         let envToken = githubToken()
@@ -172,15 +190,21 @@ struct SettingsView: View {
         // swiftlint:disable:next line_length
         log("SettingsView › onAppear — Keychain.token=\(keychainToken.map { "present(len=\($0.count))" } ?? "nil") githubToken=\(envToken.map { "present(len=\($0.count))" } ?? "nil") isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
         #endif
-        OAuthService.shared.onCompletion = { success in
-            log("SettingsView › onCompletion — success=\(success), updating auth state")
-            isOAuthAuthenticated = success
-            isCLIAuthenticated = !success && githubToken() != nil
-            log("SettingsView › onCompletion — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
-            isSigningIn = false
+
+        // Replace the old `onCompletion` closure with a structured async stream.
+        // This avoids the retained-closure / multiple-subscriber hazard (P9).
+        signInTask = Task { @MainActor in
+            for await success in oauthService.makeSignInStream() {
+                log("SettingsView › signInStream — success=\(success), updating auth state")
+                isOAuthAuthenticated = success
+                isCLIAuthenticated = !success && githubToken() != nil
+                log("SettingsView › signInStream — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+                isSigningIn = false
+            }
         }
+
         signOutTask = Task { @MainActor in
-            for await _ in OAuthService.shared.makeSignOutStream() {
+            for await _ in oauthService.makeSignOutStream() {
                 let postToken = githubToken()
                 log("SettingsView › didSignOut — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
                 isOAuthAuthenticated = false
@@ -212,16 +236,16 @@ struct SettingsView: View {
     /// Applies or removes the Login Item entry based on `enabled`.
     func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
-    /// Initiates the OAuth sign-in flow via `OAuthService`.
+    /// Initiates the OAuth sign-in flow via the injected `oauthService`.
     func signInWithGitHub() {
         log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
-        OAuthService.shared.signIn()
+        oauthService.signIn()
     }
 
-    /// Signs out of GitHub and clears all stored tokens.
+    /// Signs out of GitHub via the injected `oauthService`.
     func signOutOfGitHub() {
-        log("SettingsView › signOutOfGitHub — calling OAuthService.shared.signOut()")
-        OAuthService.shared.signOut()
+        log("SettingsView › signOutOfGitHub — calling oauthService.signOut()")
+        oauthService.signOut()
     }
 }
