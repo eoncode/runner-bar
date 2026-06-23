@@ -211,9 +211,9 @@ struct StepLogView: View {
     ///
     /// Uses `repoScopeForFetch` (derived from `job.htmlUrl`) as the primary scope.
     /// Fallback order:
-    /// 1. First `owner/repo` in `activeScopes` (enabled entries).
-    /// 2. If none, first `owner/repo` in all entries (preserves #1106 single-repo fallback,
-    ///    even when the scope is currently disabled).
+    /// 1. First `owner/repo` in all entries, including disabled ones (preserves #1106
+    ///    single-repo fallback — the saved repo is always preferred over an unrelated active repo).
+    /// 2. If no entries exist, first `owner/repo` in `activeScopes`.
     private func loadLog() {
         isLoading = true
         let jobID = job.id
@@ -222,12 +222,12 @@ struct StepLogView: View {
             let primary = repoScopeForFetch
             if !primary.isEmpty { return primary }
 
-            if let active = ScopeStore.shared.activeScopes.first(where: { $0.contains("/") }) {
-                return active
-            }
-
             if let any = ScopeStore.shared.entries.first(where: { $0.scope.contains("/") })?.scope {
                 return any
+            }
+
+            if let active = ScopeStore.shared.activeScopes.first(where: { $0.contains("/") }) {
+                return active
             }
 
             return ""
