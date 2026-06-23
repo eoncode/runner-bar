@@ -9,7 +9,8 @@ import Testing
 /// In-memory stand-in for `ScopePreferencesStoreProtocol`.
 /// Records every `setPreferences(_:for:)` call so tests can assert
 /// that exactly one write occurred and that it carried the correct values.
-final class FakeScopePreferencesStore: ScopePreferencesStoreProtocol, @unchecked Sendable {
+@MainActor
+final class FakeScopePreferencesStore: ScopePreferencesStoreProtocol {
 
     // MARK: Stored state
 
@@ -48,8 +49,9 @@ final class FakeScopePreferencesStore: ScopePreferencesStoreProtocol, @unchecked
 
 // MARK: - Helpers
 
-/// Mimics the atomic save logic from `ScopeEditSheet.confirmSave()`.
+/// Mimics the save logic from `ScopeEditSheet.confirmSave()`.
 /// Extracted here so the core contract can be tested without importing SwiftUI.
+@MainActor
 private func confirmSave(
     scope: String,
     updated: ScopePreferences,
@@ -60,6 +62,7 @@ private func confirmSave(
 
 // MARK: - Test suite
 
+@MainActor
 @Suite("ScopeEditSheet atomic save")
 struct ScopeEditSheetTests {
 

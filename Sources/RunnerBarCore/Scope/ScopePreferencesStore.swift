@@ -211,6 +211,10 @@ extension ScopePreferencesStore {
             )
         }
 
+        /// Persists all fields in a single call, replacing the previous per-field
+        /// write pattern. All eight `UserDefaults` writes happen sequentially on
+        /// the main actor — no partial-save window between them from any other
+        /// main-actor caller.
         public func setPreferences(_ prefs: ScopePreferences, for scope: String) {
             ScopePreferencesStore.setAlias(prefs.alias, for: scope)
             ScopePreferencesStore.setPollingInterval(prefs.pollingInterval, for: scope)
