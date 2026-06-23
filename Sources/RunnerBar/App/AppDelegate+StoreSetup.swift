@@ -2,6 +2,7 @@
 // RunnerBar
 
 import AppKit
+import RunnerBarCore
 
 /// AppDelegate extension wiring app-lifecycle callbacks to store and service setup.
 extension AppDelegate {
@@ -17,7 +18,8 @@ extension AppDelegate {
     }
 
     /// Entry point after launch. Configures the GitHub API clients, builds the
-    /// status-bar item, and constructs the NSPopover panel.
+    /// status-bar item, constructs the NSPopover panel, and migrates per-scope
+    /// preferences from the legacy flat-key format to the single-blob actor (#1538).
     /// - Parameter _: The notification (unused).
     func applicationDidFinishLaunching(_ _: Notification) {
         log("AppDelegate › applicationDidFinishLaunching — START")
@@ -34,12 +36,22 @@ extension AppDelegate {
         }
         // Both `endpoint` and `timeout` must be forwarded so callers that pass
         // a custom timeout via ghAPIPaginated(endpoint, timeout:) are not silently
-        // overridden by apiPaginated’s 60-second default.
+        // overridden by apiPaginated's 60-second default.
         configureGHAPIPaginated { endpoint, timeout in
             await sharedGitHubTransport.apiPaginated(endpoint, timeout: timeout)
         }
         setupStatusItem()
         setupPanel()
         setupSignOutSubscription()
+        // Migrate legacy flat UserDefaults keys → single JSON blob per scope.
+        // Must run after ScopeStore is set up (setupPanel → setupSubscriptions
+        // initialises ScopeStore.shared), before any ScopePreferencesStore reads.
+        // Plain Task{} — inherits @MainActor from AppDelegate, so knownScopes is
+        // read on main and the await crosses to the actor safely. (#1538)
+        let knownScopes = ScopeStore.shared.entries.map(\.scope)
+        Task {
+            await ScopePreferencesStore.shared.migrateIfNeeded(knownScopes: knownScopes)
+        }
+        log("AppDelegate › applicationDidFinishLaunching — migration task enqueued for \(knownScopes.count) scopes")
     }
 }
