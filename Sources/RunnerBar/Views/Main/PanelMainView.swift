@@ -44,7 +44,7 @@ struct PanelMainView: View {
     @State private var displayTick: Int = 0
     /// Structured task driving the 1-second `displayTick` loop; managed by `startDisplayTickTimer()`.
     /// Named "displayTick" for visibility in Instruments (RG6).
-    @State private var displayTickTask: Task<Void, Never>?
+    @State private var displayTickTask: Task<Void, any Error>?
 
     /// Creates a `PanelMainView`.
     init(
