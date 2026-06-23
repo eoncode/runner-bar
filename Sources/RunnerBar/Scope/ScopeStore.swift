@@ -119,4 +119,23 @@ final class ScopeStore {
         // remains accurate if copying(isEnabled:) ever gains filtering logic.
         log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(entries[idx].isEnabled)")
     }
+
+    // MARK: - Display name cache
+
+    /// Re-hydrates the transient `displayName` on every entry from `ScopePreferencesStore`.
+    ///
+    /// Call this once after launch (from `AppDelegate+StoreSetup`) and again after
+    /// `ScopeEditSheet` saves new preferences, so `ScopesView` reflects alias changes
+    /// without requiring a full restart. Runs on `@MainActor`; the actor hop to
+    /// `ScopePreferencesStore` is handled by `preferences(for:)`.
+    func refreshDisplayNames() async {
+        var updated = entries
+        for idx in updated.indices {
+            let prefs = await ScopePreferencesStore.shared.preferences(for: updated[idx].scope)
+            let alias = prefs.alias.flatMap { $0.isEmpty ? nil : $0 }
+            updated[idx] = updated[idx].copying(displayName: alias)
+        }
+        entries = updated
+        log("ScopeStore › refreshed display names for \(entries.count) scope(s)")
+    }
 }

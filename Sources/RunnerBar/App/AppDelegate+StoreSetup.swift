@@ -51,6 +51,9 @@ extension AppDelegate {
         let knownScopes = ScopeStore.shared.entries.map(\.scope)
         Task {
             await ScopePreferencesStore.shared.migrateIfNeeded(knownScopes: knownScopes)
+            // Re-hydrate cached display names after migration so ScopesView shows
+            // aliases immediately on first launch. (#1538)
+            await ScopeStore.shared.refreshDisplayNames()
         }
         log("AppDelegate › applicationDidFinishLaunching — migration task enqueued for \(knownScopes.count) scopes")
     }

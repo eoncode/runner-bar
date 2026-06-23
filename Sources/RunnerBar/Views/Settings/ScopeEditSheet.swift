@@ -492,6 +492,9 @@ extension ScopeEditSheet {
         prefs.failureHookCommand = command.isEmpty ? nil : command
         prefs.localRepoPath = path.isEmpty ? nil : path
         await ScopePreferencesStore.shared.setPreferences(prefs, for: scope)
+        // Refresh cached display names so ScopesView reflects the newly saved alias
+        // immediately after the sheet closes, without requiring an app restart. (#1538)
+        await ScopeStore.shared.refreshDisplayNames()
         isPresented = false
     }
 
