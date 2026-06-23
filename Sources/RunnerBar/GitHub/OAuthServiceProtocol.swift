@@ -26,7 +26,7 @@ import Foundation
 /// ```swift
 /// @MainActor
 /// final class StubOAuthService: OAuthServiceProtocol {
-///     var onCompletion: ((Bool) -> Void)?
+///     var onCompletion: (@MainActor (Bool) -> Void)?
 ///     func signIn() {}
 ///     func signOut() {}
 ///     func handleCallback(_ url: URL) {}
@@ -37,7 +37,8 @@ import Foundation
 protocol OAuthServiceProtocol: AnyObject {
     /// Called on the main thread after sign-in completes. `true` = success.
     /// Register once in `SettingsView.onAppearAction` — do NOT re-assign in `signIn()`.
-    var onCompletion: ((Bool) -> Void)? { get set }
+    /// The closure itself is `@MainActor`-isolated — conformers must invoke it on the main actor.
+    var onCompletion: (@MainActor (Bool) -> Void)? { get set }
 
     /// Opens the GitHub OAuth authorization page in the default browser to begin sign-in.
     func signIn()
