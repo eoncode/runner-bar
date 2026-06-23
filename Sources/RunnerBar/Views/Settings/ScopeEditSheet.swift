@@ -26,6 +26,7 @@ import SwiftUI
 //        synchronous. confirmSave() is async — called via plain Task{} to keep
 //        @MainActor isolation after the actor awaits (P9).
 //        Header now shows alias (from snapshot) when set, raw scope otherwise.
+//        confirmSave() uses setPreferences(_:for:) — single actor hop instead of 4.
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -469,22 +470,28 @@ extension ScopeEditSheet {
         hookBranch = nil
     }
 
-    /// Single commit point: writes all draft fields to `ScopePreferencesStore`,
-    /// then dismisses the sheet. Nothing is persisted before this runs.
+    /// Single commit point: writes all draft fields to `ScopePreferencesStore` in one
+    /// actor hop via `setPreferences(_:for:)`, then dismisses the sheet.
+    ///
+    /// Using `setPreferences` instead of individual `setXxx` calls reduces the cost from
+    /// 4 read-modify-write cycles + 4 UserDefaults writes to a single encode + write.
     ///
     /// Marked `async` because `ScopePreferencesStore` is now an actor (P16).
     /// Called via `Task { await confirmSave() }` in `buttonFooter` — a plain
     /// (non-detached) Task that inherits `@MainActor` from the SwiftUI button
-    /// context, so `isPresented = false` after the awaits still runs on
+    /// context, so `isPresented = false` after the await still runs on
     /// `@MainActor` with no isolation gap. (P9)
     @MainActor func confirmSave() async {
-        let store = ScopePreferencesStore.shared
-        await store.setFailureHookEnabled(hookEnabled, for: scope)
-        await store.setFailureHookBranch(hookBranch, for: scope)
         let command = hookCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        await store.setFailureHookCommand(command.isEmpty ? nil : command, for: scope)
-        let path = localRepoPath.isEmpty ? nil : localRepoPath
-        await store.setLocalRepoPath(path, for: scope)
+        let path = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Read current prefs so fields not editable in this sheet (alias, pollingInterval,
+        // notifyOnSuccess, notifyOnFailure) are preserved — not overwritten with defaults.
+        var prefs = await ScopePreferencesStore.shared.preferences(for: scope)
+        prefs.failureHookEnabled = hookEnabled
+        prefs.failureHookBranch = hookBranch
+        prefs.failureHookCommand = command.isEmpty ? nil : command
+        prefs.localRepoPath = path.isEmpty ? nil : path
+        await ScopePreferencesStore.shared.setPreferences(prefs, for: scope)
         isPresented = false
     }
 

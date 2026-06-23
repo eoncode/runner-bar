@@ -8,19 +8,23 @@ import Foundation
 ///
 /// Constrained to `Actor` (which implies `Sendable`) so every call site is
 /// visibly `async` — making actor crossings explicit and compiler-enforced (P4).
-/// The 4 read methods retained from the original narrow protocol are unchanged
-/// in signature so `FailureHookRunnerUseCase` call sites only need `await` added.
 public protocol ScopePreferencesStoreProtocol: Actor {
 
-    // MARK: - Bulk snapshot
+    // MARK: - Bulk snapshot / write
 
     /// Returns a full `ScopePreferences` snapshot for the scope in one actor hop.
     ///
     /// Prefer this over calling individual getters in sequence when multiple fields
     /// are needed at once (e.g. before presenting `ScopeEditSheet`) — one `await`
-    /// instead of four or more. The returned value is a value-type copy and is safe
-    /// to use outside the actor.
+    /// instead of N. The returned value is a value-type copy and is safe to use
+    /// outside the actor.
     func preferences(for scope: String) -> ScopePreferences
+
+    /// Writes a complete `ScopePreferences` snapshot for the scope in one actor hop.
+    ///
+    /// Prefer this over calling multiple individual setters in sequence (e.g. in
+    /// `confirmSave()`) — one `await` and one encode/write instead of N.
+    func setPreferences(_ prefs: ScopePreferences, for scope: String)
 
     // MARK: - Alias
 
@@ -79,7 +83,12 @@ public protocol ScopePreferencesStoreProtocol: Actor {
 
 /// Abstracts the terminal-launcher dependency so `FailureHookRunnerUseCase` can
 /// be tested without spawning real processes.
+///
+/// `open(_:)` is `@MainActor` because `NSAppleScript` (used by the production
+/// implementation) must run on the main thread. Call sites must dispatch via
+/// `await MainActor.run { terminalLauncher.open(resolved) }` or be `@MainActor`
+/// themselves.
 public protocol TerminalLauncherProtocol: Sendable {
-    /// Opens a terminal application and runs `command`.
-    func open(_ command: String)
+    /// Opens a terminal application and runs `command`. Must be called on `@MainActor`.
+    @MainActor func open(_ command: String)
 }

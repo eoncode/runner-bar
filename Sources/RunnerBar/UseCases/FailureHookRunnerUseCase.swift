@@ -27,7 +27,8 @@ import RunnerBarCore
 /// `FailureHookRunnerUseCase` is `Sendable`. `fireIfNeeded` is `async` and
 /// `nonisolated` — it runs on the cooperative thread pool. Callers are responsible
 /// for providing a structured Task scope (see `RunnerStore+PollBridge`).
-/// `TerminalLauncherProtocol.open(command:)` is dispatched via `MainActor.run`.
+/// `TerminalLauncherProtocol.open(_:)` is `@MainActor` and dispatched via
+/// `await MainActor.run { ... }` — see the call site comment below.
 struct FailureHookRunnerUseCase: Sendable {
 
     /// Default failure-hook command used when the user has not configured a
@@ -98,11 +99,13 @@ struct FailureHookRunnerUseCase: Sendable {
         let resolved = Self.resolveTokens(command, group: group, scope: scope, jobs: jobs, localRepoPath: localPath)
         log("FailureHookRunnerUseCase -- resolved command (first 300): \(resolved.prefix(300))")
         log("FailureHookRunnerUseCase -- calling terminalLauncher.open for groupID=\(group.id)")
-        // TerminalLauncherProtocol.open is @MainActor — hop to main actor.
+        // TerminalLauncherProtocol.open(_:) is @MainActor — NSAppleScript must run on
+        // the main thread. Hop via MainActor.run so this nonisolated async function
+        // satisfies the requirement without being @MainActor itself.
         // log() is backed by os.Logger which is nonisolated and thread-safe; safe to
         // call from inside MainActor.run without any isolation concerns.
         await MainActor.run {
-            terminalLauncher.open(command: resolved)
+            terminalLauncher.open(resolved)
             log("FailureHookRunnerUseCase main actor -- terminalLauncher.open returned for groupID=\(group.id)")
         }
     }

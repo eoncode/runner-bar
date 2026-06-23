@@ -89,7 +89,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › saved preferences for \(scope)")
     }
 
-    // MARK: - ScopePreferencesStoreProtocol — bulk snapshot
+    // MARK: - ScopePreferencesStoreProtocol — bulk snapshot / write
 
     /// Returns the full `ScopePreferences` snapshot for `scope` in a single actor hop.
     ///
@@ -97,6 +97,15 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     /// (e.g. seeding `ScopeEditSheet` draft state). One `await` instead of N.
     public func preferences(for scope: String) -> ScopePreferences {
         read(scope: scope)
+    }
+
+    /// Writes a complete `ScopePreferences` snapshot for `scope` in a single actor hop.
+    ///
+    /// This is the preferred write path when multiple fields need to be committed
+    /// atomically (e.g. `ScopeEditSheet.confirmSave()`). One `await` and one
+    /// encode/write instead of N sequential read-modify-write cycles.
+    public func setPreferences(_ prefs: ScopePreferences, for scope: String) {
+        write(prefs, for: scope)
     }
 
     // MARK: - ScopePreferencesStoreProtocol — alias
@@ -227,7 +236,11 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     ///   will have their legacy keys cleaned up on the next `cleanUp(scope:)` call
     ///   (which also removes the blob key, a no-op for unmigrated scopes).
     public func migrateIfNeeded(knownScopes: [String]) {
-        guard !store.bool(forKey: Self.migrationKey) else { return }
+        guard !store.bool(forKey: Self.migrationKey) else {
+            // Migration already ran. Scopes added after this point start clean
+            // (no legacy flat keys) so skipping them here is intentional.
+            return
+        }
         for scope in knownScopes {
             var prefs = ScopePreferences()
             if let v = store.string(forKey: "scope.\(scope).alias"), !v.isEmpty {
