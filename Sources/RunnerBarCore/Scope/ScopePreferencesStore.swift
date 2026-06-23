@@ -11,8 +11,8 @@ import Foundation
 /// scheme (`scope.<scope>.<field>`) used by the caseless-enum predecessor.
 ///
 /// ## Why one blob per scope?
-/// A single JSON blob means `cleanUp(scope:)` is one `removeObject(forKey:)` call
-/// with no hardcoded field list to maintain. Adding a new field to `ScopePreferences`
+/// A single JSON blob means `cleanUp(scope:)` removes the blob key *and* any
+/// surviving legacy flat keys in one call. Adding a new field to `ScopePreferences`
 /// automatically includes it in cleanup without touching this file.
 ///
 /// ## Migration
@@ -43,9 +43,26 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     private let store: UserDefaults
 
     /// Reused decoder. `nonisolated` because `JSONDecoder` is immutable post-init (P17).
+    /// Safety note: both `decoder` and `encoder` are only ever called from within
+    /// actor-isolated methods (`read` and `write`), which are serialised by the actor's
+    /// executor. The `nonisolated` keyword enables accessing them without a suspension
+    /// point; the actor's serial executor guarantees no concurrent use.
     nonisolated private let decoder = JSONDecoder()
     /// Reused encoder. `nonisolated` because `JSONEncoder` is immutable post-init (P17).
+    /// See `decoder` note above.
     nonisolated private let encoder = JSONEncoder()
+
+    // MARK: - Legacy flat-key field list
+
+    /// The complete set of flat-key suffixes used by the pre-migration scheme.
+    ///
+    /// Kept as a single source of truth so both `migrateIfNeeded` and `cleanUp`
+    /// use the same list. If a new field is ever added here it will automatically
+    /// be cleaned up by both call sites.
+    private static let legacyFields = [
+        "alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
+        "failureHookEnabled", "failureHookCommand", "localRepoPath", "failureHookBranch"
+    ]
 
     // MARK: - Init
 
@@ -213,8 +230,18 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
 
     // MARK: - ScopePreferencesStoreProtocol — cleanup
 
+    /// Removes all persisted data for `scope`: the blob key and any surviving
+    /// legacy flat keys.
+    ///
+    /// The legacy flat-key removal handles the edge case where a scope existed in the
+    /// old flat-key format but was removed from `ScopeStore` before `migrateIfNeeded`
+    /// ran — those keys would otherwise be orphaned indefinitely in `UserDefaults`.
+    /// For post-migration scopes the flat-key removals are no-ops.
     public func cleanUp(scope: String) {
         store.removeObject(forKey: blobKey(for: scope))
+        for field in Self.legacyFields {
+            store.removeObject(forKey: "scope.\(scope).\(field)")
+        }
         log("ScopePreferencesStore › cleaned up all keys for scope: \(scope)")
     }
 
@@ -232,9 +259,11 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     /// `AppDelegate+StoreSetup`) before any other reads occur. (Step 7)
     ///
     /// - Parameter knownScopes: The list of scope strings currently in `ScopeStore`.
-    ///   Only scopes in this list are migrated — scopes removed before migration
-    ///   will have their legacy keys cleaned up on the next `cleanUp(scope:)` call
-    ///   (which also removes the blob key, a no-op for unmigrated scopes).
+    ///   Only scopes in this list are migrated. Scopes added after this flag is set
+    ///   start clean (no legacy flat keys), so skipping them in future calls is
+    ///   intentional. Scopes removed before migration ran will have their legacy keys
+    ///   cleaned up by `cleanUp(scope:)` if they are ever explicitly removed, or they
+    ///   will remain as inert orphan keys — this is an accepted low-severity trade-off.
     public func migrateIfNeeded(knownScopes: [String]) {
         guard !store.bool(forKey: Self.migrationKey) else {
             // Migration already ran. Scopes added after this point start clean
@@ -266,8 +295,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
                 prefs.failureHookBranch = v
             }
             write(prefs, for: scope)
-            for field in ["alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
-                          "failureHookEnabled", "failureHookCommand", "localRepoPath", "failureHookBranch"] {
+            for field in Self.legacyFields {
                 store.removeObject(forKey: "scope.\(scope).\(field)")
             }
         }
