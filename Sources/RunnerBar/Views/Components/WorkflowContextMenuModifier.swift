@@ -20,6 +20,10 @@ private func copyToPasteboard(_ text: String) {
 /// plain structured `Task { }` values (never `Task.detached`) so they inherit
 /// the `@MainActor` context of the SwiftUI button closure, surface errors
 /// correctly, and are cancellable on view dismissal via `.onDisappear` (P9).
+///
+/// `currentTask` is always cancelled before being overwritten so no in-flight
+/// task is silently orphaned when the user fires a second action in quick
+/// succession (e.g. Re-run All followed immediately by Cancel).
 private struct WorkflowContextMenuModifier: ViewModifier {
     /// The workflow action group this menu acts on.
     let group: WorkflowActionGroup
@@ -28,7 +32,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
     private let actions = WorkflowActionsUseCase()
 
     /// Tracks the most recently launched mutation task so it can be cancelled
-    /// when the view disappears (P9 — structured lifetime).
+    /// when the view disappears or a new action is triggered (P9 — structured lifetime).
     @State private var currentTask: Task<Void, Never>?
 
     /// Wraps `content` with a right-click context menu and cancels any
@@ -49,18 +53,21 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 
         // Re-run failed
         Button {
+            currentTask?.cancel()
             currentTask = Task { await actions.rerunFailed(runIDs: runIDs, scope: scope) }
         } label: { Label("Re-run Failed Jobs", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
 
         // Re-run all
         Button {
+            currentTask?.cancel()
             currentTask = Task { await actions.rerunAll(runIDs: runIDs, scope: scope) }
         } label: { Label("Re-run All Jobs", systemImage: "arrow.clockwise") }
         .disabled(!isConcluded)
 
         // Cancel
         Button {
+            currentTask?.cancel()
             currentTask = Task { await actions.cancel(runIDs: runIDs, scope: scope) }
         } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
@@ -68,8 +75,10 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         Divider()
 
         // Copy log
+        // ⚠️ LogFetcher() is allocated inline here — DI follow-up tracked in #1518.
         Button {
             let capturedGroup = group
+            currentTask?.cancel()
             currentTask = Task {
                 guard let text = await LogFetcher().fetchActionLogs(group: capturedGroup),
                       !text.isEmpty else { return }
@@ -103,6 +112,10 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 /// plain structured `Task { }` values (never `Task.detached`) so they inherit
 /// the `@MainActor` context of the SwiftUI button closure, surface errors
 /// correctly, and are cancellable on view dismissal via `.onDisappear` (P9).
+///
+/// `currentTask` is always cancelled before being overwritten so no in-flight
+/// task is silently orphaned when the user fires a second action in quick
+/// succession (e.g. Re-run Job followed immediately by Cancel).
 private struct JobContextMenuModifier: ViewModifier {
     /// The job this menu acts on.
     let job: ActiveJob
@@ -113,7 +126,7 @@ private struct JobContextMenuModifier: ViewModifier {
     private let actions = WorkflowActionsUseCase()
 
     /// Tracks the most recently launched mutation task so it can be cancelled
-    /// when the view disappears (P9 — structured lifetime).
+    /// when the view disappears or a new action is triggered (P9 — structured lifetime).
     @State private var currentTask: Task<Void, Never>?
 
     /// Wraps `content` with a right-click context menu and cancels any
@@ -134,6 +147,7 @@ private struct JobContextMenuModifier: ViewModifier {
         // Re-run job
         Button {
             let jobID = job.id
+            currentTask?.cancel()
             currentTask = Task { await actions.rerunJob(jobID: jobID, scope: scope) }
         } label: { Label("Re-run Job", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
@@ -141,6 +155,7 @@ private struct JobContextMenuModifier: ViewModifier {
         // Cancel
         Button {
             let runIDs = group.runs.map { $0.id }
+            currentTask?.cancel()
             currentTask = Task { await actions.cancel(runIDs: runIDs, scope: scope) }
         } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
@@ -148,8 +163,10 @@ private struct JobContextMenuModifier: ViewModifier {
         Divider()
 
         // Copy log
+        // ⚠️ LogFetcher() is allocated inline here — DI follow-up tracked in #1518.
         Button {
             let capturedJob = job
+            currentTask?.cancel()
             currentTask = Task {
                 guard let text = await LogFetcher().fetchJobLog(jobID: capturedJob.id, scope: scope),
                       !text.isEmpty else { return }

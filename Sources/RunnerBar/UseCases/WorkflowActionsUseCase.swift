@@ -11,9 +11,10 @@ import RunnerBarCore
 /// `let` constant on `@MainActor`-isolated `ViewModifier` types and captured
 /// across actor boundaries without triggering Swift 6 sendability warnings.
 ///
-/// - Note: Each method is marked `@concurrent` so the `withTaskGroup` fan-out
-///   runs on the cooperative thread pool rather than blocking the caller's
-///   actor executor (P18).
+/// Each method is `nonisolated` so the `withTaskGroup` fan-out runs on the
+/// cooperative thread pool rather than blocking the caller's actor executor
+/// (P18). `@concurrent` is not a standard Swift attribute and was removed
+/// per code review — `nonisolated` is the correct spelling for this intent.
 struct WorkflowActionsUseCase: Sendable {
 
     // MARK: - Dependencies
@@ -31,7 +32,7 @@ struct WorkflowActionsUseCase: Sendable {
     // MARK: - Workflow mutations
 
     /// Re-runs only the failed jobs for each run ID in `scope` in parallel.
-    @concurrent
+    nonisolated
     @discardableResult
     func rerunFailed(runIDs: [Int], scope: String) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
@@ -49,7 +50,7 @@ struct WorkflowActionsUseCase: Sendable {
     }
 
     /// Re-runs all jobs for each run ID in `scope` in parallel.
-    @concurrent
+    nonisolated
     @discardableResult
     func rerunAll(runIDs: [Int], scope: String) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
@@ -67,7 +68,7 @@ struct WorkflowActionsUseCase: Sendable {
     }
 
     /// Cancels each run ID in `scope` in parallel.
-    @concurrent
+    nonisolated
     @discardableResult
     func cancel(runIDs: [Int], scope: String) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
@@ -83,7 +84,7 @@ struct WorkflowActionsUseCase: Sendable {
     // MARK: - Job mutations
 
     /// Re-runs a single job by ID.
-    @concurrent
+    nonisolated
     @discardableResult
     func rerunJob(jobID: Int, scope: String) async -> Bool {
         await transport.post(
