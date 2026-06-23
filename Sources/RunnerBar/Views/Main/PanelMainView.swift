@@ -160,8 +160,10 @@ struct PanelMainView: View {
     /// Starts the 1-second repeating `displayTick` timer. Stops any existing timer first.
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
-        displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            Task { @MainActor in self.displayTick &+= 1 }
+        displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [self] _ in
+            Task {
+                await MainActor.run { self.displayTick &+= 1 }
+            }
         }
     }
 

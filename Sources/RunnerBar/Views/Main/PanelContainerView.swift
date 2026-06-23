@@ -172,39 +172,41 @@ struct PanelContainerView<Content: View>: View {
     /// Safe to call multiple times — will not create duplicate timers.
     private func startPolling() {
         stopPolling()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            Task { @MainActor in
-                // Single atomic guard — do NOT split into two separate guards.
-                // See "TIMER GUARD SPLIT" comment at the top of this file for why.
-                //
-                // This guard fails when:
-                //   a) isOpen is false (panel is closing or closed)
-                //   b) hostWindow is nil (not yet delivered by WindowReader async)
-                //   c) window.isVisible is false (transient hide — window ordered out)
-                //
-                // In all these cases we fall into the else branch to decide whether
-                // to clear isSheetActive. We only clear it on a genuine close, not
-                // during a transient hide where the sheet window is still alive.
-                guard panelVisibilityState.isOpen,
-                      let window = hostWindow,
-                      window.isVisible
-                else {
-                    // isTransientHide = true means hidePanel() caused this guard
-                    // to fail (window ordered out but sheet still attached).
-                    // Keep isSheetActive as-is so restore has nothing to re-animate.
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [self] _ in
+            Task {
+                await MainActor.run {
+                    // Single atomic guard — do NOT split into two separate guards.
+                    // See "TIMER GUARD SPLIT" comment at the top of this file for why.
                     //
-                    // isTransientHide = false means closePanel() or the window
-                    // genuinely disappeared — safe to clear.
-                    if !panelVisibilityState.isTransientHide, isSheetActive {
-                        isSheetActive = false
+                    // This guard fails when:
+                    //   a) isOpen is false (panel is closing or closed)
+                    //   b) hostWindow is nil (not yet delivered by WindowReader async)
+                    //   c) window.isVisible is false (transient hide — window ordered out)
+                    //
+                    // In all these cases we fall into the else branch to decide whether
+                    // to clear isSheetActive. We only clear it on a genuine close, not
+                    // during a transient hide where the sheet window is still alive.
+                    guard panelVisibilityState.isOpen,
+                          let window = hostWindow,
+                          window.isVisible
+                    else {
+                        // isTransientHide = true means hidePanel() caused this guard
+                        // to fail (window ordered out but sheet still attached).
+                        // Keep isSheetActive as-is so restore has nothing to re-animate.
+                        //
+                        // isTransientHide = false means closePanel() or the window
+                        // genuinely disappeared — safe to clear.
+                        if !panelVisibilityState.isTransientHide, isSheetActive {
+                            isSheetActive = false
+                        }
+                        return
                     }
-                    return
-                }
 
-                // Window is visible and panel is open — ground truth read.
-                let hasVisibleSheet = window.sheets.contains { $0.isVisible }
-                // Guard against redundant SwiftUI state updates (no-op if unchanged).
-                if hasVisibleSheet != isSheetActive { isSheetActive = hasVisibleSheet }
+                    // Window is visible and panel is open — ground truth read.
+                    let hasVisibleSheet = window.sheets.contains { $0.isVisible }
+                    // Guard against redundant SwiftUI state updates (no-op if unchanged).
+                    if hasVisibleSheet != isSheetActive { isSheetActive = hasVisibleSheet }
+                }
             }
         }
     }
