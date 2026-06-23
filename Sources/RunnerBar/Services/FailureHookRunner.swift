@@ -27,17 +27,19 @@ enum FailureHookRunner {
     static let defaultCommand = FailureHookRunnerUseCase.defaultCommand
 
     /// Forwards to `FailureHookRunnerUseCase` wired with production dependencies.
-    /// `group` is annotated `sending` per P25 (SE-0430) because it crosses
-    /// from the caller's isolation domain into `Task.detached` inside the use-case.
+    /// `async` because `fireIfNeeded` is now a structured async call — callers
+    /// must provide a Task scope (see `RunnerStore+PollBridge`).
+    /// `sending` removed: no `Task.detached` boundary crossing, `WorkflowActionGroup`
+    /// is `Sendable` so `MainActor.run` hops inside the use-case are safe without it.
     static func fireIfNeeded(
-        group: sending WorkflowActionGroup,
+        group: WorkflowActionGroup,
         scope: String,
         callsite: String = "unknown"
-    ) {
+    ) async {
         let useCase = FailureHookRunnerUseCase(
             preferencesStore: DefaultScopePreferencesStore(),
             terminalLauncher: DefaultTerminalLauncher()
         )
-        useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
+        await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
     }
 }
