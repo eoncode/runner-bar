@@ -33,6 +33,11 @@ extension AppDelegate {
                 // logs, and ensure `self` is retained for the full loop iteration.
                 // `self?.runnerStore` would conflate both nil paths into one log line
                 // and leave `self` unbound for any future code added after `await store.start()`.
+                //
+                // `return` vs `continue` is deliberate:
+                // - `return` for nil self: AppDelegate is gone, the entire Task is meaningless.
+                // - `continue` for nil store: AppDelegate is alive; a future sign-out may find
+                //   runnerStore set. Keep the stream open and try again on the next event.
                 guard let self else {
                     log("AppDelegate › didSignOut — ⚠️ AppDelegate deallocated; skipping poll loop restart")
                     return
