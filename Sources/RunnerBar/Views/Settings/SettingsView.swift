@@ -81,6 +81,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Body
+    /// Switches between `LocalRunnersView`, `ScopesView`, and the main `settingsBody`.
     var body: some View {
         Group {
             if showLocalRunners {
@@ -125,6 +126,7 @@ struct SettingsView: View {
         .frame(idealWidth: 480, maxWidth: .infinity)
     }
 
+    /// Vertical stack of all settings sections (account, management, general, about).
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
             accountSection
@@ -138,6 +140,7 @@ struct SettingsView: View {
         .padding(.bottom, 16)
     }
 
+    /// Wires OAuth completion/sign-out callbacks when the view appears.
     private func onAppearAction() {
         let keychainToken = Keychain.token
         let envToken = githubToken()
@@ -164,6 +167,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Header
+    /// Top bar with back chevron and "Settings" title.
     private var headerBar: some View {
         HStack {
             Button(action: onBack, label: {
@@ -181,14 +185,17 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+    /// Applies or removes the Launch at Login login item.
     func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
+    /// Starts the OAuth browser flow.
     func signInWithGitHub() {
         log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
         oauthService.signIn()
     }
 
+    /// Clears the stored OAuth token and resets auth state.
     func signOutOfGitHub() {
         log("SettingsView › signOutOfGitHub — calling oauthService.signOut()")
         oauthService.signOut()
