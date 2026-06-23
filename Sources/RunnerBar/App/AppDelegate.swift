@@ -113,17 +113,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// eagerly during `AppDelegate.init()` — before `configure()` runs —
     /// triggering the `fatalError` guard inside `LocalRunnerStore.shared`.
     lazy var localRunnerStore: LocalRunnerStore = .shared
-    /// Owned `RunnerStore` actor.
+    /// Owned `RunnerStore` actor. `nil` until `setupSubscriptions()` runs.
     ///
-    /// ⚠️ This property has no lazy default body. The sole init site is
-    /// `AppDelegate+PanelSetup.swift` → `setupCombineSubscriptions()`, which
-    /// runs on the `@MainActor` and can therefore pass `AppPreferencesStore.shared`
-    /// and `ScopeStore.shared` as explicit arguments. Never add a `lazy var` body
-    /// here — doing so creates a dual-init path: if anything reads `runnerStore`
-    /// before `setupCombineSubscriptions()` runs, a second `RunnerStore` instance
-    /// with live observation tasks would be created and then silently replaced,
-    /// causing a brief window with two competing poll loops.
-    var runnerStore: RunnerStore!
+    /// Optional (not `!`) so the uninitialised state is representable at the
+    /// type level and the compiler flags any force-unwrap at call sites (P4).
+    ///
+    /// The sole init site is `AppDelegate+PanelSetup.swift` → `setupSubscriptions()`,
+    /// which runs on the `@MainActor` and can therefore pass `AppPreferencesStore.shared`
+    /// and `ScopeStore.shared` as explicit arguments.
+    ///
+    /// ❌ NEVER add a `lazy var` default body here — doing so creates a dual-init
+    /// path: if anything reads `runnerStore` before `setupSubscriptions()` runs,
+    /// a second `RunnerStore` instance with live observation tasks would be created
+    /// and immediately replaced, producing competing poll loops.
+    var runnerStore: RunnerStore?
     /// The last nav destination the user was on before the popover was closed or hidden.
     /// Restored by `openPanel()` so the user lands back where they left off.
     var savedNavState: NavState?

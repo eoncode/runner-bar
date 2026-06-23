@@ -256,7 +256,7 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
             await self.localRunnerStore.refreshAsync()
             log("AppDelegate › startup — refreshAsync() complete, starting runnerStore poll loop")
-            await self.runnerStore.start()
+            await self.runnerStore?.start()
             log("AppDelegate › startup — runnerStore poll loop started")
         }
 
