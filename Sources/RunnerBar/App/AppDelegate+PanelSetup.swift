@@ -256,7 +256,14 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
             await self.localRunnerStore.refreshAsync()
             log("AppDelegate › startup — refreshAsync() complete, starting runnerStore poll loop")
-            await self.runnerStore?.start()
+            // `runnerStore` is `RunnerStore?`.
+            // Guard makes a nil escape observable in logs rather than silently swallowed
+            // by optional chaining — the app would appear to start but never poll.
+            guard let store = self.runnerStore else {
+                log("AppDelegate › startup — ⚠️ runnerStore is nil after refreshAsync(); poll loop NOT started")
+                return
+            }
+            await store.start()
             log("AppDelegate › startup — runnerStore poll loop started")
         }
 

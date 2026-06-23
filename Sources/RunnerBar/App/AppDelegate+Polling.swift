@@ -29,7 +29,14 @@ extension AppDelegate {
         signOutTask = Task { [weak self] in
             for await _ in OAuthService.shared.makeSignOutStream() {
                 log("AppDelegate › didSignOut — restarting poll loop for env-token fallback")
-                await self?.runnerStore.start()
+                // `runnerStore` is `RunnerStore?` (set in setupSubscriptions).
+                // Guard makes a nil escape observable rather than silently swallowed
+                // by optional chaining — poll loop would never restart after sign-out.
+                guard let store = self?.runnerStore else {
+                    log("AppDelegate › didSignOut — ⚠️ runnerStore is nil at sign-out time; skipping start()")
+                    continue
+                }
+                await store.start()
             }
         }
     }
