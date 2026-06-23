@@ -109,13 +109,18 @@ private struct RunnerListEnvelope: Decodable, Sendable {
 /// Conforms to `RunnerStatusEnricherProtocol` so it can be injected into
 /// `LocalRunnerStore` (Phase 6b, #1326).
 ///
+/// The `shared` singleton has been intentionally removed (#1539 item 22).
+/// Callers must construct an instance explicitly:
+/// ```swift
+/// LocalRunnerStore(viewModel: vm, enricher: RunnerStatusEnricher())
+/// ```
+/// This makes the dependency visible at the injection site and allows unit
+/// tests to substitute a stub without patching a global.
+///
 /// - Important: All methods are async. Always call from an async context —
 ///   never block the main actor waiting for enrichment.
 /// - SeeAlso: `RunnerModel`, `RunnerStatus`, `LocalRunnerStore`
 public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
-    // MARK: - Shared singleton
-    /// The shared `RunnerStatusEnricher` instance used throughout the app.
-    public static let shared = RunnerStatusEnricher()
 
     /// Creates a new `RunnerStatusEnricher` instance.
     public init() { /* No setup required; all enrichment work is stateless. */ }
@@ -198,22 +203,6 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
     /// Looks up a `RunnerPayload` for `name` in `dict` using four strategies:
     /// exact match → case-insensitive match → whitespace-trimmed match →
     /// combined trim + lowercase match.
-    ///
-    /// Extracted from the `for idx in result.indices` loop body so it is
-    /// independently testable (P13) and free of mutable outer-loop capture (P16).
-    ///
-    /// - Parameters:
-    ///   - name: The runner name to look up.
-    ///   - dict: The payload dictionary keyed by runner name.
-    /// - Returns: The matching payload, or `nil` if none is found.
-    ///
-    /// Lookup stages (applied in order, first match wins):
-    /// 1. Exact match — `dict[name]`.
-    /// 2. Case-insensitive — both sides lowercased, whitespace untouched.
-    /// 3. Whitespace-trimmed — both sides trimmed, case untouched.
-    /// 4. Combined — both sides trimmed *and* lowercased, handles names that
-    ///    differ in both casing and surrounding whitespace (e.g. `" MyRunner"`
-    ///    vs `"myrunner"`).
     private static func findPayload(name: String, in dict: [String: RunnerPayload]) -> RunnerPayload? {
         if let api = dict[name] { return api }
         let nameLower = name.lowercased()
@@ -227,24 +216,11 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
 
     /// Fetches the **complete** runner list for a scope URL via ghAPI, paginating
     /// through all pages (per_page=100) until exhausted.
-    ///
-    /// - Parameter scopeURL: The full GitHub URL for the repo or org scope.
-    /// - Returns: All runner payloads collected across all pages. Empty on failure.
-    ///
-    /// GitHub's default page size is 30. Without explicit pagination any org/repo
-    /// with more than 30 runners would silently lose enrichment for runners beyond
-    /// the first page. Using per_page=100 (the API maximum) minimises round-trips.
-    ///
-    /// - Note: This method intentionally does NOT gate on `ghIsRateLimited`. A permission
-    ///   403 on one scope (e.g. org) must not block a repo-scope fetch from running.
-    ///   The transport layer handles real rate-limits; duplicating the check here causes
-    ///   false skips when scopes are fetched concurrently and an org 403 fires first.
     private func fetchRunnersForScope(_ scopeURL: String) async -> [RunnerPayload] {
         let stripped = scopeURL.replacingOccurrences(of: GitHubConstants.base + "/", with: "")
         let parts = stripped.split(separator: "/").map(String.init)
         guard !parts.isEmpty else { return [] }
 
-        // ⚠️ No leading slash — ghAPI builds the full URL itself.
         let baseEndpoint: String
         if parts.count >= 2 {
             baseEndpoint = "repos/\(parts[0])/\(parts[1])/actions/runners"
@@ -283,10 +259,6 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
     /// Applies fields from a `RunnerPayload` to a `RunnerModel`.
     ///
     /// - Returns: A new `RunnerModel` with API-sourced fields applied.
-    /// - Note: Platform and architecture are derived from API labels when the `.runner`
-    ///   JSON on disk did not supply them (older runner agent versions omit these fields).
-    ///   Prefer label-derived values (always correctly cased by GitHub)
-    ///   over whatever `.runner` JSON provided (often nil or raw OS strings).
     private func applyEnrichment(to runner: RunnerModel, from api: RunnerPayload) -> RunnerModel {
         let githubStatus = api.status.map { RunnerStatus(rawString: $0) }
         let effectiveLabels = api.labelNames.isEmpty ? runner.labels : api.labelNames

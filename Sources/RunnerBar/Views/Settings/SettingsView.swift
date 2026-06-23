@@ -44,20 +44,11 @@ struct SettingsView: View {
     /// Typed to protocol so tests can supply a stub without the live singleton.
     var oauthService: any OAuthServiceProtocol
     /// Runner lifecycle service injected from `AppDelegate` and forwarded into `LocalRunnersView`.
-    /// Typed to protocol so tests can supply a stub without spawning real `svc.sh` processes (P7).
-    var lifecycleService: any RunnerLifecycleServiceProtocol = RunnerLifecycleService()
+    /// Typed to protocol so tests can supply a stub without spawning real `svc.sh` processes.
+    /// No default — callers must supply the `AppDelegate`-owned instance explicitly.
+    var lifecycleService: any RunnerLifecycleServiceProtocol
 
     // MARK: - Observed stores
-    // These singleton preference stores are `@Observable` types. The view keeps
-    // stable references to the shared instances with `@State`, while SwiftUI tracks
-    // field reads from the Observation system.
-    // store (RunnerViewModel) is also @Observable and is injected as a plain stored property.
-    //
-    // NOTE: These properties (and the @State vars below) are `internal` rather than
-    // `private` so that SettingsView+Sections.swift can access them from a separate-file
-    // extension. Swift does not allow `private` members to be read across files even
-    // within the same type. See SE-0169. signOutCancellable is the sole exception —
-    // it is not referenced in the extension and intentionally stays `private`.
     /// App-wide preferences (notifications, update channel, etc.).
     @State var settings = AppPreferencesStore.shared
     /// Notification opt-in preferences per scope.
@@ -90,13 +81,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Body
-    /// Root view: swaps between the settings scroll, `LocalRunnersView`, and `ScopesView`.
     var body: some View {
-        // Lifecycle modifiers live on the root (wrapping all branches) so
-        // onAppearAction()/onDisappear fire only when the settings panel itself
-        // opens/closes — NOT on every navigation to LocalRunnersView/ScopesView.
-        // Attaching them to `settingsBody` caused needless Keychain re-reads and
-        // signOutCancellable recreation on every back-navigation.
         Group {
             if showLocalRunners {
                 LocalRunnersView(
@@ -114,20 +99,13 @@ struct SettingsView: View {
         }
         .onAppear(perform: onAppearAction)
         .onDisappear {
-            // Clear the singleton closure so a future SettingsView instance can claim it.
-            // Without this, the last-opened instance permanently owns onCompletion.
-            // Guard: do not clear while an OAuth flow is in progress — the callback must land.
             if !isSigningIn { oauthService.onCompletion = nil }
-            // Cancel the sign-out listener — a new Task is started on next onAppear.
             signOutTask?.cancel()
             signOutTask = nil
         }
     }
 
     /// The main settings layout (header + sections scroll).
-    ///
-    /// Extracted from `body` so `LocalRunnersView` and `ScopesView` can replace it cleanly
-    /// without any structural duplication.
     ///
     /// HEIGHT CONTRACT: headerBar is OUTSIDE the ScrollView — back button always visible.
     /// ❌ NEVER move headerBar inside the ScrollView.
@@ -139,12 +117,6 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // maxHeight: .infinity — fills all space the panel gives us.
-            // AppDelegate caps the panel at 85% visibleFrame. That IS the limit.
-            // ❌ NEVER move headerBar inside this ScrollView.
-            // ❌ NEVER replace .infinity with a fixed number.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-            // UNDER ANY CIRCUMSTANCE.
             ScrollView(.vertical, showsIndicators: true) {
                 sectionsStack
             }
@@ -153,9 +125,6 @@ struct SettingsView: View {
         .frame(idealWidth: 480, maxWidth: .infinity)
     }
 
-    /// Vertical stack of all settings sections.
-    ///
-    /// Order: Account → Management → General → About
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
             accountSection
@@ -169,7 +138,6 @@ struct SettingsView: View {
         .padding(.bottom, 16)
     }
 
-    /// Runs on `.onAppear`: refreshes auth state and starts the sign-out listener.
     private func onAppearAction() {
         let keychainToken = Keychain.token
         let envToken = githubToken()
@@ -183,7 +151,6 @@ struct SettingsView: View {
             log("SettingsView › onCompletion — success=\(success), updating auth state")
             isOAuthAuthenticated = success
             isCLIAuthenticated = !success && githubToken() != nil
-            log("SettingsView › onCompletion — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             isSigningIn = false
         }
         signOutTask = Task { @MainActor in
@@ -192,13 +159,11 @@ struct SettingsView: View {
                 log("SettingsView › didSignOut — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = postToken != nil
-                log("SettingsView › didSignOut — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             }
         }
     }
 
     // MARK: - Header
-    /// Top bar with back button and "Settings" title.
     private var headerBar: some View {
         HStack {
             Button(action: onBack, label: {
@@ -216,17 +181,14 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
-    /// Applies or removes the Login Item entry based on `enabled`.
     func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
-    /// Initiates the OAuth sign-in flow via `OAuthService`.
     func signInWithGitHub() {
         log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
         oauthService.signIn()
     }
 
-    /// Signs out of GitHub and clears all stored tokens.
     func signOutOfGitHub() {
         log("SettingsView › signOutOfGitHub — calling oauthService.signOut()")
         oauthService.signOut()
