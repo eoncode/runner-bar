@@ -67,7 +67,8 @@ extension AppDelegate {
                 self?.navigate(to: self?.mainView() ?? AnyView(EmptyView()))
             },
             store: observable,
-            oauthService: oauthService
+            oauthService: oauthService,
+            lifecycleService: lifecycleService
         )
         // PanelContainerView needed here too: sheets are presented from SettingsView.
         return wrapEnv(PanelContainerView(content: inner))
