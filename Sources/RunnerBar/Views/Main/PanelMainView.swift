@@ -90,7 +90,7 @@ struct PanelMainView: View {
         }
     }
 
-    /// Root body -- header, optional rate-limit banner, local runner rows, and the scrollable actions section.
+    /// Root body -- header, optional error/rate-limit banners, local runner rows, and the scrollable actions section.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PanelHeaderView(
@@ -99,6 +99,7 @@ struct PanelMainView: View {
             )
             .onAppear { systemStats.start() }
             Divider()
+            if let error = runnerState.fetchError { fetchErrorBanner(error); Divider() }
             if runnerState.isRateLimited { rateLimitBanner; Divider() }
             if !activeLocalRunners.isEmpty {
                 SectionHeaderLabel(title: "Local Runners")
@@ -193,6 +194,22 @@ struct PanelMainView: View {
     @MainActor private func stopDisplayTickTimer() {
         displayTickTask?.cancel()
         displayTickTask = nil
+    }
+
+    /// Inline error banner shown when `runnerState.fetchError` is non-nil.
+    ///
+    /// Displays a truncated error description. Dismisses automatically on the next
+    /// successful fetch cycle when `applyFetchResult` clears `fetchError`.
+    /// Stale `runners`/`jobs`/`actions` remain visible below the banner so the user
+    /// still sees the last-known state while connectivity is degraded.
+    private func fetchErrorBanner(_ error: any Error) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red).font(.caption)
+            Text("Fetch error — \(error.localizedDescription)")
+                .font(.caption).foregroundColor(.secondary)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
     }
 
     /// Rate-limit warning banner showing a countdown to API reset.

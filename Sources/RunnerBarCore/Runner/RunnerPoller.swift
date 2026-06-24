@@ -270,10 +270,26 @@ public actor RunnerPoller {
 
     /// Performs one full poll cycle.
     ///
+    /// Wraps the fetch body in a `do/catch` so any unhandled error surfaces via
+    /// `applyError` rather than silently crashing or swallowing the failure.
+    /// Existing fetch helpers (`buildJobState`, `buildGroupState`, `fetchAndEnrichRunners`)
+    /// do not currently throw — they return empty arrays on failure. The `do/catch`
+    /// guards against future changes that introduce throwing paths.
+    ///
     /// Not on `RunnerPollerProtocol`. Use `start()` to drive the poll cadence.
     /// Accessible at `internal` scope so tests holding a concrete `RunnerPoller` can
     /// trigger a single cycle without going through the protocol seam.
     func fetch() async {
+        do {
+            try await fetchInternal()
+        } catch {
+            log("RunnerPoller › fetch — ⚠️ unhandled error: \(error)")
+            await applyError(error)
+        }
+    }
+
+    /// Inner throwing fetch body. Extracted so `fetch()` can wrap it cleanly in `do/catch`.
+    private func fetchInternal() async throws {
         await clearGhRateLimit()
         let scopesSnapshot = await MainActor.run { scopeStore.activeScopes }
         log("RunnerPoller › fetch ENTER — activeScopesSnapshot=\(scopesSnapshot)")
@@ -320,6 +336,9 @@ public actor RunnerPoller {
     // MARK: - Apply result
 
     /// Merges a completed fetch into actor state and pushes the snapshot to `RunnerState`.
+    ///
+    /// Clears `state.fetchError` on every successful cycle so the UI error banner
+    /// dismisses automatically as soon as connectivity is restored.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -344,6 +363,19 @@ public actor RunnerPoller {
             state.actions = groupResult.display
             state.isRateLimited = rateLimitSnapshot.isLimited
             state.rateLimitResetDate = rateLimitSnapshot.resetDate
+            state.fetchError = nil
+        }
+    }
+
+    /// Surfaces a fetch failure to the `RunnerState` read model.
+    ///
+    /// Intentionally does **not** clear `runners`, `jobs`, or `actions` — views show
+    /// stale data alongside the error banner rather than an empty list. Stale data with
+    /// a visible error is less disruptive than a sudden empty state for a transient failure.
+    private func applyError(_ error: any Error & Sendable) async {
+        log("RunnerPoller › applyError — \(error)")
+        await MainActor.run { [state] in
+            state.fetchError = error
         }
     }
 
