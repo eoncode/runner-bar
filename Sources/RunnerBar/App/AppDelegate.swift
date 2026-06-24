@@ -322,6 +322,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         panelSheetState.captureTransientHideState()
+        // ❌ Set isTransientHide = true BEFORE isOpen = false.
+        // PanelContainerView.onChange fires synchronously when isOpen changes.
+        // If isTransientHide is not already true at that point, onChange will
+        // incorrectly clear isSheetActive, causing the dim-overlay animation to
+        // replay on the next restore even though the sheet never closed.
+        // See PanelVisibilityState.isTransientHide for the full lifecycle.
         panelVisibilityState.isTransientHide = true
         if hidePopoverWindowsPreservingSheets() {
             tearDownOpenState()
