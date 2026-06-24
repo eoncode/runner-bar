@@ -22,6 +22,15 @@ import Observation
 ///
 /// **Threading**
 /// Both `observe` and `onChange` are called on the `@MainActor`.
+///
+/// **`withObservationTracking` onChange thread contract**
+/// The `onChange` callback of `withObservationTracking` fires on whichever
+/// thread mutated the tracked `@Observable` property — not necessarily the
+/// main actor. To guarantee `@MainActor` execution without asserting it,
+/// this implementation schedules work via `Task { @MainActor in ... }` rather
+/// than `MainActor.assumeIsolated`. This means `onChange` and the subsequent
+/// `register()` call are always enqueued onto the main actor executor safely,
+/// even if an `@Observable` property is ever written from a background actor.
 @MainActor
 public final class ObservationLoop {
     /// Closure that reads `@Observable` properties to register tracking.
@@ -34,8 +43,8 @@ public final class ObservationLoop {
     /// Creates and immediately starts the observation loop.
     ///
     /// - Parameters:
-    ///   - observe:  A closure that reads one or more `@Observable` properties.
-    ///               Re-executed after each `onChange` to re-register tracking.
+    ///   - observe: A closure that reads one or more `@Observable` properties.
+    ///     Re-executed after each `onChange` to re-register tracking.
     ///   - onChange: Called whenever any property read in `observe` changes.
     public init(
         observe: @escaping @MainActor () -> Void,
@@ -51,11 +60,17 @@ public final class ObservationLoop {
     }
 
     /// Registers a single `withObservationTracking` pass and schedules re-registration on change.
+    ///
+    /// The `withObservationTracking` onChange callback fires on whichever thread mutated the
+    /// property — not necessarily the main actor. We use `Task { @MainActor in ... }` here
+    /// rather than `MainActor.assumeIsolated` so that both the `onChange` call and the
+    /// subsequent `register()` are always enqueued onto the main executor, even if a
+    /// background actor writes the observed property directly.
     private func register() {
         withObservationTracking {
             observe()
         } onChange: { [weak self] in
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
                 guard let self, self.isRunning else { return }
                 self.onChange()
                 self.register()

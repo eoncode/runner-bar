@@ -128,9 +128,7 @@ public actor RunnerPoller {
     private func startObservingPreferences() {
         let injectedStore = preferencesStore
         pollLoop.setIntervalObservationTask(Task { [weak self] in
-            // PreferencesObserver.continuation is AsyncStream<Int>.Continuation
-            // because pollingInterval is Int — use AsyncStream<Int> here.
-            let (stream, continuation) = AsyncStream<Int>.makeStream()
+            let (stream, continuation) = AsyncStream<TimeInterval>.makeStream()
             let observer: PreferencesObserver = await MainActor.run {
                 let preferencesObserver = PreferencesObserver(continuation: continuation, store: injectedStore)
                 preferencesObserver.start()
@@ -306,6 +304,9 @@ public actor RunnerPoller {
     /// 2. Metrics enrichment — one child task per busy runner via a second `withTaskGroup`.
     /// This restores the parallel behaviour from the original `RunnerStore` implementation;
     /// a serial loop would add latency proportional to the number of concurrently-busy runners.
+    ///
+    /// The `scope` is preserved alongside each runner through both phases so that Phase 2
+    /// can form the correct composite `"<scope>/<name>"` key for the `byFullKey` fallback.
     func fetchAndEnrichRunners(
         scopes: [String],
         localRunners: [RunnerModel],
@@ -314,16 +315,18 @@ public actor RunnerPoller {
         log("RunnerPoller › fetchAndEnrichRunners ENTER — scopes=\(scopes)")
 
         // Phase 1 — Fetch raw runners for all scopes in parallel.
-        var indexed: [(idx: Int, runner: Runner)] = []
-        await withTaskGroup(of: (Int, [Runner]).self) { group in
+        // Each element retains its source scope so Phase 2 can form the
+        // "<scope>/<runnerName>" composite key for the byFullKey fallback.
+        var indexed: [(idx: Int, scope: String, runner: Runner)] = []
+        await withTaskGroup(of: (Int, String, [Runner]).self) { group in
             for (i, scope) in scopes.enumerated() {
                 group.addTask {
                     let fetched = await fetchRunners(for: scope)
-                    return (i, fetched)
+                    return (i, scope, fetched)
                 }
             }
-            for await (i, fetched) in group {
-                indexed.append(contentsOf: fetched.map { (i, $0) })
+            for await (i, scope, fetched) in group {
+                indexed.append(contentsOf: fetched.map { (i, scope, $0) })
             }
         }
 
@@ -339,19 +342,22 @@ public actor RunnerPoller {
             ) { group in
                 for i in busyIndices {
                     let runner = indexed[i].runner
-                    // Resolve install path using the available lookup keys, in order
+                    let scope = indexed[i].scope
+                    // Resolve install path using all four available lookup keys, in order
                     // of decreasing specificity:
-                    //   1. byApiId   — most precise; matches the GitHub REST runner ID.
-                    //   2. byAgentId — matches the runner's self-reported agent ID.
-                    //   3. byName    — matches on runner name alone (scope-agnostic).
-                    // Note: Runner has no .scope property, so byFullKey is not used here.
-                    // The byFullKey map is still populated by buildInstallPathMap and can
-                    // be used by callers that have a scope string at hand.
+                    //   1. byApiId    — most precise; matches the GitHub REST runner ID.
+                    //   2. byAgentId  — matches the runner's self-reported agent ID.
+                    //   3. byName     — matches on runner name alone (scope-agnostic).
+                    //   4. byFullKey  — matches on "<scope>/<runnerName>" composite key;
+                    //                   resolves ambiguity when two runners in different
+                    //                   scopes share the same name and neither apiId nor
+                    //                   agentId is resolvable from local runner metadata.
                     let installPath = installPathMap.byApiId[runner.id]
                         ?? installPathMap.byAgentId[runner.id]
                         ?? installPathMap.byName[runner.name]
+                        ?? installPathMap.byFullKey["\(scope)/\(runner.name)"]
                     guard let path = installPath else {
-                        log("RunnerPoller › fetchAndEnrichRunners — no installPath for \(runner.name) id=\(runner.id)")
+                        log("RunnerPoller › fetchAndEnrichRunners — no installPath for \(runner.name) id=\(runner.id) scope=\(scope)")
                         continue
                     }
                     group.addTask {
@@ -369,20 +375,20 @@ public actor RunnerPoller {
         }
 
         // Write metrics back to the injected local runner store closure.
-        // Runner has no .scope property, so byFullKey is not checked here.
-        let metricsUpdates = indexed.filter {
-            $0.runner.busy && (
-                installPathMap.byApiId[$0.runner.id] != nil
-                    || installPathMap.byAgentId[$0.runner.id] != nil
-                    || installPathMap.byName[$0.runner.name] != nil
+        let metricsUpdates = indexed.filter { entry in
+            entry.runner.busy && (
+                installPathMap.byApiId[entry.runner.id] != nil
+                    || installPathMap.byAgentId[entry.runner.id] != nil
+                    || installPathMap.byName[entry.runner.name] != nil
+                    || installPathMap.byFullKey["\(entry.scope)/\(entry.runner.name)"] != nil
             )
         }
         if !metricsUpdates.isEmpty {
-            for (_, runner) in metricsUpdates {
+            for entry in metricsUpdates {
 #if DEBUG
-                log("RunnerPoller › fetchAndEnrichRunners — applyMetrics: \(runner.name) id=\(runner.id) busy=\(runner.busy) metrics=\(String(describing: runner.metrics))")
+                log("RunnerPoller › fetchAndEnrichRunners — applyMetrics: \(entry.runner.name) id=\(entry.runner.id) busy=\(entry.runner.busy) metrics=\(String(describing: entry.runner.metrics))")
 #endif
-                await applyMetrics(runner.metrics, runner.id, runner.name)
+                await applyMetrics(entry.runner.metrics, entry.runner.id, entry.runner.name)
             }
         }
 

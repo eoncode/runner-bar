@@ -290,6 +290,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #if DEBUG
         log("AppDelegate › tearDownOpenState — caller=\(Thread.callStackSymbols[1])")
 #endif
+        // Order matters: coordinator clears panelIsOpen first, then SwiftUI state follows.
+        // Both are @MainActor so there is no concurrency gap between the two writes,
+        // but panelIsOpen must be false before panelVisibilityState.isOpen triggers
+        // any onChange observer that reads panelIsOpen.
         lifecycleCoordinator.tearDown()
         panelVisibilityState.isOpen = false
     }
@@ -323,7 +327,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER reset hostingController.rootView here.
     func hidePanel() {
 #if DEBUG
-        // swiftlint:disable:next line_length
         log("AppDelegate › hidePanel — ENTER panelIsOpen=\(panelIsOpen) hasActiveSheet=\(hasActiveSheet) preservedSheetWindowHide=\(preservedSheetWindowHide) popoverBehavior=\(popover?.behavior.rawValue ?? -1) caller=\(Thread.callStackSymbols[1])")
 #endif
         guard panelIsOpen else {
@@ -346,7 +349,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("AppDelegate › hidePopoverWindowsPreservingSheets — ENTER hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))")
         guard hasActiveSheet,
               let popoverWindow = popover?.contentViewController?.view.window else {
-            // swiftlint:disable:next line_length
             log("AppDelegate › hidePopoverWindowsPreservingSheets — guard fail (hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))), returning false")
             return false
         }
