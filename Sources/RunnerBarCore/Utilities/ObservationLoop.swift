@@ -24,8 +24,11 @@ import Observation
 /// Both `observe` and `onChange` are called on the `@MainActor`.
 @MainActor
 public final class ObservationLoop {
+    /// Closure that reads `@Observable` properties to register tracking.
     private let observe: @MainActor () -> Void
+    /// Closure invoked whenever a tracked property changes.
     private let onChange: @MainActor () -> Void
+    /// Guards against re-registration after deinit.
     private var isRunning = true
 
     /// Creates and immediately starts the observation loop.
@@ -47,6 +50,7 @@ public final class ObservationLoop {
         isRunning = false
     }
 
+    /// Registers a single `withObservationTracking` pass and schedules re-registration on change.
     private func register() {
         withObservationTracking {
             observe()
