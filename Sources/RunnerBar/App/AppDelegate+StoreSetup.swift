@@ -26,16 +26,18 @@ extension AppDelegate {
     /// observers spawned inside `setupPanel → setupSubscriptions` never read
     /// `ScopePreferencesStore` before the v2 blobs exist. The sequence is:
     ///
-    ///  1. Configure transports (synchronous, no actor reads).
-    ///  2. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
-    ///  3. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
-    ///  4. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
-    ///     observers start only after migration is complete.
+    /// 1. Configure transports (synchronous, no actor reads).
+    /// 2. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
+    /// 3. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
+    /// 4. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
+    ///    observers start only after migration is complete.
     ///
     /// - Parameter _: The notification (unused).
     func applicationDidFinishLaunching(_ _: Notification) {
         log("AppDelegate › applicationDidFinishLaunching — START")
+
         configureGHToken { githubToken() }
+
         // Wire all three shim transports directly to sharedGitHubTransport,
         // eliminating the intermediate hop through module-level free-function shims.
         // The token is resolved per-call via sharedGitHubTransport's default
@@ -52,38 +54,62 @@ extension AppDelegate {
         configureGHAPIPaginated { endpoint, timeout in
             await sharedGitHubTransport.apiPaginated(endpoint, timeout: timeout)
         }
+
         // Read knownScopes synchronously before the Task — ScopeStore.shared is
         // @MainActor and we are already on @MainActor here. (#1538)
         let knownScopes = ScopeStore.shared.entries.map(\.scope)
         log("AppDelegate › applicationDidFinishLaunching — migration task starting for \(knownScopes.count) scopes")
+
         // Migrate, hydrate display names, THEN start UI and observers.
         // Plain Task{} inherits @MainActor from AppDelegate; all three setup
         // calls below run on the main actor after the two awaits resolve. (#1538)
-        Task<Void, Never> {
+        Task {
             // Step 2: migrate legacy flat keys → v2 blobs.
             await ScopePreferencesStore.shared.migrateIfNeeded(knownScopes: knownScopes)
+
             // Step 3: hydrate ScopeEntry.displayName from freshly-migrated blobs.
             await ScopeStore.shared.refreshDisplayNames()
+
             // Step 4: start UI and observers — guaranteed to see migrated prefs.
             setupStatusItem()
             setupPanel()
             setupSignOutSubscription()
-            // Step 13: wire ObservationLoop so AppDelegate reacts to RunnerState
-            // changes without a callback from RunnerPoller.
-            //
-            // ⚠️ Only `statusIconLoop` is wired here. Failure hooks are NOT
-            // observed via ObservationLoop — they are fired exclusively by
-            // `RunnerPoller.buildGroupState` via the injected `fireFailureHook`
-            // closure, which is correctly deduplicated by `seenGroupIDs` inside
-            // `PollResultBuilder`. Adding a second observer here would fire hooks
-            // for groups already handled by `buildGroupState`, bypassing
-            // `seenGroupIDs` and causing duplicate hook executions.
-            statusIconLoop = ObservationLoop { [weak self] in
+
+            // Step 13: wire ObservationLoop instances so AppDelegate reacts to
+            // RunnerState changes without a callback from RunnerPoller.
+            statusIconLoop = ObservationLoop {
+                [weak self] in
                 guard let self else { return }
                 _ = runnerState.aggregateStatus
-            } onChange: { [weak self] in
+            } onChange: {
+                [weak self] in
                 self?.updateStatusIcon()
             }
+
+            // ⚠️ WIRING CONSTRAINT — do NOT call FailureHookRunner.evaluate(_:)
+            // from this onChange closure.
+            //
+            // runnerState.actions is written by applyFetchResult on EVERY poll
+            // cycle, so onChange fires every cycle — not only when a new failure
+            // appears. FailureHookRunner.evaluate has no access to
+            // RunnerPoller.seenGroupIDs and therefore re-fires the hook for every
+            // group that remains in the actions list on every subsequent poll tick.
+            //
+            // Double-fire consequence: the terminal failure command opens twice
+            // (or more) per poll cycle for any group that stays in a failed state.
+            //
+            // The fireFailureHook closure injected into RunnerPoller.init
+            // (callsite: "pollResultBuilder") is the canonical, deduplicated
+            // firing path — it owns seenGroupIDs inside the RunnerPoller actor.
+            // Keep this loop registered so the observation stays alive for future
+            // use (e.g. UI badge updates), but leave onChange as a no-op for
+            // anything hook-related.
+            failureHookLoop = ObservationLoop {
+                [weak self] in
+                guard let self else { return }
+                _ = runnerState.actions
+            } onChange: { /* no-op: failure-hook firing belongs to RunnerPoller.fireFailureHook */ }
+
             log("AppDelegate › applicationDidFinishLaunching — DONE")
         }
     }
