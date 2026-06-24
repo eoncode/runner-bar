@@ -21,12 +21,15 @@ import Foundation
 @MainActor
 public final class PreferencesObserver {
     /// The continuation used to push new `pollingInterval` values into the `AsyncStream`.
-    private let continuation: AsyncStream<Int>.Continuation
+    /// `TimeInterval` matches `RunnerPoller.startObservingPreferences` which creates
+    /// `AsyncStream<TimeInterval>.makeStream()` so the interval can be used directly
+    /// as a `TimeInterval` in `nextPollInterval()` without a conversion.
+    private let continuation: AsyncStream<TimeInterval>.Continuation
     /// The injected preferences store — avoids singleton access inside the observer.
     private let store: any AppPreferencesStoreProtocol
 
     /// Creates a new observer that writes changes into `continuation`.
-    public init(continuation: AsyncStream<Int>.Continuation, store: any AppPreferencesStoreProtocol) {
+    public init(continuation: AsyncStream<TimeInterval>.Continuation, store: any AppPreferencesStoreProtocol) {
         self.continuation = continuation
         self.store = store
     }
@@ -39,7 +42,7 @@ public final class PreferencesObserver {
             } onChange: { [weak self] in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    self.continuation.yield(self.store.pollingInterval)
+                    self.continuation.yield(TimeInterval(self.store.pollingInterval))
                     self.start()
                 }
             }
