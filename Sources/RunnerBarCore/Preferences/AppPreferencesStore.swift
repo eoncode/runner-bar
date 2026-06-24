@@ -115,16 +115,12 @@ public final class AppPreferencesStore {
 
 /// Constrains a `Comparable` value to a closed range.
 ///
-/// REVIEW: This extension is scoped `internal` deliberately — it must not be
-/// `public` so consumers of `RunnerBarCore` as a library do not receive a
-/// `clamped(to:)` injection on every `Comparable` type they use.
-///
-/// Trade-off acknowledged: `internal` still injects `clamped(to:)` on every
-/// `Comparable` type inside `RunnerBarCore` (String, Date, Double, …). This is
-/// acceptable while there is only one call site (`pollingInterval` clamping in
-/// `AppPreferencesStore`). If a second call site never materialises, narrow this
-/// to `fileprivate` or replace with a `static` helper inside `AppPreferencesStore`.
-extension Comparable {
+/// Scoped `fileprivate` — there is a single call site (`pollingInterval` clamping
+/// in `AppPreferencesStore`). `fileprivate` confines the extension to this file and
+/// avoids injecting `.clamped(to:)` on every `Comparable` type across `RunnerBarCore`
+/// (principle P7 — no pollution of global namespaces). If a second call site ever
+/// appears in another file, promote to `internal` at that point.
+private extension Comparable {
     /// Returns the value clamped to `range`, i.e. `max(lowerBound, min(self, upperBound))`.
     func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
