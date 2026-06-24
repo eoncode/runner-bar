@@ -4,7 +4,7 @@
 import Foundation
 
 /// Protocol that abstracts the active-scopes store, allowing test doubles
-/// to be injected into `RunnerStore` without going through the live singleton.
+/// to be injected into `RunnerPoller` without going through the live singleton.
 ///
 /// `Sendable` conformance is required so the existential can be captured by the
 /// actor and read inside `await MainActor.run { }` closures without triggering
@@ -16,7 +16,7 @@ import Foundation
 ///   isolation on the protocol guarantees all access happens on the main actor,
 ///   making `@unchecked` safe in practice for simple fake classes.
 ///
-/// - Important: Conforming types **must** be `@Observable`. `RunnerStore` wires
+/// - Important: Conforming types **must** be `@Observable`. `RunnerPoller` wires
 ///   change notifications via `withObservationTracking`, which only fires its
 ///   `onChange` callback for properties accessed on concrete `@Observable` types.
 ///   A plain class conformance compiles correctly but the `onChange` closure will
