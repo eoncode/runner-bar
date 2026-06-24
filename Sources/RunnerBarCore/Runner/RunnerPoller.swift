@@ -342,7 +342,7 @@ public actor RunnerPoller {
                 log("RunnerPoller › fetchAndEnrichRunners — no installPath for \(runner.name) id=\(runner.id)")
                 continue
             }
-            let metrics = await RunnerMetricsFetcher.fetchMetrics(for: runner, installPath: path)
+            let metrics = await metricsForRunner(installPath: path)
             indexed[i].runner = indexed[i].runner.copying(metrics: metrics)
         }
 

@@ -74,7 +74,7 @@ actor LocalRunnerStore {
 
     // MARK: - Internal actor state
     /// The current list of locally-installed runners, sorted by name.
-    private var runners: [RunnerModel] = []
+    var runners: [RunnerModel] = []
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     private var isScanning: Bool = false
     /// Task driving the fire-and-forget refresh loop; cancelled by `shutdown()`.

@@ -227,7 +227,7 @@ extension AppDelegate: NSPopoverDelegate {
             state: runnerState,
             preferencesStore: AppPreferencesStore.shared,
             scopeStore: ScopeStore.shared,
-            localRunners: { LocalRunnerStore.shared.runners },
+            localRunners: { [observable] in observable.localRunners },
             applyMetrics: { metrics, id, name in
                 await LocalRunnerStore.shared.applyMetrics(metrics, forRunnerId: id, name: name)
             },
