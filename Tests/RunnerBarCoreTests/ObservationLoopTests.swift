@@ -12,6 +12,7 @@ import Testing
 import Observation
 @testable import RunnerBarCore
 
+@MainActor
 @Observable
 final class ObservableCounter {
     var count = 0
