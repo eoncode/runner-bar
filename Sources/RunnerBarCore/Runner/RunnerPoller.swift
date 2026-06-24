@@ -265,7 +265,11 @@ public actor RunnerPoller {
     // MARK: - Fetch
 
     /// Performs one full poll cycle.
-    public func fetch() async {
+    ///
+    /// `internal` — not on `RunnerPollerProtocol`. Use `start()` to drive the poll cadence.
+    /// Accessible at `internal` scope so tests holding a concrete `RunnerPoller` can
+    /// trigger a single cycle without going through the protocol seam.
+    func fetch() async {
         await clearGhRateLimit()
         let scopesSnapshot = await MainActor.run { scopeStore.activeScopes }
         log("RunnerPoller › fetch ENTER — activeScopesSnapshot=\(scopesSnapshot)")
@@ -447,12 +451,11 @@ public actor RunnerPoller {
             }
         }
 
-        // Write metrics back to injected local runner store for runners that Phase 2
-        // successfully enriched. Using `entry.runner.metrics != nil` as the predicate
-        // rather than re-stating the four-map OR check: Phase 2 is the canonical
-        // resolution step, and its result (a non-nil metrics field) is the single
-        // source of truth for whether applyMetrics should fire. This avoids duplicating
-        // the lookup priority logic and prevents drift if the priority chain ever changes.
+        // Write metrics back to injected local runner store for busy runners where
+        // Phase 2 successfully resolved an install path and applied metrics.
+        // Keyed on entry.runner.metrics != nil — Phase 2 is the canonical resolver;
+        // duplicating the four-map OR predicate here would create a drift risk if
+        // lookup priority ever changes.
         let metricsUpdates = indexed.filter { $0.runner.busy && $0.runner.metrics != nil }
         if !metricsUpdates.isEmpty {
             for entry in metricsUpdates {
