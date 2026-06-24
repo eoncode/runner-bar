@@ -47,10 +47,17 @@ enum FailureHookRunner {
         await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
     }
 
-    // TODO: wire this at app launch before the poll loop starts (one-shot evaluation).
-    // Track in a dedicated issue before activating. Do NOT wire to failureHookLoop or
-    // any continuous ObservationLoop — see doc-comment below for the full constraint.
-    // Periphery will flag this as unused until a call site is added; that is intentional.
+    // TODO(#1573): Wire this method when the app-launch one-shot evaluation call site
+    // is added. Before wiring:
+    //   1. Replace `group.repo` with `scopeFromActionGroup(group)` for correct
+    //      empty-repo fallback (tracked in #1573).
+    //   2. Decide whether the fire-and-forget Task {} should be stored and
+    //      cancelled on app termination, or whether the cooperative-pool
+    //      cancellation on process exit is sufficient for a one-shot path.
+    // Do NOT suppress Periphery warnings on this site permanently — remove this
+    // comment and the annotation once a real call site exists so dead-code
+    // detection can resume protecting this method.
+    // periphery:ignore
     /// Evaluates all action groups and fires the failure hook for any that qualify.
     ///
     /// Each group is evaluated independently; groups that do not qualify are silently skipped.
@@ -79,6 +86,12 @@ enum FailureHookRunner {
     /// This method is intentionally kept for future use cases where the caller can
     /// guarantee freshness (e.g. a one-shot evaluate at app launch before the poll
     /// loop starts). It must never be wired to a continuous observation loop.
+    ///
+    /// **Cancellation note:** the inner `Task {}` is fire-and-forget — no handle is
+    /// retained. For a one-shot app-launch path this is acceptable because the
+    /// cooperative thread pool drains on process exit. If this method is ever wired
+    /// to a longer-lived owner that needs structured cancellation, store and cancel
+    /// the returned task handle at that call site.
     static func evaluate(_ actions: [WorkflowActionGroup]) {
         Task {
             for group in actions {

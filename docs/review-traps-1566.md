@@ -241,3 +241,30 @@ consistent with every other `JobStatus` comparison in the codebase
 **Verify at:** `Sources/RunnerBarCore/Runner/RunnerPoller.swift` —
 `nextPollInterval()` and `Sources/RunnerBar/Views/Components/WorkflowContextMenuModifier.swift` —
 `JobContextMenuModifier.menuItems`.
+
+---
+
+## 14. `FailureHookRunner.evaluate(_:)` — dead code with `periphery:ignore`, no cancellation handle
+
+**Claim:** `evaluate(_:)` is dead code; `periphery:ignore` actively suppresses static
+analysis that would surface it; the inner `Task {}` is fire-and-forget with no stored
+handle, so it cannot be cancelled if the method is ever wired incorrectly.
+
+**Reality (partial):** The dead-code concern and the cancellation gap are both real
+observations. This PR addresses them as follows:
+
+- `periphery:ignore` is retained (Periphery must still be suppressed to compile), but
+  the annotation is now accompanied by a `// TODO(#1573)` comment that ties it to a
+  concrete open issue. The comment explicitly instructs future engineers to remove
+  the annotation once a real call site exists.
+- The doc-comment on `evaluate(_:)` now includes a **Cancellation note** explaining
+  why fire-and-forget is acceptable for the intended one-shot app-launch path, and
+  what to do if the method is ever wired to a longer-lived owner.
+- The wiring constraint (`do NOT call from failureHookLoop`) remains prominently
+  doc-commented and is now also cross-referenced in the PR traps doc.
+
+**What is not fixed here:** the `group.repo` empty-scope gap (fix deferred to #1573,
+which should be resolved before the first real call site is wired).
+
+**Verify at:** `Sources/RunnerBar/Services/FailureHookRunner.swift` —
+`evaluate(_:)`, the `TODO(#1573)` comment block and the updated doc-comment.
