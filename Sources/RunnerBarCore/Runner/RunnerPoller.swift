@@ -128,6 +128,8 @@ public actor RunnerPoller {
     private func startObservingPreferences() {
         let injectedStore = preferencesStore
         pollLoop.setIntervalObservationTask(Task { [weak self] in
+            // PreferencesObserver.continuation is AsyncStream<Int>.Continuation
+            // because pollingInterval is Int — use AsyncStream<Int> here.
             let (stream, continuation) = AsyncStream<Int>.makeStream()
             let observer: PreferencesObserver = await MainActor.run {
                 let preferencesObserver = PreferencesObserver(continuation: continuation, store: injectedStore)
@@ -337,23 +339,17 @@ public actor RunnerPoller {
             ) { group in
                 for i in busyIndices {
                     let runner = indexed[i].runner
-                    // Resolve install path using all four available lookup keys, in order
+                    // Resolve install path using the available lookup keys, in order
                     // of decreasing specificity:
-                    //   1. byApiId    — most precise; matches the GitHub REST runner ID.
-                    //   2. byAgentId  — matches the runner's self-reported agent ID.
-                    //   3. byName     — matches on runner name alone (scope-agnostic).
-                    //   4. byFullKey  — matches on "<scope>/<runnerName>" composite key;
-                    //                   resolves ambiguity when two runners in different
-                    //                   scopes share the same name and neither apiId nor
-                    //                   agentId is resolvable from local runner metadata.
-                    //                   Runner has no scope property; scope comes from the
-                    //                   outer scopes parameter, so we use runner.name as
-                    //                   the key here (byName already covers this, but we
-                    //                   keep the chain intact for future scope enrichment).
+                    //   1. byApiId   — most precise; matches the GitHub REST runner ID.
+                    //   2. byAgentId — matches the runner's self-reported agent ID.
+                    //   3. byName    — matches on runner name alone (scope-agnostic).
+                    // Note: Runner has no .scope property, so byFullKey is not used here.
+                    // The byFullKey map is still populated by buildInstallPathMap and can
+                    // be used by callers that have a scope string at hand.
                     let installPath = installPathMap.byApiId[runner.id]
                         ?? installPathMap.byAgentId[runner.id]
                         ?? installPathMap.byName[runner.name]
-                        ?? installPathMap.byFullKey[runner.name]
                     guard let path = installPath else {
                         log("RunnerPoller › fetchAndEnrichRunners — no installPath for \(runner.name) id=\(runner.id)")
                         continue
@@ -373,12 +369,12 @@ public actor RunnerPoller {
         }
 
         // Write metrics back to the injected local runner store closure.
+        // Runner has no .scope property, so byFullKey is not checked here.
         let metricsUpdates = indexed.filter {
             $0.runner.busy && (
                 installPathMap.byApiId[$0.runner.id] != nil
                     || installPathMap.byAgentId[$0.runner.id] != nil
                     || installPathMap.byName[$0.runner.name] != nil
-                    || installPathMap.byFullKey[$0.runner.name] != nil
             )
         }
         if !metricsUpdates.isEmpty {
