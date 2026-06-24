@@ -78,3 +78,18 @@ but is not required for correctness or performance.
 
 **Verify at:** `Sources/RunnerBarCore/Runner/RunnerPoller.swift` —
 `decoder` property doc-comment.
+
+---
+
+## 5. `ObservationLoop.onChange` — mutating tracked properties inside `onChange`
+
+**Status: addressed.** This is a real footgun but not a bug in the current callers.
+The `onChange` parameter doc-comment in `ObservationLoop.init` now explicitly warns
+that callers must not mutate `@Observable` properties that `observe` also reads —
+because `onChange` fires before the next `register()` pass, such mutations occur before
+tracking re-arms and will not trigger a subsequent cycle.
+
+Current callers (`updateStatusIcon`) are pure side-effect sinks and are unaffected.
+
+**Verify at:** `Sources/RunnerBarCore/Utilities/ObservationLoop.swift` —
+`init(observe:onChange:)` `onChange` parameter doc-comment.
