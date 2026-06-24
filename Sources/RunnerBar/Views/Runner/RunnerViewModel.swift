@@ -14,18 +14,21 @@ import Observation
 /// All required properties are defined on the main class body below.
 extension RunnerViewModel: RunnerViewModelProtocol {}
 
-/// Bridges `RunnerStore` and `LocalRunnerStore` into observable properties consumed by SwiftUI views.
+/// Bridges `LocalRunnerStore` into observable properties consumed by SwiftUI views.
 ///
-/// State is **pushed** into this view model by the stores via `await MainActor.run { }`.
+/// State is **pushed** into this view model by `LocalRunnerStore` via `await MainActor.run { }`.
 /// No pull / Combine sinks required. The entire class is `@MainActor` because all
 /// property mutations and reads must happen on the main thread for SwiftUI rendering.
+///
+/// GitHub runner/job/action state is no longer pushed here — it lives in `RunnerState`,
+/// written by `RunnerPoller` and injected into the SwiftUI environment via `AppDelegate.wrapEnv`.
 @MainActor
 @Observable
 final class RunnerViewModel {
     // periphery:ignore
     /// ❌ Do not use. The single live instance is owned by `AppDelegate` as `observable`.
     ///
-    /// `RunnerStore` and `LocalRunnerStore` push state into `AppDelegate.observable` only;
+    /// Only `LocalRunnerStore` pushes state into `AppDelegate.observable`;
     /// this accessor is never updated and will silently return stale/empty data.
     /// Inject `RunnerViewModel` explicitly via the environment or constructor instead.
     @MainActor static var shared: RunnerViewModel {
