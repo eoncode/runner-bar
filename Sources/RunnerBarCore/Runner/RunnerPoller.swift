@@ -128,7 +128,9 @@ public actor RunnerPoller {
     private func startObservingPreferences() {
         let injectedStore = preferencesStore
         pollLoop.setIntervalObservationTask(Task { [weak self] in
-            let (stream, continuation) = AsyncStream<TimeInterval>.makeStream()
+            // AsyncStream<Int> matches PreferencesObserver.init(continuation: AsyncStream<Int>.Continuation)
+            // because AppPreferencesStoreProtocol.pollingInterval is Int, not TimeInterval.
+            let (stream, continuation) = AsyncStream<Int>.makeStream()
             let observer: PreferencesObserver = await MainActor.run {
                 let preferencesObserver = PreferencesObserver(continuation: continuation, store: injectedStore)
                 preferencesObserver.start()
