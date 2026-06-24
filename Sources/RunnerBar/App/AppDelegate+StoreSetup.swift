@@ -77,12 +77,10 @@ extension AppDelegate {
 
             // Step 13: wire ObservationLoop instances so AppDelegate reacts to
             // RunnerState changes without a callback from RunnerPoller.
-            statusIconLoop = ObservationLoop {
-                [weak self] in
+            statusIconLoop = ObservationLoop { [weak self] in
                 guard let self else { return }
                 _ = runnerState.aggregateStatus
-            } onChange: {
-                [weak self] in
+            } onChange: { [weak self] in
                 self?.updateStatusIcon()
             }
 
@@ -104,8 +102,7 @@ extension AppDelegate {
             // Keep this loop registered so the observation stays alive for future
             // use (e.g. UI badge updates), but leave onChange as a no-op for
             // anything hook-related.
-            failureHookLoop = ObservationLoop {
-                [weak self] in
+            failureHookLoop = ObservationLoop { [weak self] in
                 guard let self else { return }
                 _ = runnerState.actions
             } onChange: { /* no-op: failure-hook firing belongs to RunnerPoller.fireFailureHook */ }
