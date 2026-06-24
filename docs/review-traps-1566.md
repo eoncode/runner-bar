@@ -81,20 +81,48 @@ but is not required for correctness or performance.
 
 ---
 
-## 5. `fireFailureHook` should be `private`
+## 5. `ObservationLoop.onChange` — mutating tracked properties inside `onChange`
 
-**Claim:** `fireFailureHook` is a stored closure on `RunnerPoller` that is only called
-once — it should be `private` to minimise the module surface and avoid Periphery warnings.
+**Status: addressed.** This is a real footgun but not a bug in the current callers.
+The `onChange` parameter doc-comment in `ObservationLoop.init` now explicitly warns
+that callers must not mutate `@Observable` properties that `observe` also reads —
+because `onChange` fires before the next `register()` pass, such mutations occur before
+tracking re-arms and will not trigger a subsequent cycle.
 
-**Reality:** Swift's `private` modifier is **file-scoped**, not type-scoped.
-`fireFailureHook` is called as `self.fireFailureHook(group, scope)` inside
-`RunnerPoller+PollBridge.swift`, which is a separate file from `RunnerPoller.swift`.
-A `private` declaration in `RunnerPoller.swift` is invisible to extensions defined in
-other files, even within the same type. Making it `private` is a **compile error**.
-`internal` (no explicit modifier) is the correct and minimum viable access level here.
+Current callers (`updateStatusIcon`) are pure side-effect sinks and are unaffected.
 
-This was briefly changed to `private` in commit `755d7ca` and immediately reverted.
-Do not re-introduce `private` on this property.
+**Verify at:** `Sources/RunnerBarCore/Utilities/ObservationLoop.swift` —
+`init(observe:onChange:)` `onChange` parameter doc-comment.
 
-**Verify at:** `Sources/RunnerBarCore/Runner/RunnerPoller+PollBridge.swift` —
-`buildGroupState`, the `fireFailureHook: { group, scope in … await self.fireFailureHook(group, scope) }` closure.
+---
+
+## 6. `fetchError: Error?` — missing `& Sendable` constraint
+
+**Claim:** `RunnerState.fetchError` is typed `Error?` rather than
+`(any Error & Sendable)?` — unsafe for cross-actor use under Swift 6 strict concurrency.
+
+**Reality:** `fetchError` is `internal`, completely unwired, and has an inline TODO
+that explicitly calls for the `& Sendable` constraint at wiring time. Applying the
+constraint now would add noise to dead scaffolding and constitutes a public API change
+before the semantics are settled. The constraint will be applied atomically when
+`applyFetchResult` is wired to write it. No action required on this PR.
+
+**Verify at:** `Sources/RunnerBarCore/Runner/RunnerState.swift` —
+`fetchError` property and its inline TODO comment.
+
+---
+
+## 7. `extraOrgScopes.contains` — O(n) array lookup
+
+**Claim:** `fetchAndEnrichRunners` Phase 0 uses `extraOrgScopes.contains(orgScope)` on
+an `Array` inside a loop — O(n²) in the worst case; should use a `Set`.
+
+**Reality:** The outer loop iterates `localRunners` — runners physically installed on
+the local machine. In any realistic fleet this is a single-digit to low-tens count.
+`extraOrgScopes` is a subset of that. There is no plausible input size where the
+array lookup matters. Converting to `Set` would also silently drop the insertion-order
+semantics that the current code provides implicitly (scopes are fetched in the order
+they are discovered, which matches the original `RunnerStore` behaviour). No action.
+
+**Verify at:** `Sources/RunnerBarCore/Runner/RunnerPoller.swift` —
+`fetchAndEnrichRunners`, Phase 0 block.
