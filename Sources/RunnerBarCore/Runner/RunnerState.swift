@@ -26,5 +26,6 @@ public final class RunnerState {
     /// The date at which the rate limit resets, if currently rate-limited.
     public private(set) var rateLimitResetDate: Date?
 
+    /// Creates a new `RunnerState` with all properties at their default values.
     public init() {}
 }
