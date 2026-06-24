@@ -47,6 +47,7 @@ enum FailureHookRunner {
         await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
     }
 
+    // periphery:ignore - intentionally retained for future one-shot evaluation entry points.
     /// Evaluates all action groups and fires the failure hook for any that qualify.
     ///
     /// Each group is evaluated independently; groups that do not qualify are silently skipped.

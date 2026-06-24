@@ -66,6 +66,12 @@ public final class ObservationLoop {
     /// rather than `MainActor.assumeIsolated` so that both the `onChange` call and the
     /// subsequent `register()` are always enqueued onto the main executor, even if a
     /// background actor writes the observed property directly.
+    ///
+    /// Ordering note: `onChange()` intentionally runs before `register()`. This matches
+    /// the current callers, which treat `onChange` as a side-effect sink rather than a
+    /// source of additional tracked mutations. If a future `onChange` mutates properties
+    /// also read by `observe`, those mutations occur before the next tracking pass is
+    /// registered and therefore are not themselves observed by that same cycle.
     private func register() {
         withObservationTracking {
             observe()

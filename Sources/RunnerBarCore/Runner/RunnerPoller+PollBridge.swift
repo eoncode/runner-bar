@@ -29,7 +29,7 @@ extension RunnerPoller {
 
     /// Builds a `JobPollResult` by fetching live jobs for all monitored scopes,
     /// backfilling step data from the cache, and diffing against `snapPrev`.
-    public func buildJobState(
+    func buildJobState(
         snapPrev: [Int: ActiveJob],
         snapCache: [Int: ActiveJob]
     ) async -> JobPollResult {
@@ -53,7 +53,7 @@ extension RunnerPoller {
     /// Builds a `GroupPollResult` by fetching live workflow action groups for all monitored scopes,
     /// firing failure hooks for newly-failed groups, enriching jobs from the job cache,
     /// and diffing against `snapPrevGroups`.
-    public func buildGroupState(
+    func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
         snapSeenGroupIDs: Set<String>,
@@ -99,7 +99,7 @@ extension RunnerPoller {
     /// fetches the full job payload from the GitHub API, and updates the cache entry.
     /// Uses `decoder` — a stored instance property on `RunnerPoller` — which is serialised
     /// by the actor's own executor, ensuring no concurrent access.
-    public func backfillSteps(into cache: inout [Int: ActiveJob]) async {
+    func backfillSteps(into cache: inout [Int: ActiveJob]) async {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil,
