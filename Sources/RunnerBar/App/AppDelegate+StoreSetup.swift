@@ -68,6 +68,21 @@ extension AppDelegate {
             setupStatusItem()
             setupPanel()
             setupSignOutSubscription()
+            // Step 13: wire ObservationLoop instances so AppDelegate reacts to
+            // RunnerState changes without a callback from RunnerPoller.
+            statusIconLoop = ObservationLoop { [weak self] in
+                guard let self else { return }
+                _ = runnerState.aggregateStatus
+            } onChange: { [weak self] in
+                self?.updateStatusIcon()
+            }
+            failureHookLoop = ObservationLoop { [weak self] in
+                guard let self else { return }
+                _ = runnerState.actions
+            } onChange: { [weak self] in
+                guard let self else { return }
+                FailureHookRunner.evaluate(runnerState.actions)
+            }
             log("AppDelegate › applicationDidFinishLaunching — DONE")
         }
     }

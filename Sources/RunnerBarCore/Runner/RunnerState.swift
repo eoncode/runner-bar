@@ -33,6 +33,10 @@ public final class RunnerState {
     /// The most recent fetch error, or `nil` if the last fetch succeeded.
     public var fetchError: Error?
 
+    /// The overall connectivity state of the runner fleet, derived from `runners`.
+    /// Observed by `AppDelegate`'s `statusIconLoop` via `ObservationLoop`.
+    public var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) }
+
     /// Creates an empty `RunnerState`.
     public init() {}
 }

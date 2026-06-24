@@ -147,11 +147,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `RunnerPoller.applyFetchResult` writes into this instance on the `@MainActor`
     /// after every poll cycle; views will migrate to read from it in Step 12.
     let runnerState = RunnerState()
+    /// Retained `ObservationLoop` that re-fires `updateStatusIcon()` whenever
+    /// `runnerState.aggregateStatus` changes. Must be stored to prevent deallocation.
+    var statusIconLoop: ObservationLoop?
+    /// Retained `ObservationLoop` that re-evaluates the failure hook whenever
+    /// `runnerState.actions` changes. Must be stored to prevent deallocation.
+    var failureHookLoop: ObservationLoop?
     /// The last nav destination the user was on before the popover was closed or hidden.
     /// Restored by `openPanel()` so the user lands back where they left off.
     var savedNavState: NavState?
     /// Sheet state that must survive transient popover hides.
     let panelSheetState = PanelSheetState()
+    // periphery:ignore - write-only by design; assignment keeps the loop alive
+    /// Retains the `ObservationLoop` that observes `runnerState.aggregateStatus`
+    /// and calls `updateStatusIcon()` whenever the runner fleet status changes.
+    /// Must be stored as a property — deallocating it stops re-registration.
+    var statusIconLoop: ObservationLoop?
+    // periphery:ignore - write-only by design; assignment keeps the loop alive
+    /// Retains the `ObservationLoop` that observes `runnerState.actions`
+    /// and calls `FailureHookRunner.evaluate(_:)` whenever actions change.
+    /// Must be stored as a property — deallocating it stops re-registration.
+    var failureHookLoop: ObservationLoop?
     // periphery:ignore - write-only by design; assignment keeps the Task alive
     /// Retained handle for the sign-out observation task started in
     /// `setupSignOutSubscription()` (AppDelegate+Polling.swift).

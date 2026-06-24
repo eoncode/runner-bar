@@ -45,4 +45,18 @@ enum FailureHookRunner {
         )
         await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
     }
+
+    /// Evaluates all action groups and fires the failure hook for any that qualify.
+    ///
+    /// Called by `AppDelegate`'s `failureHookLoop` whenever `RunnerState.actions` changes.
+    /// Each group is evaluated independently; groups that do not qualify are silently skipped.
+    /// Runs the async `fireIfNeeded` calls inside a fire-and-forget `Task` so this
+    /// method can be called synchronously from the `ObservationLoop` onChange closure.
+    static func evaluate(_ actions: [WorkflowActionGroup]) {
+        Task {
+            for group in actions {
+                await fireIfNeeded(group: group, scope: group.repo, callsite: "observationLoop")
+            }
+        }
+    }
 }
