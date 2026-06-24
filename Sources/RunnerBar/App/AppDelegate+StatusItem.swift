@@ -40,7 +40,7 @@ extension AppDelegate {
         // `aggregateStatus` is derived from `observable.runners` which `RunnerPoller`
         // pushes to `RunnerViewModel.shared` via `MainActor.run` after every fetch cycle,
         // so we derive it here on the main actor from the already-pushed snapshot.
-        let status = AggregateStatus(runners: observable.runners)
+        let status = AggregateStatus(runners: runnerState.runners)
         statusItem?.button?.image = menuBarImage(for: status)
     }
 

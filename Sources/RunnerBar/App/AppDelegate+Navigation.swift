@@ -106,7 +106,7 @@ extension AppDelegate {
             // snapshot and is already @MainActor-isolated.
             // ⚠️ Do NOT replace `observable` with `RunnerViewModel.shared` —
             //    that accessor is a fatalError trap in this codebase.
-            guard observable.jobs.contains(where: { $0.id == job.id }) else { return nil }
+            guard runnerState.jobs.contains(where: { $0.id == job.id }) else { return nil }
             // No PanelContainerView here — StepLogView has no sheets.
             return wrapEnv(StepLogView(
                 job: job,
