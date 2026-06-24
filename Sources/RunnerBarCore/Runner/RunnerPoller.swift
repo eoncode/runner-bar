@@ -91,6 +91,9 @@ public actor RunnerPoller {
     /// `internal` (not `private`) so that extension files can read this property.
     internal let scopeStore: any ScopeStoreProtocol
     /// Shared `JSONDecoder` — reused across all decode calls in the actor.
+    /// `withTaskGroup` child tasks in `fetchAndEnrichRunners` access this concurrently,
+    /// which is safe because `JSONDecoder` is stateless after initialisation and is
+    /// declared `@unchecked Sendable` in the SDK.
     let decoder = JSONDecoder()
     /// Fetcher for workflow action groups.
     let actionGroupFetcher: any WorkflowActionGroupFetcherProtocol
@@ -216,7 +219,7 @@ public actor RunnerPoller {
         if localCount == 0 {
             log("RunnerPoller › ⚠️ start — localRunners=0 at start time; installPathMap will be empty on first fetch.")
         }
-        log("RunnerPoller › start — previous pollTask cancelled, launching new task")
+        log("RunnerPoller › start — launching new poll task")
         pollLoop.setPollTask(Task { [weak self] in
             guard let self else { return }
             await self.fetch()
