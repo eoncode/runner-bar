@@ -76,14 +76,18 @@ private struct WorkflowRun: Codable {
 
 // MARK: - Runners
 
-// Step 16: delete this overload and update RunnerPoller.fetchAndEnrichRunners Phase 1
-// to call fetchRunners(for:decoder:) from RunnerBarCore/GitHub/GitHubRunnerFetchers.swift,
+// Step 16: delete this overload and all remaining call sites.
+// Use fetchRunners(for:decoder:) from RunnerBarCore/GitHub/GitHubRunnerFetchers.swift,
 // passing `self.decoder` — consistent with the fetchActiveJobs call in RunnerPoller+PollBridge.
-// This overload is retained because app-layer call sites outside RunnerPoller still use it.
-// Until then, Phase 1 silently allocates a fresh JSONDecoder per scope fetch instead of
-// reusing RunnerPoller.decoder.
+// The @available deprecation below ensures any new call site added before Step 16 lands
+// produces a compiler warning rather than silently allocating a fresh JSONDecoder per call.
 
 /// Fetches all registered runners for the given scope string.
+///
+/// - Warning: Deprecated pending Step 16 deletion. Use `fetchRunners(for:decoder:)` from
+///   `RunnerBarCore` instead, passing a shared `JSONDecoder` instance (e.g. `self.decoder`
+///   on `RunnerPoller`). This overload allocates a fresh `JSONDecoder` per call.
+@available(*, deprecated, message: "Step 16: delete — use fetchRunners(for:decoder:) from RunnerBarCore instead, passing a shared decoder")
 func fetchRunners(for scopeString: String) async -> [Runner] {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRunners › invalid scope: \(scopeString)")
