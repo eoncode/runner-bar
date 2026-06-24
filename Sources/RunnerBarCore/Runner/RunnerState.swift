@@ -30,7 +30,9 @@ public final class RunnerState {
     // TODO: wire applyFetchResult to set fetchError on network/decode failures
     // so the panel can surface a connectivity error state to the user.
     /// The most recent fetch error, or `nil` if the last fetch succeeded.
-    public var fetchError: Error?
+    /// `internal` until `applyFetchResult` is wired to write it; demoted from
+    /// `public` to keep the `RunnerBarCore` API surface clean.
+    var fetchError: Error?
 
     /// The overall connectivity state of the runner fleet, derived from `runners`.
     /// Observed by `AppDelegate`'s `statusIconLoop` via `ObservationLoop`.
