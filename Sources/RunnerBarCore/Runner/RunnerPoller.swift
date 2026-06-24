@@ -226,8 +226,6 @@ public actor RunnerPoller {
         if localCount == 0 {
             log("RunnerPoller › ⚠️ start — localRunners=0 at start time; installPathMap will be empty on first fetch.")
         }
-        // Cancel the previous poll task before launching a new one.
-        // Log this explicitly so restart races and double-poll events are traceable.
         log("RunnerPoller › start — previous pollTask cancelled, launching new poll task")
         pollLoop.setPollTask(Task { [weak self] in
             guard let self else { return }

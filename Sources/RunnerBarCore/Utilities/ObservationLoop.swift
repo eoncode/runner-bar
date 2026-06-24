@@ -38,10 +38,6 @@ public final class ObservationLoop {
     /// Closure invoked whenever a tracked property changes.
     private let onChange: @MainActor () -> Void
     /// Guards against re-registration after deinit.
-    ///
-    /// Written in `isolated deinit` (which runs on the `@MainActor` executor)
-    /// and read inside `Task { @MainActor in ... }` in `register()` — both
-    /// accesses are on the same executor, so there is no data race.
     private var isRunning = true
 
     /// Creates and immediately starts the observation loop.
@@ -66,14 +62,13 @@ public final class ObservationLoop {
         register()
     }
 
-    /// Stops re-registration by setting `isRunning = false` on the `@MainActor` executor.
-    ///
-    /// `isolated deinit` is required here because `isRunning` is a `@MainActor`-isolated
-    /// property and is read inside `Task { @MainActor in ... }` in `register()`. A plain
-    /// `deinit` on a `@MainActor` class does not run on the main actor by default in
-    /// Swift 6 — it runs on whichever thread releases the last strong reference. Using
-    /// `isolated deinit` makes the write a language-level guarantee rather than a
-    /// call-site assumption, closing the data race regardless of who holds the last ref.
+    /// `isolated deinit` ensures `isRunning = false` executes on the `@MainActor`
+    /// executor — the same isolation domain as the `self.isRunning` read in
+    /// `register()`'s `Task { @MainActor in guard let self, self.isRunning }` closure.
+    /// A plain `deinit` on a `@MainActor` class runs on the releasing thread
+    /// (not the main actor) in Swift 6, creating a data race between the write
+    /// here and the actor-isolated read in `register()`. `isolated deinit` closes
+    /// that race as a language guarantee, matching the pattern used in `RunnerPoller`.
     isolated deinit {
         isRunning = false
     }
