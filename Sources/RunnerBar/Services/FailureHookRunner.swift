@@ -31,8 +31,10 @@ enum FailureHookRunner {
     ///
     /// The deduplicated call site is the `fireFailureHook` closure injected into
     /// `RunnerPoller.init` (wired in `AppDelegate+PanelSetup`), which calls this method
-    /// with `callsite: "pollResultBuilder"`. That path is guarded by `seenGroupIDs`
-    /// inside `PollResultBuilder` so the hook fires exactly once per newly-failed group.
+    /// with `callsite: "pollResultBuilder"`. Deduplication is enforced by `seenGroupIDs`,
+    /// a stored property on `RunnerPoller`; `PollResultBuilder.buildGroupState` receives
+    /// it as a parameter, performs the guard check, and returns the updated set that
+    /// `RunnerPoller` writes back. The hook therefore fires exactly once per newly-failed group.
     ///
     /// `async` because `fireIfNeeded` is a structured async call — callers must
     /// provide a Task scope.
