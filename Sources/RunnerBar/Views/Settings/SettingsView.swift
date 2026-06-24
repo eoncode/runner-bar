@@ -49,9 +49,12 @@ struct SettingsView: View {
     var lifecycleService: any RunnerLifecycleServiceProtocol
 
     // MARK: - Injected services
-    /// App-wide preference store (notifications, update channel, etc.).
+    /// App-wide preference store (polling interval, popover arrow, etc.).
     /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
     let settings: AppPreferencesStore
+    /// Notification preference store (notify-on-success, notify-on-failure).
+    /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
+    let notifications: NotificationPreferences
 
     // MARK: - Local UI state
     /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
@@ -82,6 +85,7 @@ struct SettingsView: View {
         localRunnerStore: LocalRunnerStore = .shared,
         oauthService: any OAuthServiceProtocol,
         settings: AppPreferencesStore = .shared,
+        notifications: NotificationPreferences = .shared,
         lifecycleService: any RunnerLifecycleServiceProtocol
     ) {
         self.onBack = onBack
@@ -89,6 +93,7 @@ struct SettingsView: View {
         self.localRunnerStore = localRunnerStore
         self.oauthService = oauthService
         self.settings = settings
+        self.notifications = notifications
         self.lifecycleService = lifecycleService
     }
 
