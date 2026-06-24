@@ -25,6 +25,25 @@ public struct InstallPathMap {
     /// `.runner` JSON `AgentId`. This map is keyed on the API id so that metrics
     /// can be resolved for org runners even when `byAgentId` misses.
     public let byApiId: [Int: String]
+
+    /// Creates an `InstallPathMap` with pre-built lookup dictionaries.
+    ///
+    /// - Parameters:
+    ///   - byFullKey: Maps "scope/runnerName" to installPath.
+    ///   - byName: Maps runnerName to installPath (name-only fallback).
+    ///   - byAgentId: Maps local `.runner` JSON AgentId to installPath.
+    ///   - byApiId: Maps GitHub REST API runner id to installPath.
+    public init(
+        byFullKey: [String: String],
+        byName: [String: String],
+        byAgentId: [Int: String],
+        byApiId: [Int: String]
+    ) {
+        self.byFullKey = byFullKey
+        self.byName = byName
+        self.byAgentId = byAgentId
+        self.byApiId = byApiId
+    }
 }
 
 /// Builds four lookup maps from the local runner list.
