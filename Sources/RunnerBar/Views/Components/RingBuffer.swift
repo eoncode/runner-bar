@@ -2,10 +2,8 @@
 // RunnerBar
 import Foundation
 
-// MARK: - RingBuffer
-
 /// Fixed-capacity circular buffer whose `values` property returns elements oldest-first.
-struct RingBuffer {
+internal struct RingBuffer {
     /// Backing store; slots are overwritten in round-robin order.
     private var storage: [Double]
     /// Index of the oldest element (next write position).
@@ -15,19 +13,19 @@ struct RingBuffer {
     /// - Parameters:
     ///   - capacity: Number of slots in the buffer.
     ///   - fill: Initial value for every slot (default `0`).
-    init(capacity: Int, fill: Double = 0) {
+    internal init(capacity: Int, fill: Double = 0) {
         precondition(capacity > 0, "RingBuffer capacity must be positive")
         self.storage = Array(repeating: fill, count: capacity)
     }
 
     /// Overwrites the oldest slot with `value` in O(1).
     /// - Parameter value: The new sample to insert.
-    mutating func append(_ value: Double) {
+    internal mutating func append(_ value: Double) {
         storage[head] = value
         head = (head + 1) % storage.count
     }
 
     /// Elements in insertion order, oldest first.
     /// `head` is always in `[0, capacity)` — guaranteed by the modulo in `append()`.
-    var values: [Double] { Array(storage[head...] + storage[..<head]) }
+    internal var values: [Double] { Array(storage[head...] + storage[..<head]) }
 }
