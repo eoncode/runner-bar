@@ -10,6 +10,8 @@ import Observation
 // properties are already declared below). The explicit conformance is declared here
 // so the compiler verifies it and callers can use `RunnerViewModel` anywhere
 // `any RunnerViewModelProtocol` is expected.
+/// Declares that `RunnerViewModel` conforms to `RunnerViewModelProtocol`.
+/// All required properties are defined on the main class body below.
 extension RunnerViewModel: RunnerViewModelProtocol {}
 
 /// Bridges `RunnerStore` and `LocalRunnerStore` into observable properties consumed by SwiftUI views.
