@@ -162,7 +162,7 @@ public struct PollResultBuilder {
             "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
                 + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
-        // ── Sweep 1: enrich the display array ────────────────────────────────
+        // ── Sweep 1: enrich the display array ────────────────────────────────────────────
         // Keyed by Int (array index) so the sort order produced by buildGroupDisplay
         // is faithfully restored after withTaskGroup yields results in completion
         // order. Using a String group-ID key here would not be sufficient because
@@ -178,7 +178,7 @@ public struct PollResultBuilder {
             for await pair in group { out.append(pair) }
             return out.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
-        // ── Sweep 2: enrich the group cache ──────────────────────────────────
+        // ── Sweep 2: enrich the group cache ──────────────────────────────────────────
         // Keyed by String (group ID) because newCache is a dictionary and its
         // semantic identity IS the group ID. These two sweeps cannot be merged
         // into one: the key types differ (Int vs String), the source collections
@@ -209,7 +209,10 @@ public struct PollResultBuilder {
     ///
     /// A job vanishes when it disappears from the API response without transitioning
     /// through a `completed` status — most commonly a cancellation or runner disconnect.
-    /// Falls back to `.neutral` (not `.cancelled`) when no conclusion is available.
+    /// Falls back to `.neutral` (not `.cancelled`) because `.cancelled` is the conclusion
+    /// GitHub sets when a user explicitly cancels via the UI; a job that silently vanishes
+    /// from the feed never received that API update. Using `.neutral` avoids misattributing
+    /// the cause and keeps the display consistent with GitHub's own status page.
     public static func applyVanishedJobs(
         snapPrev: [Int: ActiveJob],
         liveIDs: Set<Int>,
@@ -264,6 +267,10 @@ public struct PollResultBuilder {
     }
 
     /// Removes cache entries whose `headSha` appears in the freshly-fetched group list.
+    ///
+    /// A re-run on the same commit produces a new group ID for the same `headSha`.
+    /// This method correctly evicts *all* cached groups for that SHA so the stale
+    /// entries cannot ghost alongside the fresh live group.
     public static func evictFreshShas(
         from cache: [String: WorkflowActionGroup],
         freshGroups: [WorkflowActionGroup]
@@ -332,6 +339,10 @@ public struct PollResultBuilder {
     ///
     /// `Set` is unordered so eviction order is arbitrary, not FIFO.
     /// Removes `count − limit` entries; the resulting set has exactly `limit` members.
+    /// The limit (200) is intentionally much larger than `groupCacheLimit` (30) so
+    /// hook-suppression memory outlasts the display cache by a wide margin — a
+    /// group evicted from the display cache cannot re-trigger the hook simply because
+    /// it reappears in GitHub's feed on a subsequent poll.
     public static func trimSeenGroupIDs(_ ids: inout Set<String>, limit: Int) {
         guard ids.count > limit else { return }
         let excess = ids.count - limit
@@ -349,7 +360,11 @@ public struct PollResultBuilder {
     ) -> [WorkflowActionGroup] {
         let inProgress = live.filter { $0.groupStatus == .inProgress }
         let queued = live.filter { $0.groupStatus == .queued }
-        let liveIDs = Set((inProgress + queued).map { $0.id })
+        // Use all live IDs (not just inProgress + queued) so that groups in other
+        // non-completed statuses (.waiting, .requested, etc.) also prevent their
+        // stale dimmed cache entry from appearing alongside the live entry.
+        // Mirrors the identical reasoning in buildJobDisplay.
+        let liveGroupIDs = Set(live.map { $0.id })
         let cached = cache.values.sorted {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
@@ -357,7 +372,7 @@ public struct PollResultBuilder {
         var display: [WorkflowActionGroup] = []
         display.appendUpTo(groupDisplayLimit, from: inProgress)
         display.appendUpTo(groupDisplayLimit, from: queued)
-        display.appendUpTo(groupDisplayLimit, from: cached) { !liveIDs.contains($0.id) }
+        display.appendUpTo(groupDisplayLimit, from: cached) { !liveGroupIDs.contains($0.id) }
         return display
     }
 }
@@ -370,7 +385,7 @@ private extension Array {
     ///
     /// Elements are appended in source order. An optional predicate can skip
     /// individual elements (e.g. cached groups that are already live) without
-    /// breaking the "fill until full" semantics.
+    /// breaking the “fill until full” semantics.
     mutating func appendUpTo<S>(
         _ limit: Int,
         from source: S,

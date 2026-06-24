@@ -1,5 +1,5 @@
 // AppPreferencesStore.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 import Observation
 
@@ -17,9 +17,9 @@ import Observation
 /// synchronisation is needed.
 @MainActor
 @Observable
-final class AppPreferencesStore {
+public final class AppPreferencesStore {
     /// Shared singleton — use this instead of calling init directly.
-    static let shared = AppPreferencesStore()
+    public static let shared = AppPreferencesStore()
 
     /// UserDefaults key constants used by `AppPreferencesStore`.
     private enum Key {
@@ -32,7 +32,7 @@ final class AppPreferencesStore {
     }
 
     /// Valid range for the polling interval in seconds. Minimum 10 s, maximum 300 s.
-    static let pollingRange: ClosedRange<Int> = 10 ... 300
+    public static let pollingRange: ClosedRange<Int> = 10 ... 300
 
     // MARK: - Backing store
 
@@ -49,10 +49,10 @@ final class AppPreferencesStore {
     /// `AppPreferencesStore` is `@MainActor`-isolated (all mutations are serialised
     /// on the main queue, so the recursive assignment cannot interleave).
     ///
-    /// `RunnerStore` observes this `@Observable` property via
+    /// `RunnerPoller` observes this `@Observable` property via
     /// `withObservationTracking`/`AsyncStream` and restarts its poll loop on change —
     /// no Combine subject bridge is required.
-    var pollingInterval: Int {
+    public var pollingInterval: Int {
         didSet {
             let clamped = pollingInterval.clamped(to: Self.pollingRange)
             if clamped != pollingInterval {
@@ -68,7 +68,7 @@ final class AppPreferencesStore {
     /// Retained for UserDefaults backwards-compatibility only — no longer surfaced
     /// in the UI (#510). Do not remove: removing would break the stored key for
     /// users upgrading from older versions.
-    var showDimmedRunners: Bool {
+    public var showDimmedRunners: Bool {
         didSet { defaults.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
     }
 
@@ -80,7 +80,7 @@ final class AppPreferencesStore {
     ///
     /// Takes effect on the next `openPanel()` call — the arrow state is baked in
     /// at `popover.show()` time and cannot be changed mid-session.
-    var showPopoverArrow: Bool {
+    public var showPopoverArrow: Bool {
         didSet { defaults.set(showPopoverArrow, forKey: Key.showPopoverArrow) }
     }
 
@@ -97,7 +97,7 @@ final class AppPreferencesStore {
     ///   Pass `.standard` in production (via the `shared` singleton) or an
     ///   ephemeral suite (`UserDefaults(suiteName:)`) in unit tests to avoid
     ///   polluting the real preferences database. (P7)
-    init(store: UserDefaults) {
+    public init(store: UserDefaults) {
         self.defaults = store
         store.register(defaults: [
             Key.pollingInterval: 15,  // First-launch default: 15 s (see #511)
@@ -113,11 +113,13 @@ final class AppPreferencesStore {
 
 // MARK: - Comparable+clamped
 
-/// Constrains a `Comparable` value to a closed range, returning `lowerBound`
-/// when the value is below the range and `upperBound` when it is above.
+/// Constrains a `Comparable` value to a closed range.
 ///
-/// Declared `private` to avoid polluting the global `Comparable` namespace —
-/// this helper is an implementation detail of `AppPreferencesStore`.
+/// Scoped `fileprivate` — there is a single call site (`pollingInterval` clamping
+/// in `AppPreferencesStore`). `fileprivate` confines the extension to this file and
+/// avoids injecting `.clamped(to:)` on every `Comparable` type across `RunnerBarCore`
+/// (principle P7 — no pollution of global namespaces). If a second call site ever
+/// appears in another file, promote to `internal` at that point.
 private extension Comparable {
     /// Returns the value clamped to `range`, i.e. `max(lowerBound, min(self, upperBound))`.
     func clamped(to range: ClosedRange<Self>) -> Self {

@@ -5,9 +5,20 @@ import Observation
 
 // MARK: - RunnerViewModel
 
-/// Bridges `RunnerStore` and `LocalRunnerStore` into observable properties consumed by SwiftUI views.
+// MARK: Protocol conformance
+// `RunnerViewModel` satisfies `RunnerViewModelProtocol` structurally (all required
+// properties are already declared below). The explicit conformance is declared here
+// so the compiler verifies it and callers can use `RunnerViewModel` anywhere
+// `any RunnerViewModelProtocol` is expected.
+/// Declares that `RunnerViewModel` conforms to `RunnerViewModelProtocol`.
+/// All required properties are defined on the main class body below.
+extension RunnerViewModel: RunnerViewModelProtocol {}
+
+/// Bridges `LocalRunnerStore` into observable properties consumed by SwiftUI views.
 ///
-/// State is **pushed** into this view model by the stores via `await MainActor.run { }`.
+/// State is **pushed** into this view model by `LocalRunnerStore` via `await MainActor.run { }`.
+/// GitHub runner/job/action state now lives in `RunnerState` and is written directly
+/// by `RunnerPoller.applyFetchResult` — it no longer flows through this class.
 /// No pull / Combine sinks required. The entire class is `@MainActor` because all
 /// property mutations and reads must happen on the main thread for SwiftUI rendering.
 @MainActor
@@ -16,7 +27,7 @@ final class RunnerViewModel {
     // periphery:ignore
     /// ❌ Do not use. The single live instance is owned by `AppDelegate` as `observable`.
     ///
-    /// `RunnerStore` and `LocalRunnerStore` push state into `AppDelegate.observable` only;
+    /// Only `LocalRunnerStore` pushes state into `AppDelegate.observable`;
     /// this accessor is never updated and will silently return stale/empty data.
     /// Inject `RunnerViewModel` explicitly via the environment or constructor instead.
     @MainActor static var shared: RunnerViewModel {
@@ -26,18 +37,6 @@ final class RunnerViewModel {
                 + "or pass it as a constructor argument."
         )
     }
-
-    // MARK: - Observable state (pushed by RunnerStore)
-    /// GitHub API-backed runners for the authenticated user's repos and orgs.
-    var runners: [Runner] = []
-    /// Active jobs across all monitored workflow runs.
-    var jobs: [ActiveJob] = []
-    /// Grouped workflow actions surfaced in the panel popover.
-    var actions: [WorkflowActionGroup] = []
-    /// Whether the GitHub API is currently rate-limited.
-    var isRateLimited: Bool = false
-    /// When the current rate-limit window resets, if known.
-    var rateLimitResetDate: Date?
 
     // MARK: - Observable state (pushed by LocalRunnerStore)
     /// Locally-installed runner agents discovered on this Mac.

@@ -22,20 +22,36 @@ extension AppDelegate {
     /// actor, then builds the status-bar item and NSPopover panel. (#1538)
     ///
     /// ## Startup ordering
-    /// Migration MUST complete before `setupPanel()` so that `RunnerStore`
+    /// Migration MUST complete before `setupPanel()` so that `RunnerPoller`
     /// observers spawned inside `setupPanel → setupSubscriptions` never read
     /// `ScopePreferencesStore` before the v2 blobs exist. The sequence is:
     ///
-    ///  1. Configure transports (synchronous, no actor reads).
-    ///  2. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
-    ///  3. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
-    ///  4. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
-    ///     observers start only after migration is complete.
+    /// 1. Configure transports (synchronous, no actor reads).
+    /// 2. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
+    /// 3. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
+    /// 4. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
+    ///    observers start only after migration is complete.
+    ///
+    /// ## statusIconLoop ordering
+    /// `statusIconLoop` (Step 13) is assigned in this outer `Task {}` block,
+    /// synchronously *after* `setupPanel()` returns but *before* `RunnerPoller.start()`
+    /// has a chance to fire. Here is why that ordering is guaranteed:
+    ///
+    /// `setupPanel → setupSubscriptions` creates the `RunnerPoller` and then
+    /// spawns an *inner* `Task(name: “AppDelegate.startup: …”)` that suspends on
+    /// `await localRunnerStore.refreshAsync()` before calling `store.start()`.
+    /// Because `refreshAsync()` suspends, the inner Task yields back to the
+    /// `@MainActor` queue — this outer `Task {}` continues to the
+    /// `statusIconLoop = ObservationLoop { … }` line before `start()` is ever
+    /// called. There is no reachable path where `applyFetchResult` writes to
+    /// `runnerState` before `statusIconLoop` is registered.
     ///
     /// - Parameter _: The notification (unused).
     func applicationDidFinishLaunching(_ _: Notification) {
         log("AppDelegate › applicationDidFinishLaunching — START")
+
         configureGHToken { githubToken() }
+
         // Wire all three shim transports directly to sharedGitHubTransport,
         // eliminating the intermediate hop through module-level free-function shims.
         // The token is resolved per-call via sharedGitHubTransport's default
@@ -52,22 +68,42 @@ extension AppDelegate {
         configureGHAPIPaginated { endpoint, timeout in
             await sharedGitHubTransport.apiPaginated(endpoint, timeout: timeout)
         }
+
         // Read knownScopes synchronously before the Task — ScopeStore.shared is
         // @MainActor and we are already on @MainActor here. (#1538)
         let knownScopes = ScopeStore.shared.entries.map(\.scope)
         log("AppDelegate › applicationDidFinishLaunching — migration task starting for \(knownScopes.count) scopes")
+
         // Migrate, hydrate display names, THEN start UI and observers.
         // Plain Task{} inherits @MainActor from AppDelegate; all three setup
         // calls below run on the main actor after the two awaits resolve. (#1538)
         Task {
             // Step 2: migrate legacy flat keys → v2 blobs.
             await ScopePreferencesStore.shared.migrateIfNeeded(knownScopes: knownScopes)
+
             // Step 3: hydrate ScopeEntry.displayName from freshly-migrated blobs.
             await ScopeStore.shared.refreshDisplayNames()
+
             // Step 4: start UI and observers — guaranteed to see migrated prefs.
             setupStatusItem()
             setupPanel()
             setupSignOutSubscription()
+
+            // Step 13: wire ObservationLoop so AppDelegate reacts to RunnerState
+            // changes without a callback from RunnerPoller.
+            //
+            // Ordering safety: setupPanel → setupSubscriptions spawns an inner Task
+            // that suspends on `await localRunnerStore.refreshAsync()` before calling
+            // `store.start()`. The suspension yields control back here, so this
+            // assignment is always reached before the first `applyFetchResult` write.
+            // See `applicationDidFinishLaunching` doc-comment for the full explanation.
+            statusIconLoop = ObservationLoop { [weak self] in
+                guard let self else { return }
+                _ = runnerState.aggregateStatus
+            } onChange: { [weak self] in
+                self?.updateStatusIcon()
+            }
+
             log("AppDelegate › applicationDidFinishLaunching — DONE")
         }
     }

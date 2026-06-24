@@ -1,5 +1,6 @@
 // FailureHookRunner.swift
 // RunnerBar
+
 import Foundation
 import RunnerBarCore
 
@@ -44,5 +45,75 @@ enum FailureHookRunner {
             terminalLauncher: DefaultTerminalLauncher()
         )
         await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
+    }
+
+    // TODO(#1573): Wire this method when the app-launch one-shot evaluation call site
+    // is added. Before wiring:
+    //   1. Replace `group.repo` with `scopeFromActionGroup(group)` for correct
+    //      empty-repo fallback (tracked in #1573).
+    //   2. Decide whether the fire-and-forget Task {} should be stored and
+    //      cancelled on app termination, or whether the cooperative-pool
+    //      cancellation on process exit is sufficient for a one-shot path.
+    // Do NOT suppress Periphery warnings on this site permanently — remove this
+    // comment and the annotation once a real call site exists so dead-code
+    // detection can resume protecting this method.
+    // periphery:ignore
+    /// Evaluates all action groups and fires the failure hook for any that qualify.
+    ///
+    /// Each group is evaluated independently; groups that do not qualify are silently skipped.
+    /// Runs the async `fireIfNeeded` calls inside a fire-and-forget `Task` so this
+    /// method can be called synchronously from an `ObservationLoop` onChange closure.
+    ///
+    /// Scope derivation mirrors `RunnerPoller.scopeFromActionGroup`:
+    /// `group.repo` is used when non-empty; otherwise the first run's `htmlUrl` is
+    /// parsed via `scopeFromHtmlUrl`. An empty string is passed only as a last resort
+    /// (no data available), which will cause `fireIfNeeded` to skip the hook silently.
+    ///
+    /// ⚠️ **Wiring constraint — do NOT call from `failureHookLoop` or any observer
+    /// that fires on every poll cycle.**
+    ///
+    /// `runnerState.actions` is written unconditionally on every `applyFetchResult`
+    /// call, so any `ObservationLoop` that reads it will call `onChange` every cycle.
+    /// `evaluate(_:)` has no access to `RunnerPoller.seenGroupIDs` and therefore
+    /// cannot distinguish newly-failed groups from already-fired ones — calling it
+    /// from such an observer causes the terminal command to open on every poll cycle
+    /// for every group that remains in the actions list.
+    ///
+    /// The canonical, deduplicated hook-firing path is the `fireFailureHook` closure
+    /// injected into `RunnerPoller.init` (callsite: `"pollResultBuilder"`), which is
+    /// guarded by `seenGroupIDs` inside the `RunnerPoller` actor.
+    ///
+    /// This method is intentionally kept for future use cases where the caller can
+    /// guarantee freshness (e.g. a one-shot evaluate at app launch before the poll
+    /// loop starts). It must never be wired to a continuous observation loop.
+    ///
+    /// **Cancellation note:** the inner `Task {}` is fire-and-forget — no handle is
+    /// retained. For a one-shot app-launch path this is acceptable because the
+    /// cooperative thread pool drains on process exit. If this method is ever wired
+    /// to a longer-lived owner that needs structured cancellation, store and cancel
+    /// the returned task handle at that call site.
+    static func evaluate(_ actions: [WorkflowActionGroup]) {
+        Task {
+            for group in actions {
+                // group.repo can be empty for org runners; mirror the fallback logic
+                // used in RunnerPoller.scopeFromActionGroup rather than passing repo
+                // directly, which would silently pass an empty scope to fireIfNeeded.
+                let scope: String
+                if !group.repo.isEmpty {
+                    scope = group.repo
+                } else if let firstRun = group.runs.first,
+                          let htmlUrl = firstRun.htmlUrl,
+                          let derived = scopeFromHtmlUrl(htmlUrl) {
+                    scope = derived
+                } else {
+                    scope = ""
+                }
+                // "evaluateOneShot" identifies this as a one-shot evaluation path
+                // (e.g. app launch), not a continuous loop. Distinct from
+                // "pollResultBuilder" (the deduplicated in-actor path) so log readers
+                // can tell the two call sites apart.
+                await fireIfNeeded(group: group, scope: scope, callsite: "evaluateOneShot")
+            }
+        }
     }
 }

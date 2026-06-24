@@ -29,7 +29,7 @@ import SwiftUI
 /// See HEIGHT/WIDTH CONTRACT comments above before making layout changes.
 ///
 /// No `onRestartPolling` callback is needed — all `ScopeStore` mutations are
-/// observed by `RunnerStore`'s `withObservationTracking` loop automatically.
+/// observed by `RunnerPoller`'s `withObservationTracking` loop automatically.
 struct SettingsView: View {
     // MARK: - Inputs
     /// Callback invoked when the user taps the back button.
@@ -49,10 +49,11 @@ struct SettingsView: View {
     var lifecycleService: any RunnerLifecycleServiceProtocol
 
     // MARK: - Injected services
-    /// App-wide preference store (notifications, update channel, etc.).
+    /// App-wide preference store (polling interval, popover arrow, etc.).
     /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
     let settings: AppPreferencesStore
-    /// Notification opt-in preferences per scope.
+    /// Notification preference store (notify-on-success, notify-on-failure).
+    /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
     let notifications: NotificationPreferences
 
     // MARK: - Local UI state

@@ -31,16 +31,14 @@ extension AppDelegate {
 
     /// Updates the menu-bar icon to reflect the current aggregate runner status.
     /// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
-    /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
+    /// ❌ NEVER read RunnerPoller.shared.jobs here — it is almost always empty.
     /// ❌ NEVER call makeStatusIcon() — it no longer exists; use menuBarImage(for:).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     func updateStatusIcon() {
-        // `RunnerStore` is now an actor; reads of its state require `await`.
-        // `aggregateStatus` is derived from `observable.runners` which `RunnerStore`
-        // pushes to `RunnerViewModel.shared` via `MainActor.run` after every fetch cycle,
-        // so we derive it here on the main actor from the already-pushed snapshot.
-        let status = AggregateStatus(runners: observable.runners)
+        // `aggregateStatus` is derived from `runnerState.runners` which `RunnerPoller`
+        // pushes to `RunnerState` via `MainActor.run` after every fetch cycle.
+        let status = AggregateStatus(runners: runnerState.runners)
         statusItem?.button?.image = menuBarImage(for: status)
     }
 

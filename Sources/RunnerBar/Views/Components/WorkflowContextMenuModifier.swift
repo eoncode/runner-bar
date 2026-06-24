@@ -82,7 +82,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
             currentTask = Task {
                 guard let text = await LogFetcher().fetchActionLogs(group: capturedGroup),
                       !text.isEmpty else { return }
-                await copyToPasteboard(text)
+                copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
 
@@ -141,7 +141,7 @@ private struct JobContextMenuModifier: ViewModifier {
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = job.conclusion != nil
-        let isLive = job.status == "in_progress"
+        let isLive = job.status == .inProgress
         let scope = group.repo
 
         // Re-run job
@@ -170,7 +170,7 @@ private struct JobContextMenuModifier: ViewModifier {
             currentTask = Task {
                 guard let text = await LogFetcher().fetchJobLog(jobID: capturedJob.id, scope: scope),
                       !text.isEmpty else { return }
-                await copyToPasteboard(text)
+                copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
 

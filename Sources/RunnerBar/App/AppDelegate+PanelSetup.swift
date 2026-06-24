@@ -1,6 +1,7 @@
 // AppDelegate+PanelSetup.swift
 // RunnerBar
 import AppKit
+import RunnerBarCore
 import SwiftUI
 
 // MARK: - AppDelegate + Panel Setup
@@ -174,11 +175,11 @@ extension AppDelegate: NSPopoverDelegate {
     /// Wires all long-lived async subscriptions (sign-out listener, startup sequence).
     ///
     /// Idempotent: if `runnerStore` is already set a second call is a no-op.
-    /// This makes it structurally impossible to orphan a `RunnerStore` actor and
+    /// This makes it structurally impossible to orphan a `RunnerPoller` actor and
     /// its live Task tree by calling this method more than once (P4, P16).
     private func setupSubscriptions() {
         // Idempotency guard — must only run once.
-        // A second call would orphan the existing RunnerStore actor and its
+        // A second call would orphan the existing RunnerPoller actor and its
         // observation Task tree (two Tasks per instance via PollLoopCoordinator).
         // AppDelegate is @MainActor-isolated so this nil-check is safe and synchronous.
         guard runnerStore == nil else {
@@ -211,27 +212,36 @@ extension AppDelegate: NSPopoverDelegate {
         LocalRunnerStore.configure(viewModel: observable)
         log("AppDelegate › setupSubscriptions — LocalRunnerStore.configure(viewModel:) called")
 
-        // NOTE: The `RunnerStore.didUpdate` Combine sink has been removed.
-        // `RunnerStore` is now a Swift actor that pushes state directly to
-        // the injected `viewModel` (AppDelegate.observable) via `await MainActor.run { }`
-        // at the end of every fetch cycle, and calls `AppDelegate.updateStatusIcon()` inside
-        // that same `MainActor.run` block — so icon refresh is still driven once
-        // per completed fetch cycle without any Combine subscription.
-        // ℹ️ `RunnerViewModel.shared` is a fatalError accessor — the live instance
-        // is AppDelegate.observable, injected explicitly into both stores.
-
-        // RunnerStore.init no longer accepts @MainActor-isolated default values
+        // NOTE: The old `RunnerStore.didUpdate` Combine sink has been removed.
+        // `RunnerPoller` is a Swift actor in RunnerBarCore that pushes state directly
+        // to `AppDelegate.runnerState` (a stored property) via `await MainActor.run { }`
+        // at the end of every fetch cycle.
+        //
+        // Step 11 (dual-write bridge): `runnerState` is now a stored AppDelegate property
+        // so it persists for the full app lifetime and is ready for environment injection
+        // in Step 12. `RunnerPoller.applyFetchResult` already writes both `state.*` and
+        // the actor-local mirrors. Views read from `RunnerViewModel` (`observable`) until
+        // Step 12 migrates them to `runnerState`.
+        //
+        // `RunnerPoller.init` does not accept @MainActor-isolated default values
         // (Swift 6: default values for parameters must not be @MainActor-isolated
         // in a nonisolated context). AppPreferencesStore.shared and ScopeStore.shared
         // are therefore passed explicitly here, where we are already on the @MainActor.
-        runnerStore = RunnerStore(
-            viewModel: observable,
-            localRunnerStore: localRunnerStore,
+        runnerStore = RunnerPoller(
+            state: runnerState,
             preferencesStore: AppPreferencesStore.shared,
             scopeStore: ScopeStore.shared,
-            onStatusUpdate: { [weak self] in self?.updateStatusIcon() }
+            localRunners: { [observable] in observable.localRunners },
+            // Capture the stored property rather than the .shared singleton so a test
+            // double wired via localRunnerStore is honoured here too.
+            applyMetrics: { [localRunnerStore] metrics, id, name in
+                await localRunnerStore.applyMetrics(metrics, forRunnerId: id, name: name)
+            },
+            fireFailureHook: { group, scope in
+                await FailureHookRunner.fireIfNeeded(group: group, scope: scope, callsite: "pollResultBuilder")
+            }
         )
-        log("AppDelegate › setupSubscriptions — RunnerStore created with injected stores")
+        log("AppDelegate › setupSubscriptions — RunnerPoller created with injected stores")
 
         // FIX: Await LocalRunnerStore.refreshAsync() before starting the poll loop.
         //
@@ -256,7 +266,7 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
             await self.localRunnerStore.refreshAsync()
             log("AppDelegate › startup — refreshAsync() complete, starting runnerStore poll loop")
-            // `runnerStore` is `RunnerStore?`.
+            // `runnerStore` is `(any RunnerPollerProtocol)?`.
             // This guard is structurally unreachable in normal execution: runnerStore is
             // assigned unconditionally just before this Task is spawned, and nothing
             // currently nils it out. It exists to make the condition observable if that
@@ -273,8 +283,8 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — runnerStore poll loop started")
         }
 
-        // Scope changes (add / remove / enable toggle) restart RunnerStore so it polls
-        // the correct repos from the beginning. RunnerStore observes
+        // Scope changes (add / remove / enable toggle) restart RunnerPoller so it polls
+        // the correct repos from the beginning. RunnerPoller observes
         // ScopeStore.activeScopes internally via withObservationTracking/AsyncStream,
         // so no Combine sink is needed here — the actor's own observer handles it.
         log("AppDelegate › setupSubscriptions — complete")

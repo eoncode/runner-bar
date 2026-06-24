@@ -73,7 +73,11 @@ actor LocalRunnerStore {
     }
 
     // MARK: - Internal actor state
+
     /// The current list of locally-installed runners, sorted by name.
+    /// Private: all external reads go through `viewModel.localRunners` (pushed via MainActor.run).
+    /// Widening to internal is unnecessary — the `localRunners` closure in AppDelegate+PanelSetup
+    /// reads `observable.localRunners`, not this property directly.
     private var runners: [RunnerModel] = []
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     private var isScanning: Bool = false
@@ -82,7 +86,7 @@ actor LocalRunnerStore {
 
     // MARK: - Injected dependencies
     /// The view model this actor pushes UI state into.
-    private let viewModel: RunnerViewModel
+    private let viewModel: any RunnerViewModelProtocol
     /// Persistence layer for the runner name → install path mapping.
     private let index = LocalRunnerIndex()
     /// Enricher that applies GitHub API data (status, busy, labels, group) to
@@ -101,7 +105,7 @@ actor LocalRunnerStore {
     ///     The `shared` singleton has been removed (#1539 item 22) — callers must
     ///     construct an explicit instance.
     init(
-        viewModel: RunnerViewModel,
+        viewModel: any RunnerViewModelProtocol,
         enricher: any RunnerStatusEnricherProtocol = RunnerStatusEnricher()
     ) {
         self.viewModel = viewModel

@@ -2,6 +2,7 @@
 // RunnerBar
 
 import AppKit
+import RunnerBarCore
 import SwiftUI
 
 // MARK: - NSPopover architecture note
@@ -39,9 +40,9 @@ import SwiftUI
 // This is NOT App Store safe but RunnerBar is not App Store distributed.
 // The preference is stored in AppPreferencesStore.showPopoverArrow (default: true).
 // ⚠️ The arrow state is baked in at show() time — changing the pref takes
-//    effect on the NEXT open. Never call show() mid-session to apply it.
+// effect on the NEXT open. Never call show() mid-session to apply it.
 // ⚠️ The KVC call is guarded by responds(to:) so the app degrades silently
-//    (arrow stays visible) rather than crashing if Apple removes the key.
+// (arrow stays visible) rather than crashing if Apple removes the key.
 //
 // TEXT INPUT:
 // NSPopover windows are key-capable natively. NSApp.activate() is
@@ -84,8 +85,10 @@ import SwiftUI
 //    view with a new struct and resets all @State.
 
 // MARK: - AppDelegate
+
 // ⚠️ @MainActor isolation — see ARCHITECTURE.md §@MainActor isolation.
 // ❌ NEVER remove @MainActor from this class declaration.
+
 /// Manages AppDelegate state and behaviour.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -102,7 +105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// swapped on navigation; the controller itself is never recreated.
     var hostingController: NSHostingController<AnyView>?
     /// The owned observable view-model passed into every SwiftUI view via the environment.
-    /// `RunnerStore` and `LocalRunnerStore` push updates into this instance via `await MainActor.run { }`.
+    /// `LocalRunnerStore` pushes updates into this instance via `await MainActor.run { }`.
+    /// GitHub runner/job/action state is now written to `runnerState` by `RunnerPoller`.
     let observable = RunnerViewModel()
     /// Owned OAuth service instance. Typed to protocol so tests can supply a stub
     /// without going through the live singleton (P7).
@@ -125,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// eagerly during `AppDelegate.init()` — before `configure()` runs —
     /// triggering the `fatalError` guard inside `LocalRunnerStore.shared`.
     lazy var localRunnerStore: LocalRunnerStore = .shared
-    /// Owned `RunnerStore` actor. `nil` until `setupSubscriptions()` runs.
+    /// Owned `RunnerPoller` actor. `nil` until `setupSubscriptions()` runs.
     ///
     /// Optional (not `!`) so the uninitialised state is representable at the
     /// type level and the compiler flags any force-unwrap at call sites (P4).
@@ -136,14 +140,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// ❌ NEVER add a `lazy var` default body here — doing so creates a dual-init
     /// path: if anything reads `runnerStore` before `setupSubscriptions()` runs,
-    /// a second `RunnerStore` instance with live observation tasks would be created
+    /// a second `RunnerPoller` instance with live observation tasks would be created
     /// and immediately replaced, producing competing poll loops.
-    var runnerStore: RunnerStore?
+    var runnerStore: (any RunnerPollerProtocol)?
+    /// The observable read model for Core-side runner/job/action/rate-limit state.
+    ///
+    /// Created here (not inside `setupSubscriptions`) so it survives for the full
+    /// app lifetime and can be injected into the SwiftUI environment in Step 12.
+    /// `RunnerPoller.applyFetchResult` writes into this instance on the `@MainActor`
+    /// after every poll cycle; views read from it in Step 12 onwards.
+    let runnerState = RunnerState()
     /// The last nav destination the user was on before the popover was closed or hidden.
     /// Restored by `openPanel()` so the user lands back where they left off.
     var savedNavState: NavState?
     /// Sheet state that must survive transient popover hides.
     let panelSheetState = PanelSheetState()
+
+    // periphery:ignore - write-only by design; assignment keeps the loop alive
+    /// Retains the `ObservationLoop` that observes `runnerState.aggregateStatus`
+    /// and calls `updateStatusIcon()` whenever the runner fleet status changes.
+    /// Must be stored as a property — deallocating it stops re-registration.
+    var statusIconLoop: ObservationLoop?
+
     // periphery:ignore - write-only by design; assignment keeps the Task alive
     /// Retained handle for the sign-out observation task started in
     /// `setupSignOutSubscription()` (AppDelegate+Polling.swift).
@@ -161,7 +179,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Injected into every SwiftUI view via `wrapEnv(_:)`.
     /// ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
     let panelVisibilityState = PanelVisibilityState()
-
     /// Minimum popover content width.
     static let minWidth: CGFloat = 280
     /// Forwarded from `lifecycleCoordinator` for read access across AppDelegate extensions.
@@ -170,7 +187,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Forwarded from `lifecycleCoordinator` for read access across AppDelegate extensions.
     /// Extensions read via this computed var; writes go via `lifecycleCoordinator.setPreservedSheetWindowHide(_:)`.
     var preservedSheetWindowHide: Bool { lifecycleCoordinator.preservedSheetWindowHide }
-
     /// Maximum popover content width (90% of screen).
     var maxWidth: CGFloat { min(900, statusItemScreen.visibleFrame.width * 0.9) }
     /// Maximum popover height (85% of visible screen).
@@ -197,7 +213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `PanelContainerView` and its dim overlay observe this object;
     /// removing it causes a runtime crash on sheet dismissal.
     func wrapEnv<V: View>(_ view: V) -> AnyView {
-        AnyView(view.environment(panelVisibilityState))
+        AnyView(view
+            .environment(panelVisibilityState)
+            .environment(runnerState)
+        )
     }
 
     // MARK: - Popover resize
@@ -243,18 +262,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Resets `panelIsOpen` and the visibility state flag.
     /// Internal (not private) — called cross-file from AppDelegate+PanelSetup.swift.
     /// ⚠️ Must be called on the main actor. AppDelegate is @MainActor;
-    ///    do not call from background threads or completion handlers.
+    /// do not call from background threads or completion handlers.
     /// Does NOT reset `savedNavState` — callers that want a full close (not a hide)
-    ///    must nil it out themselves (see `closePanel()`).
+    /// must nil it out themselves (see `closePanel()`).
     /// Does NOT reset `panelVisibilityState.isTransientHide` — that flag is cleared
-    ///    by `openPanel()` on re-open.
+    /// by `openPanel()` on re-open.
     /// Note: the `Thread.callStackSymbols` log line below is wrapped in `#if DEBUG`
-    ///       and compiles away completely in release builds.
+    /// and compiles away completely in release builds.
     @MainActor
     func tearDownOpenState() {
-        #if DEBUG
+#if DEBUG
         log("AppDelegate › tearDownOpenState — caller=\(Thread.callStackSymbols[1])")
-        #endif
+#endif
         // Order matters: coordinator clears panelIsOpen first, then SwiftUI state follows.
         // Both are @MainActor so there is no concurrency gap between the two writes,
         // but panelIsOpen must be false before panelVisibilityState.isOpen triggers
@@ -290,13 +309,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// ❌ NEVER add dismissSheets() here.
     /// ❌ NEVER reset hostingController.rootView here.
-    /// Note: the `Thread.callStackSymbols` log line below is wrapped in `#if DEBUG`
-    ///       and compiles away completely in release builds.
     func hidePanel() {
-        #if DEBUG
-        // swiftlint:disable:next line_length
-        log("AppDelegate › hidePanel — ENTER panelIsOpen=\(panelIsOpen) hasActiveSheet=\(hasActiveSheet) preservedSheetWindowHide=\(preservedSheetWindowHide) popoverBehavior=\(popover?.behavior.rawValue ?? -1) caller=\(Thread.callStackSymbols[1])")
-        #endif
+#if DEBUG
+        let behavior = popover?.behavior.rawValue ?? -1
+        let caller = Thread.callStackSymbols[1]
+        log("AppDelegate › hidePanel — ENTER panelIsOpen=\(panelIsOpen) "
+            + "hasActiveSheet=\(hasActiveSheet) preservedSheetWindowHide=\(preservedSheetWindowHide) "
+            + "popoverBehavior=\(behavior) caller=\(caller)")
+#endif
         guard panelIsOpen else {
             log("AppDelegate › hidePanel — guard exit: not open")
             return
@@ -318,18 +338,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Orders the popover and attached sheet windows out without closing them.
-    ///
-    /// Closing an NSPopover while an attached SwiftUI sheet is open can detach
-    /// the visible sheet while leaving the parent content in AppKit's disabled
-    /// sheet-modal state. Ordering the existing windows out preserves the live
-    /// sheet session so re-opening can order the same windows back in.
     @discardableResult
     func hidePopoverWindowsPreservingSheets() -> Bool {
-        log("AppDelegate › hidePopoverWindowsPreservingSheets — ENTER hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))")
+        let popoverWin = String(describing: popover?.contentViewController?.view.window)
+        log("AppDelegate › hidePopoverWindowsPreservingSheets — ENTER "
+            + "hasActiveSheet=\(hasActiveSheet) popoverWindow=\(popoverWin)")
         guard hasActiveSheet,
               let popoverWindow = popover?.contentViewController?.view.window else {
-            // swiftlint:disable:next line_length
-            log("AppDelegate › hidePopoverWindowsPreservingSheets — guard fail (hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))), returning false")
+            log("AppDelegate › hidePopoverWindowsPreservingSheets — guard fail "
+                + "(hasActiveSheet=\(hasActiveSheet) popoverWindow=\(popoverWin)), returning false")
             return false
         }
         log("AppDelegate › hidePopoverWindowsPreservingSheets — ordering out popoverWindow=\(popoverWindow) sheets=\(popoverWindow.sheets.count)")
@@ -358,11 +375,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Makes the lazy NSPopover backing window key immediately after show/restore.
-    ///
-    /// The native Liquid Glass chrome resolves differently while the popover
-    /// window is inactive. A user click makes the window key and restores the
-    /// desired dark glass look; doing it immediately avoids the grey first-open
-    /// state without adding tint, overlays, or extra `show()` calls.
     func makePopoverWindowKeyIfPossible() {
         guard let popoverWindow = popover?.contentViewController?.view.window else { return }
         NSApp.activate(ignoringOtherApps: true)
@@ -387,22 +399,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lifecycleCoordinator.setPanelIsOpen(true)
         panelVisibilityState.isOpen = true
         if !restorePopoverWindowsPreservingSheetsIfNeeded() {
-            // Apply arrow visibility preference (#1184).
-            // shouldHideAnchor is a private KVC key — not App Store safe, but
-            // RunnerBar is not App Store distributed so this is acceptable.
-            // ⚠️ Must be set immediately before show() — the value is latched at show() time.
-            // ⚠️ Guarded by responds(to:) so the app degrades silently (arrow stays
-            //    visible) rather than crashing if Apple removes the key on a future macOS.
             let hideArrow = !AppPreferencesStore.shared.showPopoverArrow
             if popover.responds(to: NSSelectorFromString("setShouldHideAnchor:")) {
                 popover.setValue(hideArrow, forKey: "shouldHideAnchor")
             }
-            // Re-assert behavior and delegate immediately before show().
-            // NSPopover latches these values at show() time — setting them
-            // only at setupPanel() is not sufficient; AppKit can reset them
-            // between calls. Without this, behavior silently falls back to
-            // .transient and our outsideClickMonitor / popoverShouldClose
-            // code never runs.
             popover.behavior = .applicationDefined
             popover.delegate = self
             log("AppDelegate › openPanel — PRE-SHOW behavior=\(popover.behavior.rawValue) delegate=\(String(describing: popover.delegate))")
@@ -411,11 +411,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         makePopoverWindowKeyIfPossible()
         resizeAndRepositionPanel()
-        // Only navigate if we have a saved state AND the current rootView is
-        // NOT already showing that view (i.e. we came from closePanel/mainView reset,
-        // not from hidePanel which preserves rootView).
-        // Simpler approach: only navigate when savedNavState is set AND
-        // hasActiveSheet is false (if sheet is open, rootView is correct already).
         if let saved = savedNavState, !hasActiveSheet, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
@@ -423,15 +418,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !self.preservedSheetWindowHide else { return }
             self.panelSheetState.restoreTransientHideStateIfNeeded()
         }
-        // Delegate monitor installation to the lifecycle coordinator.
-        // The coordinator owns outsideClickMonitor and workspaceObserver;
-        // AppDelegate passes closures so the coordinator never holds a
-        // back-reference to AppDelegate (#1374).
-        //
-        // NOTE: monitors are installed on EVERY open, including the preserved-sheet
-        // restore path (restorePopoverWindowsPreservingSheetsIfNeeded() == true).
-        // tearDownOpenState() removes them on every hide/close, so reinstalling
-        // here is always correct — the coordinator guards against double-install.
         lifecycleCoordinator.installMonitors(
             hasActiveSheet: { [weak self] in self?.hasActiveSheet ?? false },
             popoverWindow: { [weak self] in self?.popover?.contentViewController?.view.window },

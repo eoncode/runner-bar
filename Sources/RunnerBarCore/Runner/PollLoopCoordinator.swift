@@ -1,24 +1,24 @@
 // PollLoopCoordinator.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 
 // MARK: - PollLoopCoordinator
 
-/// Owns the three `Task` handles that drive `RunnerStore`’s poll loop.
+/// Owns the three `Task` handles that drive `RunnerPoller`'s poll loop.
 ///
-/// `RunnerStore` holds this as a stored property, so all mutation is serialised
-/// by the actor’s own executor — no additional isolation annotation is needed
+/// `RunnerPoller` holds this as a stored property, so all mutation is serialised
+/// by the actor's own executor — no additional isolation annotation is needed
 /// during normal operation.
 ///
 /// **`@unchecked Sendable` — PRINCIPLE #4 EXCEPTION (documented sign-off)**
 ///
-/// Project Principle #4 states: “no `@unchecked Sendable` escape hatches in
-/// production types.” `PollLoopCoordinator` is a production type that carries
+/// Project Principle #4 states: "no `@unchecked Sendable` escape hatches in
+/// production types." `PollLoopCoordinator` is a production type that carries
 /// this conformance. The exception is intentional and safe for the following
 /// reasons, recorded here as the required sign-off:
 ///
 /// 1. **Owned by a single actor.** `PollLoopCoordinator` is stored as
-///    `private let pollLoop` on `RunnerStore`. Swift actors serialise all
+///    `private let pollLoop` on `RunnerPoller`. Swift actors serialise all
 ///    access to their stored properties on their own executor, so every call
 ///    to `setPollTask`, `setIntervalObservationTask`, and
 ///    `setScopeObservationTask` is already serialised without any additional
@@ -32,8 +32,8 @@ import Foundation
 ///    those properties after the last strong reference is released.
 ///
 /// 3. **`deinit` runs after all strong references are gone.** By the time
-///    `RunnerStore.deinit` (and therefore `PollLoopCoordinator.deinit`) runs,
-///    no concurrent mutation of the coordinator’s task handles is possible.
+///    `RunnerPoller.deinit` (and therefore `PollLoopCoordinator.deinit`) runs,
+///    no concurrent mutation of the coordinator's task handles is possible.
 ///
 /// The root cause of the conformance requirement is that Swift 6 forbids
 /// accessing a stored property of a non-`Sendable` type from a nonisolated
@@ -45,21 +45,21 @@ import Foundation
 /// needs to own a `PollLoopCoordinator`.
 ///
 /// **Why a dedicated type?**
-/// Swift’s `private` modifier is file-scoped, not type-scoped. The poll-loop
+/// Swift's `private` modifier is file-scoped, not type-scoped. The poll-loop
 /// state (`pollTask`, `intervalObservationTask`, `scopeObservationTask`) cannot
-/// be moved into `RunnerStore+PollLoop.swift` as raw stored properties without
+/// be moved into `RunnerPoller+PollLoop.swift` as raw stored properties without
 /// widening their access to `internal`. Wrapping them here makes the coordinator
 /// itself `internal` while keeping the individual task slots private.
 ///
 /// **PR-D review sign-off — all findings resolved (2026-06-21)**
 ///
 /// The final review pass raised three findings; all are closed:
-/// - 🔵 Sign-off comment precision: “no writes” → “no reads or writes that race
-///   with concurrent callers” (point 2 above; `cancelAll()` does nil handles,
+/// - 🔵 Sign-off comment precision: "no writes" → "no reads or writes that race
+///   with concurrent callers" (point 2 above; `cancelAll()` does nil handles,
 ///   which is safe post-last-reference but is a mutable write — now stated
 ///   accurately).
 /// - 🟡 `isSampling` rapid stop→start liveness: fixed in `SystemStatsViewModel`
-///   via `samplingGeneration` counter — stale task’s `defer` is a no-op
+///   via `samplingGeneration` counter — stale task's `defer` is a no-op
 ///   against a newer generation.
 /// - 🔵 `#1256` tracking issue: confirmed closed 2026-06-09; `RunnerStore+PollLoop`
 ///   comment updated to note supersession by this PR.
@@ -112,7 +112,7 @@ final class PollLoopCoordinator: @unchecked Sendable {
     /// Niling after cancel keeps this method consistent with the setter contract
     /// (`setPollTask(nil)` also nils) and releases the `Task` references immediately,
     /// leaving the coordinator in a clean, fully-reset state.
-    /// Called from `RunnerStore.deinit` and this type’s own `deinit`.
+    /// Called from `RunnerPoller.deinit` and this type's own `deinit`.
     func cancelAll() {
         pollTask?.cancel()
         pollTask = nil
