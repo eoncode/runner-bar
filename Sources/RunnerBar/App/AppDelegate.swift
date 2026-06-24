@@ -327,7 +327,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER reset hostingController.rootView here.
     func hidePanel() {
 #if DEBUG
-        log("AppDelegate › hidePanel — ENTER panelIsOpen=\(panelIsOpen) hasActiveSheet=\(hasActiveSheet) preservedSheetWindowHide=\(preservedSheetWindowHide) popoverBehavior=\(popover?.behavior.rawValue ?? -1) caller=\(Thread.callStackSymbols[1])")
+        log("AppDelegate › hidePanel — ENTER panelIsOpen=\(panelIsOpen) hasActiveSheet=\(hasActiveSheet)" +
+            " preservedSheetWindowHide=\(preservedSheetWindowHide) popoverBehavior=\(popover?.behavior.rawValue ?? -1)" +
+            " caller=\(Thread.callStackSymbols[1])")
 #endif
         guard panelIsOpen else {
             log("AppDelegate › hidePanel — guard exit: not open")
@@ -349,7 +351,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("AppDelegate › hidePopoverWindowsPreservingSheets — ENTER hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))")
         guard hasActiveSheet,
               let popoverWindow = popover?.contentViewController?.view.window else {
-            log("AppDelegate › hidePopoverWindowsPreservingSheets — guard fail (hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))), returning false")
+            log("AppDelegate › hidePopoverWindowsPreservingSheets — guard fail" +
+                " (hasActiveSheet=\(hasActiveSheet) popoverWindow=\(String(describing: popover?.contentViewController?.view.window))), returning false")
             return false
         }
         log("AppDelegate › hidePopoverWindowsPreservingSheets — ordering out popoverWindow=\(popoverWindow) sheets=\(popoverWindow.sheets.count)")
