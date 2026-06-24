@@ -46,6 +46,13 @@ public final class ObservationLoop {
     ///   - observe: A closure that reads one or more `@Observable` properties.
     ///     Re-executed after each `onChange` to re-register tracking.
     ///   - onChange: Called whenever any property read in `observe` changes.
+    ///     **Do not mutate `@Observable` properties that `observe` also reads.**
+    ///     `onChange` fires before the next `register()` pass, so any mutation
+    ///     made here occurs before `withObservationTracking` has re-armed —
+    ///     that mutation will not trigger a subsequent `onChange` call in the
+    ///     same cycle. Use `onChange` as a side-effect sink (e.g. update an icon,
+    ///     trigger a fetch); keep tracked-property mutations in response to the
+    ///     property changes themselves, not inside this callback.
     public init(
         observe: @escaping @MainActor () -> Void,
         onChange: @escaping @MainActor () -> Void
