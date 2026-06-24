@@ -460,6 +460,14 @@ public actor RunnerPoller {
         // Keyed on entry.runner.metrics != nil — Phase 2 is the canonical resolver;
         // duplicating the four-map OR predicate here would create a drift risk if
         // lookup priority ever changes.
+        //
+        // Intentional nil-clearing omission: the old RunnerStore called applyMetrics(nil, ...)
+        // for busy runners whose metricsForRunner returned nil (e.g. a process-read failure),
+        // which cleared any stale badge metric. This filter skips that call, so stale metrics
+        // persist in LocalRunnerStore until the next successful read or the runner goes idle.
+        // Accepted tradeoff: the stale window is at most one poll cycle, and clearing on a
+        // transient read failure caused unnecessary badge flicker. applyMetrics(nil, ...) can
+        // be reinstated here if stale-metric persistence becomes observable in practice.
         let metricsUpdates = indexed.filter { $0.runner.busy && $0.runner.metrics != nil }
         if !metricsUpdates.isEmpty {
             for entry in metricsUpdates {
