@@ -3,7 +3,6 @@
 import Foundation
 
 // MARK: - RingBuffer
-
 /// Fixed-capacity circular buffer whose `values` property returns elements oldest-first.
 struct RingBuffer {
     /// Backing store; slots are overwritten in round-robin order.
