@@ -11,14 +11,16 @@ import os
 
 // MARK: - IndexedScopedRunner
 
-/// Carries a scope-fetched `Runner` alongside its source-scope string and
-/// sort-order index. Used internally by `fetchAndEnrichRunners` to pass data
-/// through two concurrent `withTaskGroup` phases without a 3-member tuple
+/// Carries a scope-fetched `Runner` alongside its source-scope string.
+/// Used internally by `fetchAndEnrichRunners` to pass data through two
+/// concurrent `withTaskGroup` phases without a 3-member tuple
 /// (which would trigger the `large_tuple` SwiftLint rule).
+///
+/// ⚠️ The ordering of entries in the `indexed` array after Phase 1 is
+/// non-deterministic: `withTaskGroup` tasks complete in arrival order.
+/// This matches the previous `RunnerStore` behaviour; views sort
+/// runners independently for display.
 private struct IndexedScopedRunner {
-    /// The position of the owning scope in the `scopes` array — used to
-    /// preserve deterministic ordering of runners across concurrent fetches.
-    var idx: Int
     /// The GitHub scope URL string (repo or org) this runner belongs to.
     var scope: String
     /// The enriched `Runner` value. Mutated in-place during Phase 2 to add metrics.
@@ -78,11 +80,11 @@ public actor RunnerPoller {
     private let localRunners: @MainActor @Sendable () -> [RunnerModel]
     /// Writes metrics back into the local runner store.
     /// Injected at init to decouple Core from the app-layer `LocalRunnerStore` actor.
-    private let applyMetrics:
-        @Sendable (_ metrics: RunnerMetrics?, _ runnerId: Int, _ name: String) async -> Void
+    private let applyMetrics: @Sendable (_ metrics: RunnerMetrics?, _ runnerId: Int, _ name: String) async -> Void
     /// Fires a failure hook for a newly-failed workflow action group.
     /// Injected at init so Core never imports the app-layer `FailureHookRunner`.
-    let fireFailureHook: @Sendable (_ group: WorkflowActionGroup, _ scope: String) async -> Void
+    /// `private` — only called via `self.fireFailureHook(group, scope)` inside buildGroupState.
+    private let fireFailureHook: @Sendable (_ group: WorkflowActionGroup, _ scope: String) async -> Void
     /// Injected preferences store. Provides `pollingInterval`.
     private let preferencesStore: any AppPreferencesStoreProtocol
     /// Injected scope store. Provides `activeScopes`.
@@ -111,16 +113,15 @@ public actor RunnerPoller {
     ///   - scopeStore: Provides `activeScopes`.
     ///   - localRunners: Closure returning the current local-runner snapshot on `@MainActor`.
     ///   - applyMetrics: Closure that writes enriched metrics back to the local runner store.
+    ///   - fireFailureHook: Closure that fires a failure hook for a newly-failed action group.
     ///   - actionGroupFetcher: Fetcher for workflow action groups.
     public init(
         state: RunnerState,
         preferencesStore: any AppPreferencesStoreProtocol,
         scopeStore: any ScopeStoreProtocol,
         localRunners: @escaping @MainActor @Sendable () -> [RunnerModel],
-        applyMetrics: @escaping @Sendable
-            (_ metrics: RunnerMetrics?, _ runnerId: Int, _ name: String) async -> Void,
-        fireFailureHook: @escaping @Sendable
-            (_ group: WorkflowActionGroup, _ scope: String) async -> Void = { _, _ in },
+        applyMetrics: @escaping @Sendable (_ metrics: RunnerMetrics?, _ runnerId: Int, _ name: String) async -> Void,
+        fireFailureHook: @escaping @Sendable (_ group: WorkflowActionGroup, _ scope: String) async -> Void = { _, _ in },
         actionGroupFetcher: any WorkflowActionGroupFetcherProtocol = WorkflowActionGroupFetcher()
     ) {
         self.state = state
@@ -144,6 +145,13 @@ public actor RunnerPoller {
     // MARK: - Observation loops
 
     /// Starts (or restarts) the `pollingInterval` observation loop.
+    ///
+    /// Uses `AsyncStream<TimeInterval>` to match `PreferencesObserver.continuation` which is
+    /// typed `AsyncStream<TimeInterval>.Continuation` and yields
+    /// `TimeInterval(store.pollingInterval)`. The stream element type must match the
+    /// continuation type exactly — `pollingInterval` is an `Int` (seconds) but the observer
+    /// converts it to `TimeInterval` before yielding so the value can be used directly in
+    /// `nextPollInterval()` without a second conversion.
     private func startObservingPreferences() {
         let injectedStore = preferencesStore
         pollLoop.setIntervalObservationTask(Task { [weak self] in
@@ -155,7 +163,7 @@ public actor RunnerPoller {
             }
             for await newInterval in stream {
                 guard !Task.isCancelled else { break }
-                log("RunnerPoller › pollingInterval changed to \(newInterval) — restarting poll loop")
+                log("RunnerPoller › pollingInterval changed to \(Int(newInterval))s — restarting poll loop")
                 await self?.startObservingPreferences()
                 guard !Task.isCancelled else { break }
                 await self?.start()
@@ -267,6 +275,7 @@ public actor RunnerPoller {
         )
         let enrichedRunners = await fetchAndEnrichRunners(
             scopes: scopesSnapshot,
+            localRunners: localRunnersSnapshot,
             installPathMap: installPathMap
         )
         let jobResult = await buildJobState(snapPrev: snapPrev, snapCache: snapCache)
@@ -317,67 +326,86 @@ public actor RunnerPoller {
 
     /// Fetches runners for the given scopes, resolves install paths, and enriches with metrics.
     ///
-    /// Both phases run concurrently:
-    /// 1. Scope fetches — one child task per scope via `withTaskGroup`.
-    /// 2. Metrics enrichment — one child task per busy runner via a second `withTaskGroup`.
-    /// This restores the parallel behaviour from the original `RunnerStore` implementation;
-    /// a serial loop would add latency proportional to the number of concurrently-busy runners.
+    /// **Phase 0** derives extra org scopes from local runners whose `gitHubUrl` points to a
+    /// single-path-component URL (org-only, not repo). This handles runners registered against
+    /// an org that the user hasn't explicitly added as a scope in ScopeStore — their org is
+    /// inferred from the local runner's URL so those runners continue to appear in the panel.
     ///
-    /// The `scope` is preserved alongside each runner through both phases so that Phase 2
-    /// can form the correct composite `"<scope>/<name>"` key for the `byFullKey` fallback.
+    /// **Phase 1** fans out concurrent scope fetches via `withTaskGroup`. Task completion order
+    /// is non-deterministic; views sort runners for display independently.
+    ///
+    /// **Phase 2** enriches each busy runner with system metrics concurrently.
+    ///
+    /// **Install-path lookup priority** (matches the original `RunnerStore`):
+    /// `byApiId ?? byAgentId ?? byFullKey ?? byName`
+    /// `byFullKey` ("scope/name" composite) ranks above `byName` so runners sharing
+    /// a name across different scopes resolve to the correct install path.
     ///
     /// - Parameters:
     ///   - scopes: The active scopes to fetch runners for.
-    ///   - installPathMap: Pre-built lookup maps from `buildInstallPathMap`; constructed
-    ///     in `fetch()` from the local-runner snapshot taken there.
+    ///   - localRunners: The current local-runner snapshot (used for org-scope derivation).
+    ///   - installPathMap: Pre-built lookup maps from `buildInstallPathMap`.
     func fetchAndEnrichRunners(
         scopes: [String],
+        localRunners: [RunnerModel],
         installPathMap: InstallPathMap
     ) async -> [Runner] {
         log("RunnerPoller › fetchAndEnrichRunners ENTER — scopes=\(scopes)")
 
-        // Phase 1 — Fetch raw runners for all scopes in parallel.
-        // Each child task returns [IndexedScopedRunner] for its scope so the
-        // `of:` type parameter is tuple-free (avoids `large_tuple` SwiftLint rule).
+        // Phase 0 — Derive extra org scopes from local runner URLs.
+        // A runner whose gitHubUrl has a single non-empty path component is registered
+        // against an org (e.g. "https://github.com/myorg"). If that org isn't already
+        // in the configured activeScopes, add it so we still fetch runners for it.
+        let configuredScopeSet = Set(scopes)
+        var extraOrgScopes: [String] = []
+        for localRunner in localRunners {
+            guard let url = localRunner.gitHubUrl else { continue }
+            let parts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+            guard parts.count == 1 else { continue }
+            let orgScope = parts[0]
+            guard !configuredScopeSet.contains(orgScope),
+                  !extraOrgScopes.contains(orgScope)
+            else { continue }
+            extraOrgScopes.append(orgScope)
+            log("RunnerPoller › fetchAndEnrichRunners — derived extra org scope '\(orgScope)' from local runner '\(localRunner.runnerName)'")
+        }
+        if !extraOrgScopes.isEmpty {
+            log("RunnerPoller › fetchAndEnrichRunners — extra org scopes to fetch: \(extraOrgScopes)")
+        }
+
+        let allScopes = scopes + extraOrgScopes
+
+        // Phase 1 — Fetch raw runners for all scopes concurrently.
+        // Completion order is non-deterministic; views sort for display.
         var indexed: [IndexedScopedRunner] = []
-        await withTaskGroup(of: [IndexedScopedRunner].self) { group in
-            for (i, scope) in scopes.enumerated() {
+        await withTaskGroup(of: (String, [Runner]).self) { group in
+            for scope in allScopes {
                 group.addTask {
                     let fetched = await fetchRunners(for: scope)
-                    return fetched.map { IndexedScopedRunner(idx: i, scope: scope, runner: $0) }
+                    return (scope, fetched)
                 }
             }
-            for await batch in group {
-                indexed.append(contentsOf: batch)
+            for await (scope, fetched) in group {
+                indexed.append(contentsOf: fetched.map { IndexedScopedRunner(scope: scope, runner: $0) })
             }
         }
 
-        // Phase 2 — Enrich each busy runner with system metrics (CPU, memory) concurrently.
-        // Using a second withTaskGroup restores the parallel behaviour from RunnerStore;
-        // a serial loop would serialise all metricsForRunner() calls even when multiple
-        // runners are busy simultaneously.
+        // Phase 2 — Enrich each busy runner with system metrics concurrently.
+        // Lookup priority: byApiId ?? byAgentId ?? byFullKey ?? byName
+        // byFullKey ("scope/name" composite) intentionally ranks above byName to
+        // correctly disambiguate runners that share a name across different scopes.
         let busyIndices = indexed.indices.filter { indexed[$0].runner.busy }
         if !busyIndices.isEmpty {
-            // Collect (arrayIndex, metrics) pairs concurrently, then apply in order.
             let metricsResults: [(Int, RunnerMetrics?)] = await withTaskGroup(
                 of: (Int, RunnerMetrics?).self
             ) { group in
                 for i in busyIndices {
                     let runner = indexed[i].runner
                     let scope = indexed[i].scope
-                    // Resolve install path using all four available lookup keys, in order
-                    // of decreasing specificity:
-                    //   1. byApiId    — most precise; matches the GitHub REST runner ID.
-                    //   2. byAgentId  — matches the runner's self-reported agent ID.
-                    //   3. byName     — matches on runner name alone (scope-agnostic).
-                    //   4. byFullKey  — matches on "<scope>/<runnerName>" composite key;
-                    //                   resolves ambiguity when two runners in different
-                    //                   scopes share the same name and neither apiId nor
-                    //                   agentId is resolvable from local runner metadata.
                     let installPath = installPathMap.byApiId[runner.id]
                         ?? installPathMap.byAgentId[runner.id]
-                        ?? installPathMap.byName[runner.name]
                         ?? installPathMap.byFullKey["\(scope)/\(runner.name)"]
+                        ?? installPathMap.byName[runner.name]
                     guard let path = installPath else {
                         log("RunnerPoller › fetchAndEnrichRunners — no installPath for \(runner.name) id=\(runner.id) scope=\(scope)")
                         continue
@@ -397,12 +425,13 @@ public actor RunnerPoller {
         }
 
         // Write metrics back to the injected local runner store closure.
+        // Lookup priority matches Phase 2 above: byApiId ?? byAgentId ?? byFullKey ?? byName.
         let metricsUpdates = indexed.filter { entry in
             entry.runner.busy && (
                 installPathMap.byApiId[entry.runner.id] != nil
                     || installPathMap.byAgentId[entry.runner.id] != nil
-                    || installPathMap.byName[entry.runner.name] != nil
                     || installPathMap.byFullKey["\(entry.scope)/\(entry.runner.name)"] != nil
+                    || installPathMap.byName[entry.runner.name] != nil
             )
         }
         if !metricsUpdates.isEmpty {
