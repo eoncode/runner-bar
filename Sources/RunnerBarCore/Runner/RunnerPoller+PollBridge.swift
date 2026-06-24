@@ -29,7 +29,10 @@ extension RunnerPoller {
 
     /// Builds a `JobPollResult` by fetching live jobs for all monitored scopes,
     /// backfilling step data from the cache, and diffing against `snapPrev`.
-    public func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) async -> JobPollResult {
+    public func buildJobState(
+        snapPrev: [Int: ActiveJob],
+        snapCache: [Int: ActiveJob]
+    ) async -> JobPollResult {
         await PollResultBuilder.buildJobState(
             snapPrev: snapPrev,
             snapCache: snapCache,
@@ -64,7 +67,11 @@ extension RunnerPoller {
                 let scopes = await MainActor.run { self.scopeStore.activeScopes }
                 var groups: [WorkflowActionGroup] = []
                 for scope in scopes {
-                    groups.append(contentsOf: await self.actionGroupFetcher.fetch(for: scope, cache: shaKeyedCache))
+                    let fetched = await self.actionGroupFetcher.fetch(
+                        for: scope,
+                        cache: shaKeyedCache
+                    )
+                    groups.append(contentsOf: fetched)
                 }
                 return groups
             },
@@ -137,7 +144,10 @@ extension RunnerPoller {
     /// Marking it `nonisolated` removes the implicit `@MainActor` hop that was serialising
     /// every `withTaskGroup` child task in `PollResultBuilder.buildGroupState` through
     /// the main actor, negating the intended parallelism (#1153).
-    public nonisolated func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
+    public nonisolated func enrichGroupJobs(
+        _ jobs: [ActiveJob],
+        jobCache: [Int: ActiveJob]
+    ) -> [ActiveJob] {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
             // cacheHasConclusion: the cache settled a conclusion the live API hasn't returned
