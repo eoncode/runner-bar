@@ -12,13 +12,13 @@ runner-bar/
 ├── deploy.sh                                — deployment/release helper script
 ├── install.sh                               — runner installation helper script
 ├── README.md                                — project overview, screenshots, setup instructions
+├── AGENTS.md                                — instructions / context for AI coding agents (repo root, per the AGENTS.md standard)
 ├── LICENSE                                  — project licence
 ├── sonar-project.properties                 — SonarCloud project configuration
 ├── .swiftlint.yml                           — SwiftLint rule configuration
 ├── .periphery.yml                           — Periphery dead-code scanner configuration
 │
 ├── docs/
-│   ├── AGENTS.md                            — instructions / context for AI coding agents
 │   ├── architecture/
 │   │   ├── file-hierarchy.md                — this file; annotated map of the codebase
 │   │   ├── concurrency-overview.md          — overview of the concurrency architecture (actors, isolation, poll loop)
