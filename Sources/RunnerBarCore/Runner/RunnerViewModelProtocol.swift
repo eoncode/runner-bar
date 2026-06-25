@@ -27,3 +27,9 @@ public protocol RunnerViewModelProtocol: AnyObject, Sendable {
     /// `true` while `LocalRunnerStore` is running a refresh cycle.
     var isLocalScanning: Bool { get set }
 }
+
+// MARK: - RunnerState conformance
+
+/// `RunnerState` owns `localRunners` and `isLocalScanning` directly,
+/// so it satisfies `RunnerViewModelProtocol` with no additional implementation.
+extension RunnerState: RunnerViewModelProtocol {}
