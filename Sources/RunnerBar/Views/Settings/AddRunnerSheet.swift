@@ -6,13 +6,23 @@ import SwiftUI
 // MARK: - URI Constants
 
 /// Centralised URI and path constants used by `AddRunnerSheet` and its extensions.
+///
+/// Intentionally `internal` (not `private`) because the cross-file extension split
+/// requires all extension files to access these constants.
 enum GitHubURIs {
+    /// The base GitHub web URL.
     static let base = "https://github.com/" // NOSONAR
+    /// The GitHub API endpoint for the latest Actions runner release.
     static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR
+    /// Relative path to the user's LaunchAgents directory.
     static let launchAgentsDir = "Library/LaunchAgents"
+    /// Default runner install directory relative to the user's home folder.
     static let actionsRunnerDefaultDir = "actions-runner/my-runner"
+    /// System path to the curl binary used when downloading the runner package.
     static let curlPath = "/usr/bin/curl" // NOSONAR
+    /// System path to the tar binary used when unpacking the runner package.
     static let tarPath = "/usr/bin/tar"  // NOSONAR
+    /// System path to the uname binary used to detect CPU architecture.
     static let unamePath = "/usr/bin/uname" // NOSONAR
 }
 
@@ -36,60 +46,100 @@ struct AddRunnerSheet: View {
     let onComplete: () -> Void
     /// Injected local runner store — avoids direct `.shared` references inside the sheet.
     var localRunnerStore: LocalRunnerStore = .shared
-    /// Core runner state — read for synchronous duplicate checks against localRunners.
+    /// Core runner state — read for synchronous duplicate checks against `localRunners`.
     @Environment(RunnerState.self) var runnerState: RunnerState
 
     // MARK: - Add Mode
 
+    /// Controls which form body is shown in the sheet.
     enum AddMode: String, CaseIterable, Identifiable {
+        /// Onboards a fresh runner via download + registration token.
         case addNew = "Add new"
+        /// Imports a runner folder that was configured outside of RunnerBar.
         case addExisting = "Add pre-existing"
+        /// Stable identity backed by `rawValue`.
         var id: String { rawValue }
     }
 
+    /// Whether the user is adding a new runner or importing a pre-existing one.
     @State var addMode: AddMode = .addNew
 
     // MARK: - Internal state (extension-accessible)
+    // These properties are `internal` (no modifier) rather than `private` so that
+    // extensions defined in sibling files (+FormFields, +Validation, +TokenSection)
+    // can read and mutate them. They must not be accessed from outside the AddRunnerSheet
+    // file family.
 
     // MARK: Scope state (Add new only)
+
+    /// Determines whether the runner is registered at repo or organisation scope.
     enum ScopeType: String, CaseIterable, Identifiable {
+        /// Runner registered to a single repository.
         case repo = "Repository"
+        /// Runner registered at organisation level.
         case org = "Organisation"
+        /// Stable identity backed by `rawValue`.
         var id: String { rawValue }
     }
 
+    /// Whether the runner is repo-scoped or org-scoped.
     @State var scopeType: ScopeType = .repo
+    /// Selected repository slug (used when `scopeType == .repo`).
     @State var selectedRepo = ""
+    /// Selected organisation name (used when `scopeType == .org`).
     @State var selectedOrg = ""
+    /// Repository slugs fetched from GitHub for the picker.
     @State var repos: [String] = []
+    /// Organisation names fetched from GitHub for the picker.
     @State var orgs: [String] = []
+    /// `true` while scope options are being fetched from GitHub.
     @State var isLoadingScopes = false
+    /// `true` while the repository-selector sheet is presented.
     @State var showRepoSelector = false
+    /// `true` while the organisation-selector sheet is presented.
     @State var showOrgSelector = false
 
     // MARK: Runner config state (Add new only)
+
+    /// Display name the runner will register with.
     @State var runnerName = ""
+    /// Comma-separated label string pre-populated with defaults.
     @State var labelsText = "self-hosted,macOS"
+    /// Install path; each runner needs its own folder.
     @State var installDir = FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
 
     // MARK: Registration state (Add new only)
+
+    /// `true` while the registration command is running.
     @State var isRegistering = false
+    /// Human-readable description of the current registration step.
     @State var registrationStep = ""
+    /// Non-nil when registration fails; shown as an inline error.
     @State var errorMessage: String?
 
     // MARK: Pre-existing state (Add pre-existing only)
+
+    /// The folder path the user selected via NSOpenPanel.
     @State var existingDir = ""
+    /// Runner name parsed from the `.runner` JSON inside `existingDir`.
     @State var detectedName = ""
+    /// GitHub URL parsed from the `.runner` JSON inside `existingDir`.
     @State var detectedGitHubURL = ""
+    /// Shown when the selected folder has no valid `.runner` file or it can't be parsed.
     @State var existingError: String?
+    /// Editable fallback shown when `.runner` JSON has no `gitHubUrl` (rare, org-scoped runners).
     @State var githubURLOverride = ""
+    /// Whether a runner with this name is already in LocalRunnerStore's index.
     @State var isDuplicate = false
+    /// The NSWindow hosting this sheet, captured early via WindowGrabber so
+    /// `beginSheetModal` has a reliable reference when pickExistingFolder() is called.
     @State var hostWindow: NSWindow?
 
     // MARK: - Body
 
+    /// Root layout: mode picker, form body, and action bar.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner").font(.headline)
@@ -125,6 +175,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - State reset helpers
 
+    /// Resets all "Add new" form fields to their initial default values.
     func resetAddNewState() {
         runnerName = ""
         labelsText = "self-hosted,macOS"
@@ -142,6 +193,7 @@ struct AddRunnerSheet: View {
         }
     }
 
+    /// Clears all "Add pre-existing" detection state so a fresh folder can be picked.
     func resetExistingState() {
         existingDir = ""
         detectedName = ""
@@ -153,6 +205,10 @@ struct AddRunnerSheet: View {
 
     // MARK: - Plist writer (shared by both modes)
 
+    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/` for the given runner.
+    ///
+    /// The plist label is derived as `actions.runner.<owner>.<repo>.<runnerName>` and written
+    /// atomically. Used by both the "Add new" and "Add pre-existing" flows.
     nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
@@ -179,6 +235,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Process helpers (Add new)
 
+    /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
     func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) async -> Int32 {
@@ -195,6 +252,7 @@ struct AddRunnerSheet: View {
         return result.exitCode
     }
 
+    /// Launches `executable` with `args` asynchronously and returns the termination status.
     func runSimpleProcess(_ executable: String, args: [String]) async -> Int32 {
         let result = await ProcessRunner.runAsync(
             executableURL: URL(fileURLWithPath: executable),
@@ -207,6 +265,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Register (Add new)
 
+    /// Downloads, unpacks, configures a new runner, registers with `LocalRunnerStore`, and dismisses.
     func register() async {
         guard canRegister else { return }
         errorMessage = nil
