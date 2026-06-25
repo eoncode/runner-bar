@@ -5,6 +5,7 @@
 // `FailureHookRunner` is decoupled — the injected `fireFailureHook` closure
 // stored on `RunnerPoller` is the sole integration point, keeping
 // `FailureHookRunner` in the app target and out of `RunnerBarCore`.
+import Collections
 import Foundation
 import os
 
@@ -56,7 +57,7 @@ extension RunnerPoller {
     func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
-        snapSeenGroupIDs: Set<String>,
+        snapSeenGroupIDs: OrderedSet<String>,
         jobCache: [Int: ActiveJob]
     ) async -> GroupPollResult {
         await PollResultBuilder.buildGroupState(

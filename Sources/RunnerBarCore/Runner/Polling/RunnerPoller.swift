@@ -6,6 +6,7 @@
 // App-layer dependencies replaced with protocol-typed injections and closures
 // so Core has no import of the RunnerBar app target.
 
+import Collections
 import Foundation
 import os
 
@@ -64,7 +65,9 @@ public actor RunnerPoller {
     ///
     /// Kept separate from `actionGroupCache` so that cache eviction does not re-arm
     /// the hook for old completed groups still present in GitHub's last-completed feed.
-    private var seenGroupIDs: Set<String> = []
+    /// `OrderedSet` preserves insertion order so `trimSeenGroupIDs` evicts the
+    /// oldest entries first (FIFO), rather than arbitrary ones as `Set` would.
+    private var seenGroupIDs: OrderedSet<String> = []
     /// Whether the GitHub API is currently rate-limiting this client.
     private(set) var isRateLimited = false
     /// The exact moment the current rate-limit window expires, or `nil` when no

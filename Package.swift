@@ -34,7 +34,10 @@ let package = Package(
         ),
         .testTarget(
             name: "RunnerBarCoreTests",
-            dependencies: ["RunnerBarCore"],
+            dependencies: [
+                "RunnerBarCore",
+                .product(name: "Collections", package: "swift-collections")
+            ],
             path: "Tests/RunnerBarCoreTests",
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
