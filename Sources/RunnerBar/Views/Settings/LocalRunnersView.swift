@@ -278,10 +278,18 @@ struct LocalRunnersView: View {
         removeErrorMessage = nil
         Task(priority: .userInitiated) {
             await localRunnerStore.optimisticallyRemove(runner.runnerName)
-            let ok = await lifecycleService.remove(runner: runner)
-            if !ok {
+            let result = await lifecycleService.remove(runner: runner)
+            switch result {
+            case .success:
+                break
+            case .corruptInstall:
                 await localRunnerStore.optimisticallyRestore(runner)
-                removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
+                removeErrorMessage = "Runner \"\(runner.runnerName)\" has a corrupt install. Check logs."
+            case .failed(let msg):
+                await localRunnerStore.optimisticallyRestore(runner)
+                let short = msg.components(separatedBy: "\n")
+                    .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                removeErrorMessage = "Failed to remove \"\(runner.runnerName)\": \(short)"
             }
             await localRunnerStore.refresh()
         }
