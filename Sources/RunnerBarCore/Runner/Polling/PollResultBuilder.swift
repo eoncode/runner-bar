@@ -1,6 +1,5 @@
 // PollResultBuilder.swift
 // RunnerBarCore
-import Collections
 import OrderedCollections
 import Foundation
 
@@ -385,9 +384,6 @@ public struct PollResultBuilder {
                 continue
             }
             if !seenGroupIDs.contains(groupID) {
-                // Register the ID unconditionally — idempotent membership, independent of
-                // whether the hook fires. Must not be gated on cache[groupID] == nil.
-                seenGroupIDs.append(groupID)
                 // Fire the hook only when this group was not already written to cache by
                 // the doneGroups loop in buildGroupState. A cache entry means the group
                 // was already processed (and the hook already fired or it succeeded) via
@@ -403,6 +399,18 @@ public struct PollResultBuilder {
                         await fireFailureHook(group, scope)
                     }
                 }
+                // Register the ID in seenGroupIDs unconditionally — idempotent membership,
+                // independent of whether the hook actually fires. Without this write-back,
+                // a group that fired via the vanish path (not through doneGroups) would
+                // re-arm the hook on the next poll when it reappears in snapPrevGroups.
+                // Note: group IDs are derived from the maximum run ID in the group, so a
+                // retry on the same commit SHA produces a different (higher) group ID.
+                // An evicted success group with this ID cannot suppress a future failure
+                // because the failure group would have a different ID. If group IDs were
+                // stable across retries, gating this append on isHookConclusion would be
+                // needed — for now the unconditional write-back correctly prevents the
+                // latent re-fire bug that existed before this parameter was made inout.
+                seenGroupIDs.append(groupID)
             }
             if group.lastJobCompletedAt == nil {
                 cache[groupID] = group.copying(isDimmed: true, settingCompletedAt: config.now)
