@@ -86,13 +86,7 @@ curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash
 
 ## Concurrency
 
-All UI state lives on `@MainActor`. Background domain work is isolated in dedicated actors — there is no single shared background queue. The boundary-crossing pattern is explicit at every call site:
-
-```swift
-let scopes = await MainActor.run { scopeStore.activeScopes }
-```
-
-Timers use `Task` + `Task.sleep(for:)` (never `DispatchQueue`), guarded by a generation counter to prevent stale-task races. Related values crossing an actor boundary are always fetched atomically via a `snapshot()` method or `async let` binding — never with two sequential `await` calls. The entire model is compiler-enforced: no `@unchecked Sendable` in production types.
+RunnerBar uses Swift 6.2 strict concurrency, so data-race safety is guaranteed by the compiler rather than by convention. UI runs on the main actor and background work is isolated in dedicated actors, all coordinated through structured `async`/`await`.
 
 → [`docs/architecture/concurrency-overview.md`](docs/architecture/concurrency-overview.md)
 
@@ -100,12 +94,7 @@ Timers use `Task` + `Task.sleep(for:)` (never `DispatchQueue`), guarded by a gen
 
 ## Module Separation
 
-The codebase is split into two SPM targets:
-
-- **`RunnerBarCore`** — pure Swift library; no AppKit, no app bundle, no entitlements. All networking, use-cases, actors, and Codable models live here. Testable with `swift test` in CI — no simulator, no signing.
-- **`RunnerBar`** — the macOS app target. Imports Core and adds UI, `@Observable` ViewModels, AppKit integrations (`NSWorkspace`, `ServiceManagement`), and Keychain access.
-
-The compiler enforces the boundary: importing `AppKit` inside Core is a build error. This keeps business logic framework-agnostic and gives SonarCloud and Periphery a clean, high-signal surface to analyse.
+Logic is kept independent of the app runtime: the `RunnerBarCore` library holds the platform-agnostic business logic, and the `RunnerBar` executable holds the macOS app shell. The compiler enforces the boundary, which keeps Core reusable and unit-testable with plain `swift test`.
 
 → [`docs/architecture/library-rationale.md`](docs/architecture/library-rationale.md)
 
@@ -113,7 +102,7 @@ The compiler enforces the boundary: importing `AppKit` inside Core is a build er
 
 ## Model Philosophy
 
-Models are immutable `Sendable` value types (`struct`) by default. `@Observable` classes are used only for ViewModels that need SwiftUI change propagation. Actors own all mutable state that crosses async boundaries. Use-cases (e.g. `WorkflowActionsUseCase`, `FailureHookRunnerUseCase`) are non-isolated `Sendable` structs with no stored mutable state — they run on the cooperative thread pool and depend only on injected protocols, making them trivially unit-testable. Persisted configuration is typed `Codable` — no stringly-typed `UserDefaults` keys in Core.
+State is immutable by default and flows one way: domain models are value types, and the UI observes a single read model it never writes to. Configuration is typed and behaviour is expressed as dependency-injected use-cases, so everything stays testable in isolation.
 
 → [`docs/architecture/data-model.md`](docs/architecture/data-model.md) · [`docs/principles/project-principles.md`](docs/principles/project-principles.md)
 
