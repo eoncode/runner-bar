@@ -117,7 +117,7 @@ struct RunnerDetailSheet: View {
     private var sheetHeader: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(dotColor(for: runner))
+                .fill(runner.statusColor.color)
                 .frame(width: 8, height: 8)
             Text(runner.runnerName)
                 .font(.system(size: 13, weight: .semibold))
@@ -313,17 +313,6 @@ struct RunnerDetailSheet: View {
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-    }
-
-    /// Status indicator colour from runner model.
-    /// Matches the 4-state logic in `LocalRunnersView.localRunnerDotColor(for:)`.
-    private func dotColor(for runnerModel: RunnerModel) -> Color {
-        switch runnerModel.statusColor {
-        case .running: return Color.rbSuccess
-        case .busy: return Color.rbWarning
-        case .idle: return Color.rbTextTertiary
-        case .offline: return Color.rbDanger
-        }
     }
 
     // MARK: - On Appear

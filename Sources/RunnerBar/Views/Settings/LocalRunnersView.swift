@@ -194,7 +194,7 @@ struct LocalRunnersView: View {
         let hasWarning = runner.lifecycleWarning != nil
         let displayStatus = runner.displayStatus
         return HStack(spacing: 6) {
-            Circle().fill(localRunnerDotColor(for: runner)).frame(width: 8, height: 8)
+            Circle().fill(runner.statusColor.color).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(runner.runnerName).font(.system(size: 13)).lineLimit(1)
                 if let url = runner.gitHubUrl {
@@ -296,16 +296,6 @@ struct LocalRunnersView: View {
     }
 
     // MARK: - Helpers
-
-    /// Maps a runner's `statusColor` to the corresponding design-system `Color`.
-    private func localRunnerDotColor(for runner: RunnerModel) -> Color {
-        switch runner.statusColor {
-        case .running: return Color.rbSuccess
-        case .busy: return Color.rbWarning
-        case .idle: return Color.rbTextTertiary
-        case .offline: return Color.rbDanger
-        }
-    }
 
     /// Returns the configured `AddRunnerSheet` for use as a `.sheet` content closure.
     private func addRunnerSheet() -> some View {
