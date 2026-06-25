@@ -67,8 +67,13 @@ func fetchActiveJobs(for scopeString: String, decoder: JSONDecoder) async -> [Ac
         guard let data = await ghAPI(runsEndpoint(status: status)),
               let resp = try? decoder.decode(WorkflowRunsResponse.self, from: data)
         else { continue }
-        // The `where` clause evaluates `insert(_:)` as a side effect, deduplicating
-        // across the two status passes while satisfying the `for_where` rule.
+        // `insert(_:)` is intentionally used as the `where` predicate so that
+        // deduplication across the two status passes (in_progress / queued) is
+        // expressed as a single readable loop rather than a nested if-guard.
+        // `Set.insert` returns `(inserted: Bool, ...)` and mutates `seenRunIDs`
+        // as a side effect; the `where` clause is evaluated exactly once per
+        // element, so there is no hidden short-circuit or double-insert risk.
+        // A plain `filter` cannot replace this because filter does not mutate.
         for run in resp.workflowRuns where seenRunIDs.insert(run.id).inserted {
             runIDs.append(run.id)
         }
