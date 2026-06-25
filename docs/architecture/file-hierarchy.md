@@ -21,27 +21,27 @@ runner-bar/
 │   ├── architecture/
 │   │   ├── AGENTS.md                        — AI agent usage guidelines for this codebase
 │   │   ├── FILE_HIERARCHY.md                — this file; annotated map of the codebase
-│   │   ├── UI-ARCHITECTURE.md               — UI layer architecture overview and component responsibilities
+│   │   ├── ui-architecture.md               — UI layer architecture overview and component responsibilities
 │   │   ├── project-principles.md            — core engineering principles and conventions for the project
 │   │   └── reach-goal-principles.md         — aspirational / stretch principles guiding future architecture decisions
 │   ├── design/
-│   │   ├── brand-inspiration_developer-tools_2026-06-02.md — brand/design inspiration notes
-│   │   ├── dark_light_mode_support.md       — notes on dark/light mode adaptive design
+│   │   ├── brand-inspiration.md — brand/design inspiration notes
+│   │   ├── dark-light-mode-support.md       — notes on dark/light mode adaptive design
 │   │   ├── liquid-glass.md                  — liquid-glass visual design exploration
-│   │   ├── runnerbar_v34_light_glass.html   — HTML prototype of the v34 light glass UI
+│   │   ├── runnerbar-light-glass.html   — HTML prototype of the v34 light glass UI
 │   │   └── zap.svg                          — zap icon asset used in design explorations
 │   ├── guides/
-│   │   ├── DEPLOYMENT.md                    — release and deployment instructions
-│   │   ├── DEVELOPMENT.md                   — local development setup and workflow
-│   │   ├── UI_TESTING.md                    — UI testing approach and instructions
+│   │   ├── deployment.md                    — release and deployment instructions
+│   │   ├── development.md                   — local development setup and workflow
+│   │   ├── ui-testing.md                    — UI testing approach and instructions
 │   │   ├── commenting-standard.md           — code commenting conventions for the project
 │   │   ├── dev-with-log-in-terminal.md      — how to run the app with live log output in Terminal
 │   │   └── useful-commands.md               — handy shell commands for development tasks
 │   ├── legal-and-security/
-│   │   ├── GitHub-Permission-Rationale.md   — justification for requested GitHub OAuth scopes
-│   │   └── PRIVACY.md                       — privacy policy and data-handling notes
+│   │   ├── github-permission-rationale.md   — justification for requested GitHub OAuth scopes
+│   │   └── privacy.md                       — privacy policy and data-handling notes
 │   └── ui/
-│       ├── nspopoer-without-jump-issues.md  — fix notes for NSPopover repositioning jumps
+│       ├── nspopover-without-jump-issues.md  — fix notes for NSPopover repositioning jumps
 │       ├── status-bar-app-position-warning.md — notes on status-bar icon positioning edge cases
 │       └── status-bar-window.md             — status-bar window construction notes
 │
