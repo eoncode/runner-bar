@@ -3,6 +3,36 @@
 import Collections
 import Foundation
 
+// MARK: - GroupStateDeps
+
+/// Injected dependencies for `PollResultBuilder.buildGroupState`.
+///
+/// Grouping the four async/sync closures into a single value type keeps
+/// `buildGroupState` within SwiftLint's `function_parameter_count` limit
+/// while preserving full testability via closure injection.
+public struct GroupStateDeps: Sendable {
+    /// Fetches live groups for every active scope.
+    public let fetchGroups: @Sendable ([String: WorkflowActionGroup]) async -> [WorkflowActionGroup]
+    /// Derives a scope string from a group; used as the failure-hook's second argument.
+    public let scopeFromGroup: @Sendable (WorkflowActionGroup) -> String
+    /// Invoked the first time a group transitions to a hook-triggering conclusion.
+    public let fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void
+    /// Enriches a job list by backfilling step data from the job cache.
+    public let enrichJobs: @Sendable ([ActiveJob]) async -> [ActiveJob]
+
+    public init(
+        fetchGroups: @escaping @Sendable ([String: WorkflowActionGroup]) async -> [WorkflowActionGroup],
+        scopeFromGroup: @escaping @Sendable (WorkflowActionGroup) -> String,
+        fireFailureHook: @escaping @Sendable (WorkflowActionGroup, String) async -> Void,
+        enrichJobs: @escaping @Sendable ([ActiveJob]) async -> [ActiveJob]
+    ) {
+        self.fetchGroups = fetchGroups
+        self.scopeFromGroup = scopeFromGroup
+        self.fireFailureHook = fireFailureHook
+        self.enrichJobs = enrichJobs
+    }
+}
+
 // MARK: - PollResultBuilder
 
 /// Pure state-building logic extracted from RunnerStore.
@@ -80,7 +110,6 @@ public struct PollResultBuilder {
     }
 
     // MARK: - Group state
-    // swiftlint:disable function_parameter_count
 
     /// Builds the action-group display list and updated caches from a background poll.
     ///
@@ -91,10 +120,7 @@ public struct PollResultBuilder {
     ///     hook in a previous poll cycle. Contains `WorkflowActionGroup.id` values.
     ///     Survives `trimGroupCache` eviction so the hook cannot re-fire for old groups.
     ///     Insertion order is preserved so `trimSeenGroupIDs` evicts the oldest entries first.
-    ///   - fetchGroups: Async closure that fetches live groups for every active scope.
-    ///   - scopeFromGroup: Synchronous closure that derives a scope string from a WorkflowActionGroup.
-    ///   - fireFailureHook: Async closure invoked the first time a group transitions to a hook-triggering conclusion.
-    ///   - enrichJobs: Async closure that enriches a job list from the job cache.
+    ///   - deps: Injected async/sync closures (fetch, scope, hook, enrich).
     ///
     /// - Important: `doneGroups` inserts into `newSeenGroupIDs` **before**
     ///   `freezeVanishedGroups` runs, so a group that appears in both the fetched
@@ -104,14 +130,11 @@ public struct PollResultBuilder {
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
         snapSeenGroupIDs: OrderedSet<String>,
-        fetchGroups: @Sendable ([String: WorkflowActionGroup]) async -> [WorkflowActionGroup],
-        scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
-        fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void,
-        enrichJobs: @escaping @Sendable ([ActiveJob]) async -> [ActiveJob]
+        deps: GroupStateDeps
     ) async -> GroupPollResult {
         log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count) snapSeenGroupIDs=\(snapSeenGroupIDs.count)")
         let shaKeyedCache = makeShaKeyedCache(snapGroupCache)
-        let allFetched = await fetchGroups(shaKeyedCache)
+        let allFetched = await deps.fetchGroups(shaKeyedCache)
         if allFetched.isEmpty {
             log("PollResultBuilder › buildGroupState — ⚠️ fetchGroups returned 0 groups; activeScopes may be empty or all scopes are unreachable")
         }
@@ -127,11 +150,11 @@ public struct PollResultBuilder {
             let runSummary = group.runs.map { "\($0.id):\($0.conclusion?.rawValue ?? "nil")" }.joined(separator: ", ")
             log("PollResultBuilder › doneGroups — groupID=\(group.id) isNew=\(isNew) runs=[\(runSummary)]")
             if isNew {
-                let scope = scopeFromGroup(group)
+                let scope = deps.scopeFromGroup(group)
                 log("PollResultBuilder › doneGroups — groupID=\(group.id) isNew=true → scope=\(scope)")
                 let shouldFire = group.runs.contains { $0.conclusion?.isHookConclusion == true }
                 if shouldFire {
-                    await fireFailureHook(group, scope)
+                    await deps.fireFailureHook(group, scope)
                 }
                 newSeenGroupIDs.append(group.id)
             }
@@ -143,8 +166,8 @@ public struct PollResultBuilder {
             now: now,
             into: &newCache,
             seenGroupIDs: &newSeenGroupIDs,
-            scopeFromGroup: scopeFromGroup,
-            fireFailureHook: fireFailureHook
+            scopeFromGroup: deps.scopeFromGroup,
+            fireFailureHook: deps.fireFailureHook
         )
         trimGroupCache(&newCache, limit: groupCacheLimit)
         trimSeenGroupIDs(&newSeenGroupIDs, limit: seenGroupIDsLimit)
@@ -161,7 +184,7 @@ public struct PollResultBuilder {
             of: (Int, WorkflowActionGroup).self
         ) { group in
             for (idx, actionGroup) in display.enumerated() {
-                group.addTask { (idx, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
+                group.addTask { (idx, actionGroup.withJobs(await deps.enrichJobs(actionGroup.jobs))) }
             }
             var out: [(Int, WorkflowActionGroup)] = []
             for await pair in group { out.append(pair) }
@@ -171,7 +194,7 @@ public struct PollResultBuilder {
             of: (String, WorkflowActionGroup).self
         ) { group in
             for (key, actionGroup) in newCache {
-                group.addTask { (key, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
+                group.addTask { (key, actionGroup.withJobs(await deps.enrichJobs(actionGroup.jobs))) }
             }
             var out: [String: WorkflowActionGroup] = [:]
             for await (key, actionGroup) in group { out[key] = actionGroup }
@@ -372,6 +395,10 @@ public struct PollResultBuilder {
     ///
     /// Display order: in-progress → loading → queued → cached (most-recently-completed first).
     /// The total list is capped at `groupDisplayLimit`.
+    ///
+    /// `.loading` groups are included so that newly-triggered workflows remain visible
+    /// during the transient window before their jobs have been assigned a runner and
+    /// their status advances to `.inProgress` or `.queued`.
     ///
     /// - Parameters:
     ///   - live: Currently active groups from the latest poll.
