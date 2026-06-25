@@ -299,6 +299,10 @@ struct PollResultBuilderTests {
 
     // MARK: applyVanishedJobs
 
+    /// Vanished jobs fall back to `.neutral` (not `.cancelled`) because `.cancelled` is the
+    /// conclusion GitHub assigns when a user explicitly cancels via the UI. A job that silently
+    /// disappears from the feed never received that API update, so using `.neutral` avoids
+    /// misattributing the cause and avoids triggering isHookConclusion side-effects.
     @Test func applyVanishedJobsMovesVanishedJobToCache() {
         let vanished = ActiveJob(id: 55, name: "Vanished", status: "in_progress")
         var cache: [Int: ActiveJob] = [:]
