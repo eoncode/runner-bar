@@ -79,6 +79,27 @@ struct StepLogView: View {
         return formatter
     }()
 
+    /// Creates a `StepLogView` for the given job step.
+    /// - Parameters:
+    ///   - job: The job that owns the step.
+    ///   - step: The step whose log will be fetched and displayed.
+    ///   - onBack: Called when the user taps the back button.
+    ///   - onLogLoaded: Optional callback fired on the main thread once the log fetch completes.
+    ///   - scopeStore: Scope store used for API scope resolution. Defaults to `ScopeStore.shared`.
+    init(
+        job: ActiveJob,
+        step: JobStep,
+        onBack: @escaping () -> Void,
+        onLogLoaded: (() -> Void)? = nil,
+        scopeStore: any ScopeStoreProtocol = ScopeStore.shared
+    ) {
+        self.job = job
+        self.step = step
+        self.onBack = onBack
+        self.onLogLoaded = onLogLoaded
+        self.scopeStore = scopeStore
+    }
+
     /// Root body -- top bar, step name, meta rows, and the capped log scroll view.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -231,8 +252,8 @@ struct StepLogView: View {
     /// underlying network I/O inside `fetchStepLog`. Because `fetchStepLog` does not
     /// itself check `Task.isCancelled` at suspension points, the network call runs to
     /// completion regardless. The `guard !Task.isCancelled` below therefore does NOT
-    /// prevent a previous task’s result from being committed if the task was cancelled
-    /// and then re-checked before Swift’s cooperative cancellation machinery fires —
+    /// prevent a previous task's result from being committed if the task was cancelled
+    /// and then re-checked before Swift's cooperative cancellation machinery fires —
     /// it merely reduces the window, not closes it.
     ///
     /// Concretely: on fast back → forward navigation, `loadLog()` cancels the old handle

@@ -295,7 +295,7 @@ struct InlineJobRowsView: View {
                     ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in
                         JobRowCard(
                             job: job,
-                            status: jobStatus(for: job),
+                            status: job.rbStatus,
                             isLast: index == jobs.count - 1,
                             group: group,
                             isExpanded: expandedJobIDs.contains(job.id),
@@ -309,25 +309,6 @@ struct InlineJobRowsView: View {
                 .padding(.trailing, RBSpacing.xs)
                 .padding(.bottom, RBSpacing.xs)
             }
-        }
-    }
-    // TODO: jobStatus(for:) duplicates conclusion→RBStatus mapping that also exists in // NOSONAR
-    // ActionRowView. Consider moving to an extension on ActiveJob or RBStatus in a future
-    // logic-pass batch so both call sites share one source of truth.
-    /// Resolves the display ``RBStatus`` for a single job from its conclusion and status fields.
-    private func jobStatus(for job: ActiveJob) -> RBStatus {
-        if let conclusion = job.conclusion {
-            switch conclusion {
-            case .success: return .success
-            case .failure: return .failed
-            case .cancelled, .skipped: return .unknown
-            default:                         return .unknown
-            }
-        }
-        switch job.status {
-        case .inProgress: return .inProgress
-        case .queued: return .queued
-        default:          return .queued
         }
     }
 }
