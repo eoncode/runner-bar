@@ -135,27 +135,17 @@ extension Color {
 
 // MARK: - Status helpers
 
-/// Semantic status values used to drive color selection across the app.
-enum RBStatus {
-    /// A job or workflow step that is currently executing.
-    case inProgress
-    /// A job or workflow step that completed successfully.
-    case success
-    /// A job or workflow step that failed.
-    case failed
-    /// A job or workflow step that is waiting to run.
-    case queued
-    /// An unrecognised or unavailable status.
-    case unknown
-
+/// UI-layer color extension for `RBStatus`.
+/// `RBStatus` cases are defined in `RunnerBarCore/RBStatus.swift`.
+extension RBStatus {
     /// The primary foreground color associated with this status.
     var color: Color {
         switch self {
         case .inProgress: return .rbBlue
-        case .success: return .rbSuccess
-        case .failed: return .rbDanger
-        case .queued: return .rbWarning
-        case .unknown: return .rbTextTertiary
+        case .success:    return .rbSuccess
+        case .failed:     return .rbDanger
+        case .queued:     return .rbWarning
+        case .unknown:    return .rbTextTertiary
         }
     }
 }

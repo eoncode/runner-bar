@@ -180,6 +180,31 @@ extension ActiveJob {
     }
 }
 
+// MARK: - RBStatus
+
+extension ActiveJob {
+    /// The canonical display status for this job, derived from `conclusion` and `status`.
+    ///
+    /// This is the single source of truth that replaces the duplicate
+    /// `conclusion → RBStatus` switches previously found in
+    /// `InlineJobRowsView.jobStatus(for:)` and `ActionRowView`.
+    public var rbStatus: RBStatus {
+        if let conclusion {
+            switch conclusion {
+            case .success:             return .success
+            case .failure:             return .failed
+            case .cancelled, .skipped: return .unknown
+            default:                   return .unknown
+            }
+        }
+        switch status {
+        case .inProgress: return .inProgress
+        case .queued:     return .queued
+        default:          return .queued
+        }
+    }
+}
+
 // MARK: - Job step
 
 /// A single step within an `ActiveJob`.
