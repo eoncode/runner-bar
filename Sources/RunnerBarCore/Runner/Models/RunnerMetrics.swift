@@ -87,7 +87,9 @@ private func parsePIDs(_ output: String) -> String? {
 /// - Returns: An array of `RunnerMetrics` values; empty when no parseable
 ///   lines are found.
 private func parsePSOutput(_ output: String, context: String) -> [RunnerMetrics] {
-    // Use .split to match parsePIDs strategy: empty subsequences dropped natively.
+    // Pass omittingEmptySubsequences: false so the header line is always a
+    // stable index-0 element and .dropFirst() reliably skips it. Blank lines
+    // that survive into the loop are filtered by the guard below.
     let lines = output.split(separator: "\n", omittingEmptySubsequences: false).dropFirst()
     var results: [RunnerMetrics] = []
     for line in lines {
