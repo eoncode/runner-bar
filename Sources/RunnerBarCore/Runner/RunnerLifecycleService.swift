@@ -11,6 +11,7 @@ import Foundation
 /// delegating process execution to `ProcessRunner` and token fetching to the GitHub API.
 public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
+    /// Creates a new `RunnerLifecycleService` instance.
     public init() {}
 
     // MARK: - Start
@@ -199,6 +200,8 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
     // MARK: - Corrupt install detection
 
+    /// Returns `true` if `output` contains a string that indicates the runner installation is corrupt
+    /// (e.g. the runner was moved or partially uninstalled outside the app).
     private func isCorruptInstall(output: String) -> Bool {
         let lower = output.lowercased()
         let result = lower.contains("must run from runner root") || lower.contains("install is corrupt")
@@ -208,6 +211,8 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
     // MARK: - LaunchAgent plist cleanup
 
+    /// Removes any LaunchAgent plist file in `~/Library/LaunchAgents` whose name matches
+    /// the pattern `actions.runner.*.<runnerName>`. Called as the final cleanup step in `remove()`.
     private func deleteLaunchAgentPlist(for runnerName: String) {
         let laDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
@@ -224,6 +229,12 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
     // MARK: - Scope helper
 
+    /// Derives a GitHub scope string (`owner/repo` or `org`) from a GitHub URL.
+    ///
+    /// Examples:
+    /// - `https://github.com/acme/my-repo` → `"acme/my-repo"`
+    /// - `https://github.com/acme` → `"acme"`
+    /// - Unrecognised URL → returns the original string unchanged.
     private func scopeFromGitHubUrl(_ urlString: String) -> String {
         guard let url = URL(string: urlString) else { return urlString }
         let parts = url.pathComponents.filter { $0 != "/" }
@@ -234,6 +245,10 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
     // MARK: - Script runner
 
+    /// Runs a shell script relative to `workingDirectory` and returns `(exitCode == 0, combined output)`.
+    ///
+    /// Thin wrapper around `ProcessRunner.runAsync` that resolves the executable by name within the
+    /// runner's install directory, guards against non-executable files, and merges stderr into stdout.
     private func runScriptWithOutput(
         executableName: String,
         arguments: [String],
@@ -262,6 +277,8 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
     // MARK: - Logging helper
 
+    /// Emits a structured log line in the format `RunnerLifecycle > <tag>: <message>`.
+    /// Centralises the prefix so individual methods stay concise.
     private func logStep(_ tag: String, _ message: String) {
         log("RunnerLifecycle > \(tag): \(message)")
     }
