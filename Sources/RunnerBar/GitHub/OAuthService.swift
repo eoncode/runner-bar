@@ -2,6 +2,7 @@
 // RunnerBar
 import AppKit
 import Foundation
+import RunnerBarCore
 
 // MARK: - OAuthService
 //

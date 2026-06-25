@@ -1,5 +1,5 @@
 // OAuthServiceProtocol.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 
 // MARK: - OAuthServiceProtocol
@@ -34,7 +34,7 @@ import Foundation
 /// }
 /// ```
 @MainActor
-protocol OAuthServiceProtocol: AnyObject {
+public protocol OAuthServiceProtocol: AnyObject {
     /// Opens the GitHub OAuth authorization page in the default browser to begin sign-in.
     func signIn()
 
