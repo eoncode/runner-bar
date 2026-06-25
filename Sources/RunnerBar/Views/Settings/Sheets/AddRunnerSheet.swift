@@ -86,16 +86,7 @@ struct AddRunnerSheet: View {
     // not be accessed from outside it.
 
     // MARK: Scope state (Add new only)
-
-    /// Determines whether the runner is registered at repo or organisation scope.
-    enum ScopeType: String, CaseIterable, Identifiable {
-        /// Runner registered to a single repository.
-        case repo = "Repository"
-        /// Runner registered at organisation level.
-        case org = "Organisation"
-        /// Stable identity backed by `rawValue`.
-        var id: String { rawValue }
-    }
+    // ScopeType is defined in ScopeType.swift (F-45 / #1644).
 
     /// Whether the runner is repo-scoped or org-scoped.
     @State var scopeType: ScopeType = .repo

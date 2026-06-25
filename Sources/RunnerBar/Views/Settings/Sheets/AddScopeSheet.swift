@@ -3,17 +3,7 @@
 import RunnerBarCore
 import SwiftUI
 
-// MARK: - ScopeType
-
-/// Enumerates possible values for ScopeType.
-private enum ScopeType: String, CaseIterable, Identifiable {
-    /// Coding key for the `org` field.
-    case org = "Organisation"
-    /// Coding key for the `repo` field.
-    case repo = "Repository"
-    /// The id property.
-    var id: String { rawValue }
-}
+// ScopeType is defined in ScopeType.swift (F-45 / #1644).
 
 // MARK: - AddScopeSheet
 
