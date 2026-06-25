@@ -23,11 +23,6 @@ import SwiftUI
 // Do NOT add .background() or NSVisualEffectView at this level.
 /// Root panel view rendered inside the NSPopover.
 struct PanelMainView: View {
-    /// The view model driving runner and workflow data.
-    /// SAFE: lifetime is managed by `AppDelegate`, not SwiftUI. The hosting
-    /// `NSViewController` is never destroyed, so SwiftUI never re-creates
-    /// `PanelMainView`'s identity and `store` always points at the same instance.
-    var store: RunnerViewModel
     /// Called when user taps a step row.
     let onStepTap: (ActiveJob, JobStep) -> Void
     /// Called when the user taps the settings gear button.
@@ -36,7 +31,7 @@ struct PanelMainView: View {
     var localRunnerStore: LocalRunnerStore = .shared
     /// Panel open/close and transient-hide state from the environment.
     @Environment(PanelVisibilityState.self) private var panelVisibilityState: PanelVisibilityState
-    /// Step 12: Core runner/job/action/rate-limit state injected from AppDelegate.wrapEnv.
+    /// Core runner/job/action/rate-limit state injected from AppDelegate.wrapEnv.
     @Environment(RunnerState.self) private var runnerState: RunnerState
     /// View model for CPU/memory stats displayed in the header.
     @State private var systemStats = SystemStatsViewModel()
@@ -50,11 +45,9 @@ struct PanelMainView: View {
 
     /// Creates a `PanelMainView`.
     init(
-        store: RunnerViewModel,
         onStepTap: @escaping (ActiveJob, JobStep) -> Void,
         onSelectSettings: @escaping () -> Void
     ) {
-        self.store = store
         self.onStepTap = onStepTap
         self.onSelectSettings = onSelectSettings
     }
@@ -66,13 +59,9 @@ struct PanelMainView: View {
 
     /// Local runners currently executing a job inside an in-progress workflow group.
     ///
-    /// Reads GitHub-side state (`actions`, `jobs`, `runners`) from `runnerState` (injected
-    /// via the SwiftUI environment from `AppDelegate.wrapEnv`).
-    ///
-    /// `store.localRunners` is intentionally still read from `RunnerViewModel` here —
-    /// `LocalRunnerStore` pushes `localRunners` to `observable` (not to `RunnerState`)
-    /// because the LocalRunnerStore migration is deferred to a follow-up issue.
-    /// TODO: migrate store.localRunners to RunnerState once LocalRunnerStore is moved to Core.
+    /// Reads GitHub-side state (`actions`, `jobs`, `runners`) and local runner state
+    /// (`localRunners`) from `runnerState` — the single observable source of truth
+    /// injected via the SwiftUI environment from `AppDelegate.wrapEnv`.
     private var activeLocalRunners: [RunnerModel] {
         guard runnerState.actions.contains(where: { $0.groupStatus == .inProgress }) else { return [] }
         let activeNamesFromJobs = Set(
@@ -81,8 +70,7 @@ struct PanelMainView: View {
         let busyRunners = runnerState.runners.filter { $0.busy }
         let busyIds = Set(busyRunners.compactMap { $0.id })
         let busyNames = Set(busyRunners.map { $0.name })
-        // TODO: migrate store.localRunners → RunnerState once LocalRunnerStore is moved to Core.
-        return store.localRunners.filter { local in
+        return runnerState.localRunners.filter { local in
             if activeNamesFromJobs.contains(local.runnerName) { return true }
             if let aid = local.agentId, busyIds.contains(aid) { return true }
             if busyNames.contains(local.runnerName) { return true }

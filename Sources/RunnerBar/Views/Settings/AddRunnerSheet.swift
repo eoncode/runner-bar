@@ -6,28 +6,14 @@ import SwiftUI
 // MARK: - URI Constants
 
 /// Centralised URI and path constants used by `AddRunnerSheet` and its extensions.
-///
-/// Intentionally `internal` (not `private`) because the cross-file extension split
-/// requires all extension files to access these constants. Do not promote to `public`
-/// and do not add constants unrelated to `AddRunnerSheet` here.
-///
-/// - Note: If `AddRunnerSheet` is ever consolidated back into a single file,
-///   restrict this enum to `private`.
 enum GitHubURIs {
-    /// The base GitHub web URL.
-    static let base = "https://github.com/" // NOSONAR — centralised constant, not an inline hardcoded URI
-    /// The GitHub API endpoint for the latest Actions runner release.
-    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR — centralised constant, not an inline hardcoded URI
-    /// Relative path to the user's LaunchAgents directory.
+    static let base = "https://github.com/" // NOSONAR
+    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR
     static let launchAgentsDir = "Library/LaunchAgents"
-    /// Default runner install directory relative to the user's home folder.
     static let actionsRunnerDefaultDir = "actions-runner/my-runner"
-    /// System path to the curl binary used when downloading the runner package.
-    static let curlPath = "/usr/bin/curl" // NOSONAR — fixed OS path
-    /// System path to the tar binary used when unpacking the runner package.
-    static let tarPath = "/usr/bin/tar"  // NOSONAR — fixed OS path
-    /// System path to the uname binary used to detect CPU architecture.
-    static let unamePath = "/usr/bin/uname" // NOSONAR — fixed OS path
+    static let curlPath = "/usr/bin/curl" // NOSONAR
+    static let tarPath = "/usr/bin/tar"  // NOSONAR
+    static let unamePath = "/usr/bin/uname" // NOSONAR
 }
 
 /// Sheet view for onboarding a self-hosted runner.
@@ -39,18 +25,10 @@ enum GitHubURIs {
 ///   of RunnerBar (e.g. via terminal). Only writes the LaunchAgent plist so
 ///   the runner can be managed — no token or download needed.
 ///
-/// After successful registration/import the app writes a minimal LaunchAgent plist to
-/// `~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist` directly
-/// via FileManager, and registers the runner in `LocalRunnerStore`.
-///
-/// Requires a GitHub token for "Add new" (OAuth sign-in, GH_TOKEN, or GITHUB_TOKEN).
-///
 /// ## Visibility note
 /// All `@State` properties and extension-facing helpers are `internal` (no modifier)
 /// rather than `private` because Swift does not allow `private` members of a primary
-/// type to be accessed from extensions defined in separate files. This is an accepted
-/// trade-off of the cross-file split; these members remain logically private to the
-/// `AddRunnerSheet` family of files.
+/// type to be accessed from extensions defined in separate files.
 struct AddRunnerSheet: View {
     /// Controls whether the sheet is shown.
     @Binding var isPresented: Bool
@@ -58,111 +36,64 @@ struct AddRunnerSheet: View {
     let onComplete: () -> Void
     /// Injected local runner store — avoids direct `.shared` references inside the sheet.
     var localRunnerStore: LocalRunnerStore = .shared
-    /// View model used for synchronous duplicate checks against `localRunners` already
-    /// pushed to the UI layer — avoids crossing the actor boundary in computed properties.
-    ///
-    /// No default is provided: every call site must pass an explicit `store:` argument.
-    /// (Previously defaulted to `RunnerViewModel.shared`, which is a `fatalError` trap.)
-    var store: RunnerViewModel
+    /// Core runner state — read for synchronous duplicate checks against localRunners.
+    @Environment(RunnerState.self) var runnerState: RunnerState
 
     // MARK: - Add Mode
 
-    /// Controls which form body is shown in the sheet.
     enum AddMode: String, CaseIterable, Identifiable {
-        /// Onboards a fresh runner via download + registration token.
         case addNew = "Add new"
-        /// Imports a runner folder that was configured outside of RunnerBar.
         case addExisting = "Add pre-existing"
-        /// Stable identity backed by `rawValue`.
         var id: String { rawValue }
     }
 
-    /// Whether the user is adding a new runner or importing a pre-existing one.
     @State var addMode: AddMode = .addNew
 
     // MARK: - Internal state (extension-accessible)
-    // These properties have no explicit access modifier (i.e. they are `internal`)
-    // rather than `private` so that extensions defined in sibling files
-    // (+FormFields, +Validation, +TokenSection) can read and mutate them.
-    // They are logically private to the AddRunnerSheet file family and must
-    // not be accessed from outside it.
 
     // MARK: Scope state (Add new only)
-
-    /// Determines whether the runner is registered at repo or organisation scope.
     enum ScopeType: String, CaseIterable, Identifiable {
-        /// Runner registered to a single repository.
         case repo = "Repository"
-        /// Runner registered at organisation level.
         case org = "Organisation"
-        /// Stable identity backed by `rawValue`.
         var id: String { rawValue }
     }
 
-    /// Whether the runner is repo-scoped or org-scoped.
     @State var scopeType: ScopeType = .repo
-    /// Selected repository slug (used when `scopeType == .repo`).
     @State var selectedRepo = ""
-    /// Selected organisation name (used when `scopeType == .org`).
     @State var selectedOrg = ""
-    /// Repository slugs fetched from GitHub for the picker.
     @State var repos: [String] = []
-    /// Organisation names fetched from GitHub for the picker.
     @State var orgs: [String] = []
-    /// `true` while scope options are being fetched from GitHub.
     @State var isLoadingScopes = false
-    /// `true` while the repository-selector sheet is presented.
     @State var showRepoSelector = false
-    /// `true` while the organisation-selector sheet is presented.
     @State var showOrgSelector = false
 
     // MARK: Runner config state (Add new only)
-
-    /// Display name the runner will register with.
     @State var runnerName = ""
-    /// Comma-separated label string pre-populated with defaults.
     @State var labelsText = "self-hosted,macOS"
-    /// Default: ~/actions-runner/my-runner — user should rename the last
-    /// component to match their runner name. Each runner needs its own folder.
     @State var installDir = FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
 
     // MARK: Registration state (Add new only)
-
-    /// `true` while the registration command is running.
     @State var isRegistering = false
-    /// Human-readable description of the current registration step.
     @State var registrationStep = ""
-    /// Non-nil when registration fails; shown as an inline error.
     @State var errorMessage: String?
 
     // MARK: Pre-existing state (Add pre-existing only)
-
-    /// The folder path the user selected via NSOpenPanel.
     @State var existingDir = ""
-    /// Runner name parsed from the `.runner` JSON inside `existingDir`.
     @State var detectedName = ""
-    /// GitHub URL parsed from the `.runner` JSON inside `existingDir`.
     @State var detectedGitHubURL = ""
-    /// Shown when the selected folder has no valid `.runner` file or it can't be parsed.
     @State var existingError: String?
-    /// Editable fallback shown when `.runner` JSON has no `gitHubUrl` (rare, org-scoped runners).
     @State var githubURLOverride = ""
-    /// Whether a runner with this name is already in LocalRunnerStore's index.
     @State var isDuplicate = false
-    /// The NSWindow hosting this sheet, captured early via WindowGrabber so
-    /// `beginSheetModal` has a reliable reference when pickExistingFolder() is called.
     @State var hostWindow: NSWindow?
 
     // MARK: - Body
 
-    /// Root layout: mode picker, form body, and action bar.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner").font(.headline)
 
-            // MARK: Mode toggle
             Picker("Mode", selection: $addMode) {
                 ForEach(AddMode.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -176,7 +107,6 @@ struct AddRunnerSheet: View {
 
             Divider()
 
-            // MARK: Form body branch
             if addMode == .addNew {
                 addNewFormBody
             } else {
@@ -195,7 +125,6 @@ struct AddRunnerSheet: View {
 
     // MARK: - State reset helpers
 
-    /// Resets all "Add new" form fields to their initial default values.
     func resetAddNewState() {
         runnerName = ""
         labelsText = "self-hosted,macOS"
@@ -213,7 +142,6 @@ struct AddRunnerSheet: View {
         }
     }
 
-    /// Clears all "Add pre-existing" detection state so a fresh folder can be picked.
     func resetExistingState() {
         existingDir = ""
         detectedName = ""
@@ -225,16 +153,6 @@ struct AddRunnerSheet: View {
 
     // MARK: - Plist writer (shared by both modes)
 
-    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/` for the given runner.
-    ///
-    /// The plist label is derived as `actions.runner.<owner>.<repo>.<runnerName>` and written
-    /// atomically. Used by both the "Add new" and "Add pre-existing" flows.
-    ///
-    /// - Note: `ProgramArguments` is intentionally omitted. The runner is started by
-    ///   `launchctl` invoking `./run.sh` from the `WorkingDirectory`; RunnerBar only
-    ///   needs `Label` + `WorkingDirectory` to identify and manage the agent. A full
-    ///   `ProgramArguments` array would be added if RunnerBar ever needs to bootstrap
-    ///   the runner itself rather than relying on the existing `run.sh` mechanism.
     nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
@@ -261,9 +179,6 @@ struct AddRunnerSheet: View {
 
     // MARK: - Process helpers (Add new)
 
-    /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
-    ///
-    /// Delegates to `ProcessRunner.runAsync` — no blocking `waitUntilExit()` on the pool.
     func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) async -> Int32 {
@@ -280,9 +195,6 @@ struct AddRunnerSheet: View {
         return result.exitCode
     }
 
-    /// Launches `executable` with `args` asynchronously and returns the termination status.
-    ///
-    /// Delegates to `ProcessRunner.runAsync` — stderr is discarded (default `mergeStderr: false`).
     func runSimpleProcess(_ executable: String, args: [String]) async -> Int32 {
         let result = await ProcessRunner.runAsync(
             executableURL: URL(fileURLWithPath: executable),
@@ -295,20 +207,6 @@ struct AddRunnerSheet: View {
 
     // MARK: - Register (Add new)
 
-    /// Downloads, unpacks, configures a new runner, registers with `LocalRunnerStore`, and dismisses.
-    ///
-    /// ## Actor isolation — read before changing this function
-    /// `AddRunnerSheet` is a plain `struct … View` with **no** `@MainActor` annotation on the
-    /// type itself. Swift only synthesises `@MainActor` isolation for a SwiftUI `View` when the
-    /// conformance is on an explicitly `@MainActor`-annotated type — it does NOT do so for
-    /// unannotated structs. Only `body` and helpers explicitly marked `@MainActor` (e.g.
-    /// `setStep`) run on the main actor.
-    ///
-    /// `register()` carries **no** actor annotation. A `Task { await register() }` created from
-    /// a SwiftUI button action inherits the *caller's* actor isolation only if the callee is
-    /// itself actor-isolated. Because `register()` is unannotated, the Task runs on the
-    /// cooperative thread pool — **not** on `@MainActor`. This is the correct and intended
-    /// behaviour, not a bug.
     func register() async {
         guard canRegister else { return }
         errorMessage = nil
@@ -325,7 +223,7 @@ struct AddRunnerSheet: View {
         let resolvedDir = URL(fileURLWithPath: dir).resolvingSymlinksInPath().path
         guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
             isRegistering = false
-            errorMessage = "Install directory must be inside your home folder (~/…)."
+            errorMessage = "Install directory must be inside your home folder (~/\u{2026})."
             return
         }
 
@@ -347,7 +245,7 @@ struct AddRunnerSheet: View {
         let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
 
         if !FileManager.default.fileExists(atPath: configPath) {
-            setStep("Downloading runner package…")
+            setStep("Downloading runner package\u{2026}")
             guard let downloadURL = await fetchRunnerDownloadURL() else {
                 isRegistering = false
                 errorMessage = "Could not determine runner download URL. Check your internet connection."
@@ -364,7 +262,7 @@ struct AddRunnerSheet: View {
                 errorMessage = "Download failed."
                 return
             }
-            setStep("Unpacking runner package…")
+            setStep("Unpacking runner package\u{2026}")
             let tarResult = await runSimpleProcess(GitHubURIs.tarPath, args: ["xzf", tarPath, "-C", dir])
             try? FileManager.default.removeItem(atPath: tarPath)
             guard tarResult == 0 else {
@@ -374,7 +272,7 @@ struct AddRunnerSheet: View {
             }
         }
 
-        setStep("Fetching registration token…")
+        setStep("Fetching registration token\u{2026}")
         guard let token = await fetchRegistrationToken(scope: scope) else {
             isRegistering = false
             if currentScopeType == .org {
@@ -385,7 +283,7 @@ struct AddRunnerSheet: View {
             return
         }
 
-        setStep("Configuring runner…")
+        setStep("Configuring runner\u{2026}")
         let ghURL = "\(GitHubURIs.base)\(scope)"
         let configExit = await runRegistrationCommand(
             dir: dir, ghURL: ghURL, token: token, name: name, labels: labels
@@ -396,12 +294,8 @@ struct AddRunnerSheet: View {
             return
         }
 
-        setStep("Registering service…")
+        setStep("Registering service\u{2026}")
         writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
-        // Await directly — register() is already async, no Task wrapper needed.
-        // This guarantees add() completes before isPresented = false fires and
-        // onComplete() enqueues its refresh(), so the new runner row is always
-        // present in the actor's index before the scan runs.
         await localRunnerStore.add(runnerName: name, installPath: dir)
         isRegistering = false
         registrationStep = ""

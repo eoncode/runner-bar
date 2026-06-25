@@ -32,7 +32,6 @@ extension AppDelegate {
     ///    nesting causes multiple overlapping dim overlays → gray/black flash.
     func mainView() -> AnyView {
         let inner = PanelMainView(
-            store: observable,
             onStepTap: { [weak self] job, step in
                 guard let self else { return }
                 self.savedNavState = .stepLog(job: job, step: step)
@@ -66,7 +65,6 @@ extension AppDelegate {
                 self?.panelSheetState.clearRunnerSheet()
                 self?.navigate(to: self?.mainView() ?? AnyView(EmptyView()))
             },
-            store: observable,
             oauthService: oauthService,
             lifecycleService: lifecycleService
         )

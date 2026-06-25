@@ -34,9 +34,6 @@ struct SettingsView: View {
     // MARK: - Inputs
     /// Callback invoked when the user taps the back button.
     let onBack: () -> Void
-    // periphery:ignore - injected by caller; read indirectly via passed closures
-    /// The shared runner view-model; observed for remote runner list updates.
-    var store: RunnerViewModel
     /// The local runner actor forwarded into `LocalRunnersView`.
     /// Defaults to `LocalRunnerStore.shared` so call sites that don't own the actor still compile.
     var localRunnerStore: LocalRunnerStore = .shared
@@ -81,7 +78,6 @@ struct SettingsView: View {
     /// up the shared live instances automatically.
     init(
         onBack: @escaping () -> Void,
-        store: RunnerViewModel,
         localRunnerStore: LocalRunnerStore = .shared,
         oauthService: any OAuthServiceProtocol,
         settings: AppPreferencesStore = .shared,
@@ -89,7 +85,6 @@ struct SettingsView: View {
         lifecycleService: any RunnerLifecycleServiceProtocol
     ) {
         self.onBack = onBack
-        self.store = store
         self.localRunnerStore = localRunnerStore
         self.oauthService = oauthService
         self.settings = settings
@@ -120,7 +115,6 @@ struct SettingsView: View {
                 LocalRunnersView(
                     onBack: { showLocalRunners = false },
                     isAuthenticated: isOAuthAuthenticated || isCLIAuthenticated,
-                    store: store,
                     localRunnerStore: localRunnerStore,
                     lifecycleService: lifecycleService
                 )

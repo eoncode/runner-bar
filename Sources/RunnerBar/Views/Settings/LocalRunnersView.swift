@@ -19,13 +19,12 @@ struct LocalRunnersView: View {
     let onBack: () -> Void
     /// Combined OAuth + CLI auth state forwarded from `SettingsView`; required by `RemovalAlertModifier`.
     let isAuthenticated: Bool
-    /// View model that holds `localRunners` and `isLocalScanning` pushed by `LocalRunnerStore`.
-    var store: RunnerViewModel
 
-    // MARK: - Local runner store (for mutations only — state is read from `store`)
+    // MARK: - Local runner store (for mutations only — state is read from RunnerState environment)
 
     /// The local runner actor. Used only for mutations (refresh, optimistic updates).
-    /// Observed state (`localRunners`, `isLocalScanning`) is read from `store` instead.
+    /// Observed state (`localRunners`, `isLocalScanning`) is read from the `RunnerState`
+    /// environment object injected by `AppDelegate.wrapEnv`.
     /// Injected by the caller; defaults to `LocalRunnerStore.shared` at the `SettingsView` boundary.
     var localRunnerStore: LocalRunnerStore = .shared
 
@@ -33,6 +32,11 @@ struct LocalRunnersView: View {
     /// Typed to protocol so tests can supply a stub without spawning real `svc.sh` processes (P7).
     /// No default — callers must supply the `AppDelegate`-owned instance explicitly.
     var lifecycleService: any RunnerLifecycleServiceProtocol
+
+    // MARK: - Environment
+
+    /// Core runner state — localRunners and isLocalScanning are read from here.
+    @Environment(RunnerState.self) private var runnerState: RunnerState
 
     // MARK: - Local UI state
 
@@ -74,7 +78,7 @@ struct LocalRunnersView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear { Task { await localRunnerStore.refresh() } }
-        .onChange(of: store.isLocalScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
+        .onChange(of: runnerState.isLocalScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
         .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
         .modifier(removalAlertModifier)
         // #1262: Use .sheet(item:) instead of .popover(item:) so AppKit attaches
@@ -128,7 +132,7 @@ struct LocalRunnersView: View {
             .help("Add a new runner")
             .accessibilityIdentifier("addRunnerButton")
             .padding(.trailing, 4)
-            if store.isLocalScanning {
+            if runnerState.isLocalScanning {
                 ProgressView().scaleEffect(0.6).frame(width: 14, height: 14)
             } else {
                 Button(action: { removeErrorMessage = nil; Task { await localRunnerStore.refresh() } }, label: {
@@ -160,11 +164,11 @@ struct LocalRunnersView: View {
     /// Empty-state placeholder or populated list of runner rows.
     @ViewBuilder
     private var runnerList: some View {
-        if store.localRunners.isEmpty && !store.isLocalScanning && hasLoadedOnce {
+        if runnerState.localRunners.isEmpty && !runnerState.isLocalScanning && hasLoadedOnce {
             Text("No local runners found").font(.caption).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
         } else {
-            ForEach(store.localRunners) { runner in localRunnerRow(runner) }
+            ForEach(runnerState.localRunners) { runner in localRunnerRow(runner) }
         }
     }
 
@@ -227,15 +231,9 @@ struct LocalRunnersView: View {
     // MARK: - Lifecycle actions
 
     /// Optimistically marks the runner as running then delegates to `lifecycleService`.
-    ///
-    /// The optimistic update is awaited inline before the lifecycle service is called so the
-    /// runner row updates on the very next main-actor frame after the toggle fires. Previously
-    /// two independent `Task {}` blocks were used, which introduced an actor-hop latency
-    /// between the tap and the first visible state change.
     @MainActor private func performResume(runner: RunnerModel) {
         log("LocalRunnersView > performResume called runner=\(runner.runnerName)")
         Task(priority: .userInitiated) {
-            // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: true)
             let result = await lifecycleService.start(runner: runner)
             switch result {
@@ -254,15 +252,9 @@ struct LocalRunnersView: View {
     }
 
     /// Optimistically marks the runner as stopped then delegates to `lifecycleService`.
-    ///
-    /// The optimistic update is awaited inline before the lifecycle service is called so the
-    /// runner row updates on the very next main-actor frame after the toggle fires. Previously
-    /// two independent `Task {}` blocks were used, which introduced an actor-hop latency
-    /// between the tap and the first visible state change.
     @MainActor private func performStop(runner: RunnerModel) {
         log("LocalRunnersView > performStop called runner=\(runner.runnerName)")
         Task(priority: .userInitiated) {
-            // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
             let result = await lifecycleService.stop(runner: runner)
             switch result {
@@ -284,10 +276,6 @@ struct LocalRunnersView: View {
         guard let runner = runnerPendingRemoval else { return }
         runnerPendingRemoval = nil
         removeErrorMessage = nil
-        // optimisticallyRemove is awaited inline at the top of the same Task so that
-        // the removal is always visible before the lifecycle call starts. A separate
-        // fire-and-forget Task risks the rollback path (optimisticallyRestore) running
-        // before optimisticallyRemove, leaving the row permanently deleted on failure.
         Task(priority: .userInitiated) {
             await localRunnerStore.optimisticallyRemove(runner.runnerName)
             let ok = await lifecycleService.remove(runner: runner)
@@ -316,8 +304,7 @@ struct LocalRunnersView: View {
         AddRunnerSheet(
             isPresented: $showAddRunnerSheet,
             onComplete: { Task { await localRunnerStore.refresh() } },
-            localRunnerStore: localRunnerStore,
-            store: store
+            localRunnerStore: localRunnerStore
         )
     }
 
@@ -336,9 +323,6 @@ struct LocalRunnersView: View {
     }
 
     /// Builds the `RunnerDetailSheet` with commit/cancel wiring.
-    ///
-    /// Presented via `.sheet(item:)` so AppKit attaches the view as a child sheet
-    /// of `NSPopoverWindowFrame` — unconstrained by the SwiftUI view hierarchy bounds.
     @ViewBuilder
     private func runnerEditingSheet(runner: RunnerModel) -> some View {
         RunnerDetailSheet(
@@ -348,10 +332,6 @@ struct LocalRunnersView: View {
                 guard !isCommitting else { return }
                 isCommitting = true
                 commitError = nil
-                // Build original from disk so the dirty-check in SaveRunnerEditsUseCase
-                // compares against actual persisted values, not model defaults.
-                // (#1001 fix: was RunnerEditDraft(runner: runner) which left
-                // autoUpdate=true and proxy fields empty regardless of disk state.)
                 Task(priority: .userInitiated) {
                     var original = RunnerEditDraft(runner: runner)
                     if let installPath = runner.installPath {
