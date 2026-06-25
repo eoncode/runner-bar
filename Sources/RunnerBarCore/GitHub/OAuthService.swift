@@ -98,11 +98,16 @@ public final class OAuthService: OAuthServiceProtocol {
     ///     NSWorkspace.shared.open(url)  // app layer — not Core's concern
     /// }
     /// ```
-    /// Returns `nil` if the URL cannot be constructed. In practice both guard paths
-    /// are unreachable — `authorizeURL` is a compile-time constant from `GitHubConstants`
-    /// and `URLComponents` will not fail on it. The `nil` return communicates failure
-    /// to the call site; no stream event is fired here because no real sign-in attempt
-    /// was made.
+    ///
+    /// Returns `nil` if the URL cannot be constructed (both guard paths are unreachable
+    /// at runtime — `authorizeURL` is a compile-time constant from `GitHubConstants`).
+    ///
+    /// **Stream asymmetry:** `makeSignInStream()` consumers are **not** notified when
+    /// this method returns `nil`. No sign-in attempt reached the network, so no stream
+    /// event is appropriate. The call site is responsible for handling `nil` directly
+    /// (e.g. resetting `isSigningIn = false`). Only `handleCallback(_:)` and
+    /// `exchangeCode(_:)` fire stream events, because those represent real sign-in
+    /// outcomes.
     public func makeSignInURL() -> URL? {
         log("OAuthService › makeSignInURL — building OAuth URL")
         let state = UUID().uuidString
