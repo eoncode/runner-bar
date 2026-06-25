@@ -9,7 +9,7 @@ import Foundation
 /// `SaveRunnerEditsUseCase`. Each case is converted to a human-readable string by
 /// `labelsPrereqErrorMessage(_:)` before being surfaced in `execute(…)`'s `CommitResult`.
 /// External callers receive only `[String]` errors — this enum is an implementation detail (#1480).
-enum LabelsPrerequisiteError: Error, Equatable, Sendable {
+package enum LabelsPrerequisiteError: Error, Equatable, Sendable {
     /// The runner has no `agentId` — required to address the GitHub API runner endpoint.
     case missingAgentId
     /// The runner has no `gitHubUrl` — required to determine the API scope.
