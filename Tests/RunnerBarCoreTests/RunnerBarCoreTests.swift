@@ -1,5 +1,6 @@
 // RunnerBarCoreTests.swift
 // RunnerBarCoreTests
+import Collections
 import Foundation
 import Testing
 import RunnerBarCore
@@ -433,9 +434,9 @@ struct PollResultBuilderTests {
 
     // MARK: trimSeenGroupIDs
 
-    /// Set at exactly the limit must not be modified.
+    /// OrderedSet at exactly the limit must not be modified.
     @Test func trimSeenGroupIDsNoopAtLimit() {
-        var ids: Set<String> = Set((1...10).map { "group-\($0)" })
+        var ids: OrderedSet<String> = OrderedSet((1...10).map { "group-\($0)" })
         PollResultBuilder.trimSeenGroupIDs(&ids, limit: 10)
         #expect(ids.count == 10)
     }
@@ -445,7 +446,7 @@ struct PollResultBuilderTests {
     /// instead of only the single excess entry.
     @Test func trimSeenGroupIDsTrimsToLimitNotHalf() {
         let limit = 10
-        var ids: Set<String> = Set((1...(limit + 1)).map { "group-\($0)" })
+        var ids: OrderedSet<String> = OrderedSet((1...(limit + 1)).map { "group-\($0)" })
         PollResultBuilder.trimSeenGroupIDs(&ids, limit: limit)
         #expect(ids.count == limit)
     }
@@ -453,9 +454,29 @@ struct PollResultBuilderTests {
     /// Well over the limit must also leave exactly `limit` entries.
     @Test func trimSeenGroupIDsWellOverLimit() {
         let limit = 10
-        var ids: Set<String> = Set((1...25).map { "group-\($0)" })
+        var ids: OrderedSet<String> = OrderedSet((1...25).map { "group-\($0)" })
         PollResultBuilder.trimSeenGroupIDs(&ids, limit: limit)
         #expect(ids.count == limit)
+    }
+
+    /// Regression test for #1641: trimSeenGroupIDs must evict the *oldest* inserted IDs
+    /// first (FIFO), not arbitrary entries.
+    ///
+    /// Inserts "group-1" through "group-12" in order into an OrderedSet (limit = 10).
+    /// After trimming, the 2 oldest entries ("group-1", "group-2") must be gone and
+    /// the 10 newest ("group-3" – "group-12") must all be present.
+    /// With the old `Set<String>` implementation this assertion was non-deterministic;
+    /// with `OrderedSet` it is guaranteed.
+    @Test func trimSeenGroupIDsEvictsOldestFirst() {
+        let limit = 10
+        var ids: OrderedSet<String> = OrderedSet((1...12).map { "group-\($0)" })
+        PollResultBuilder.trimSeenGroupIDs(&ids, limit: limit)
+        #expect(ids.count == limit)
+        #expect(!ids.contains("group-1"), "Oldest entry must be evicted")
+        #expect(!ids.contains("group-2"), "Second-oldest entry must be evicted")
+        for i in 3...12 {
+            #expect(ids.contains("group-\(i)"), "Recent entry group-\(i) must be retained")
+        }
     }
 }
 
