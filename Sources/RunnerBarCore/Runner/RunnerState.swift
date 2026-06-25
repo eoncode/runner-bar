@@ -42,10 +42,12 @@ public final class RunnerState {
 
     /// Locally-installed runner agents discovered on this Mac.
     /// Pushed by `LocalRunnerStore` via `await MainActor.run { }` after every refresh cycle.
-    public var localRunners: [RunnerModel] = []
+    /// Write access is module-internal — only `LocalRunnerStore` (in `RunnerBarCore`) pushes here.
+    public internal(set) var localRunners: [RunnerModel] = []
     /// `true` while `LocalRunnerStore` is running a refresh cycle.
     /// Pushed by `LocalRunnerStore` alongside `localRunners`.
-    public var isLocalScanning: Bool = false
+    /// Write access is module-internal — only `LocalRunnerStore` (in `RunnerBarCore`) pushes here.
+    public internal(set) var isLocalScanning: Bool = false
 
     /// The overall connectivity state of the runner fleet, derived from `runners`.
     /// Observed by `AppDelegate`'s `statusIconLoop` via `ObservationLoop`.

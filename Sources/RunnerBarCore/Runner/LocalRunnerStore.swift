@@ -37,7 +37,7 @@ public actor LocalRunnerStore {
         guard let instance = sharedInstance else {
             fatalError(
                 "LocalRunnerStore.shared accessed before configure(viewModel:) was called. "
-                    + "Call LocalRunnerStore.configure(viewModel: appDelegate.observable) in "
+                    + "Call LocalRunnerStore.configure(viewModel: appDelegate.runnerState) in "
                     + "applicationDidFinishLaunching before using this accessor."
             )
         }
