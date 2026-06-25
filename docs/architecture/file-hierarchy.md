@@ -90,6 +90,7 @@ runner-bar/
 │   │   │   └── ScopePreferencesStore.swift  — reads and writes the list of ScopeEntry values to UserDefaults
 │   │   │
 │   │   ├── Services/
+│   │   │   ├── DefaultRunnerLabelsService.swift — live conformance of RunnerLabelsService; delegates to patchRunnerLabels in GitHubTransportShims; moved from RunnerBar in #1610
 │   │   │   ├── LogFetcher.swift             — downloads raw step-log text for a given job URL
 │   │   │   └── ProcessRunner.swift          — runs a shell command in a subprocess, captures stdout/stderr, merges stderr to /dev/null when not needed
 │   │   │
@@ -125,7 +126,6 @@ runner-bar/
 │       │   └── RemovalAlertModifier.swift   — ViewModifier that presents the runner-removal confirmation alert
 │       │
 │       ├── GitHub/
-│       │   ├── GitHubHelpers.swift          — URL helpers and job-fetch utilities for the app layer; fetches all active jobs for a given scope
 │       │   ├── GitHubTokenCache.swift       — lock-protected in-memory cache for the resolved GitHub token; cleared after saving a new token to Keychain
 │       │   ├── OAuthSecrets.swift           — holds the GitHub App client-id and client-secret constants
 │       │   └── OAuthService.swift           — drives the GitHub OAuth Device Flow (sign-in URL, code exchange, CSRF check, callback handling)
@@ -149,7 +149,7 @@ runner-bar/
 │       │   └── ScopeStore.swift             — @MainActor store that loads, persists, and mutates the list of monitored scopes
 │       │
 │       ├── Services/
-│       │   ├── DefaultRunnerLabelsService.swift — live conformance of RunnerLabelsService; delegates to patchRunnerLabels (app-layer, not Core)
+│       │   ├── DefaultRunnerLabelsService.swift — retained for git history only; moved to RunnerBarCore/Services/ in #1610
 │       │   ├── FailureHookRunner.swift      — runs the user-configured failure-hook shell command when a job fails; builds log-tail content
 │       │   ├── FailureHookRunnerAdapters.swift — lightweight production adapters bridging static ScopePreferencesStore and TerminalLauncher singletons to FailureHookRunnerUseCase
 │       │   ├── Keychain.swift               — Security.framework wrapper for storing and retrieving the GitHub OAuth token
