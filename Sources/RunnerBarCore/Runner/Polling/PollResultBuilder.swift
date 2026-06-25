@@ -320,7 +320,7 @@ public struct PollResultBuilder {
                 log("PollResultBuilder › freezeVanishedGroups — groupID=\(group.id) already cached+dimmed, skipping")
                 continue
             }
-            if !seenGroupIDs.contains(groupID) {
+            if !seenGroupIDs.contains(groupID) && cache[groupID] == nil {
                 let scope = scopeFromGroup(group)
                 let shouldFire = group.runs.contains { $0.conclusion?.isHookConclusion == true }
                 if shouldFire {
