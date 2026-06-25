@@ -51,6 +51,7 @@ public enum Keychain {
 
     // MARK: - Private helpers
 
+    /// Returns the base Keychain query shared by all token operations.
     private static func baseQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
@@ -63,6 +64,9 @@ public enum Keychain {
     // MARK: - Public API
 
     /// The stored OAuth token, or nil if none is present.
+    ///
+    /// - Note: `SecItem*` calls are OS-serialised by the Security framework.
+    ///   No actor or lock is required. See file-level P16 rationale.
     public static var token: String? {
         var query = baseQuery()
         query[kSecReturnData as String] = true
@@ -77,9 +81,20 @@ public enum Keychain {
     }
 
     /// Saves (or overwrites) the token and invalidates the in-memory token cache.
+    /// Returns true if the token was successfully persisted.
+    ///
+    /// - Note: `SecItemUpdate`/`SecItemAdd` are OS-serialised.
+    ///   Concurrent writers are handled by the upsert retry guard below.
+    ///   See file-level P16 rationale.
     @discardableResult
     public static func save(_ token: String) -> Bool {
         guard let data = token.data(using: .utf8) else { return false }
+        // Try update first; fall back to add if item does not exist.
+        // kSecAttrAccessibleAfterFirstUnlock is included on both paths so that a
+        // legacy item created without this attribute (e.g. from an older build or
+        // different signing identity) is upgraded in place. Without it, the existing
+        // accessibility attribute is preserved, and a legacy item may be inaccessible
+        // at launch before the first device unlock.
         let updateStatus = SecItemUpdate(
             baseQuery() as CFDictionary,
             [
@@ -91,9 +106,15 @@ public enum Keychain {
         if updateStatus == errSecItemNotFound {
             var addQuery = baseQuery()
             addQuery[kSecValueData as String] = data
+            // kSecAttrAccessibleAfterFirstUnlock: token is readable after the first
+            // unlock post-reboot, which covers app launch in the background before
+            // the user has unlocked the screen. Without this, the default
+            // kSecAttrAccessibleWhenUnlocked would block token reads at launch.
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
             if addStatus == errSecDuplicateItem {
+                // A concurrent writer inserted the item between our update and add.
+                // Retry the update now that the item exists.
                 let retryStatus = SecItemUpdate(
                     baseQuery() as CFDictionary,
                     [
@@ -122,7 +143,11 @@ public enum Keychain {
         return succeeded
     }
 
-    /// Deletes the stored token and invalidates the in-memory token cache.
+    /// Deletes the stored token.
+    /// Invalidates the in-memory token cache only when deletion actually succeeds
+    /// (or the item was already absent). Returns true on success.
+    ///
+    /// - Note: `SecItemDelete` is OS-serialised. See file-level P16 rationale.
     @discardableResult
     public static func delete() -> Bool {
         let status = SecItemDelete(baseQuery() as CFDictionary)
