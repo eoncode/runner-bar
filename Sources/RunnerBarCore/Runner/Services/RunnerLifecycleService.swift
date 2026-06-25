@@ -121,16 +121,16 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
     /// `config.sh remove` (falling back to the API DELETE endpoint if the script fails),
     /// deletes the install directory, and removes the LaunchAgent plist.
     ///
-    /// Returns `.corruptInstall` if the install was detected as broken — either because
-    /// `config.sh` is missing/non-executable, or because its output contains a known
-    /// corruption signal — even when the API DELETE fallback succeeded. The corrupt-install
-    /// signal takes priority so the caller can surface it to the user.
-    /// Returns `.success` only when `config.sh` itself succeeded (no corrupt-install signal).
-    /// Returns `.failed` if deregistration failed entirely.
+    /// Return value priority (highest first):
+    /// - `.corruptInstall` — `config.sh` failed with a corrupt-install signal (missing/non-executable
+    ///   script, or known corruption string in output). Returned regardless of whether the API DELETE
+    ///   fallback subsequently succeeded; the broken local install still needs user attention.
+    /// - `.success` — `config.sh` exited 0 (the only path that does not go through the fallback).
+    /// - `.failed` — both `config.sh` and the API DELETE fallback failed; deregistration incomplete.
     ///
-    /// - Note: Local file cleanup (install directory + LaunchAgent plist) is performed only
-    ///   when deregistration succeeds. If both `config.sh` and the API fallback fail,
-    ///   no local files are deleted so the user can retry.
+    /// - Note: Local file cleanup (install directory + LaunchAgent plist) is performed whenever
+    ///   deregistration succeeds (either path). If both paths fail, no local files are deleted
+    ///   so the user can retry.
     @discardableResult
     public func remove(runner: RunnerModel) async -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
