@@ -55,14 +55,13 @@ private struct TreeLineLeader: View {
 
 // MARK: - JobRunnerTypeIcon
 /// Small SF Symbol indicating whether a job runs on a self-hosted (local) or
-/// GitHub-hosted (cloud) runner. Derived from the job's runner name.
+/// GitHub-hosted (cloud) runner. Resolved via `ActiveJob.isLocalRunner`.
 private struct JobRunnerTypeIcon: View {
-    /// The runner name string from the job, used to detect self-hosted runners.
-    let runnerName: String?
+    /// Pre-resolved local-runner flag from `ActiveJob.isLocalRunner`.
+    let isLocalRunner: Bool?
     /// Renders a desktop or cloud SF Symbol based on the runner type.
     var body: some View {
-        let isLocal = runnerName?.lowercased().contains("self-hosted") == true
-        Image(systemName: isLocal ? "desktopcomputer" : "cloud")
+        Image(systemName: isLocalRunner == true ? "desktopcomputer" : "cloud")
             .font(.system(size: 9))
             .foregroundColor(.secondary)
     }
@@ -212,7 +211,7 @@ private struct JobRowCard: View {
         } label: {
             HStack(spacing: 6) {
                 DonutStatusView(status: status, progress: job.progressFraction ?? 0, size: 10)
-                JobRunnerTypeIcon(runnerName: job.runnerName)
+                JobRunnerTypeIcon(isLocalRunner: job.isLocalRunner)
                 Text(job.name)
                     .font(RBFont.mono)
                     .foregroundColor(job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary)
@@ -255,7 +254,7 @@ private struct JobRowCard: View {
                 StepRowView(
                     step: step,
                     isLast: index == job.steps.count - 1,
-                    onTap: { onStepTap(step) }
+                    onTap: { step in onStepTap(step) }
                 )
             }
         }
