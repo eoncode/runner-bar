@@ -9,13 +9,12 @@ import Foundation
 /// `@MainActor` isolation mirrors the concrete `OAuthService` — all methods are
 /// serialised on the main thread because:
 /// - `handleCallback(_:)` is delivered by `AppDelegate.application(_:open:)` on the main thread.
-/// - `onCompletion` is consumed by SwiftUI views (`SettingsView`).
+/// - `makeSignInStream()` is consumed by SwiftUI views (`SettingsView`).
 /// - `makeSignOutStream()` is consumed by `AppDelegate.setupSignOutSubscription()`,
 ///   which runs on `@MainActor`.
 ///
-/// `AnyObject` constraint is required because `onCompletion` is a settable `var`.
-/// Mutating stored properties requires reference semantics — this protocol cannot
-/// be adopted by a `struct`.
+/// `AnyObject` constraint is required because the protocol has settable state.
+/// Mutating stored properties requires reference semantics — structs cannot adopt this protocol.
 ///
 /// ## Production usage
 /// ```swift
@@ -26,17 +25,19 @@ import Foundation
 /// ```swift
 /// @MainActor
 /// final class StubOAuthService: OAuthServiceProtocol {
-///     var onCompletion: (@MainActor (Bool) -> Void)?
-///     func signIn() {}
+///     func makeSignInURL() -> URL? { nil }
 ///     func signOut() {}
 ///     func handleCallback(_ url: URL) {}
+///     func makeSignInStream() -> AsyncStream<Bool> { AsyncStream { _ in } }
 ///     func makeSignOutStream() -> AsyncStream<Void> { AsyncStream { _ in } }
 /// }
 /// ```
 @MainActor
 public protocol OAuthServiceProtocol: AnyObject {
-    /// Opens the GitHub OAuth authorization page in the default browser to begin sign-in.
-    func signIn()
+    /// Builds and returns the GitHub OAuth authorization URL, storing the CSRF nonce.
+    /// The caller is responsible for opening the URL (e.g. `NSWorkspace.shared.open(url)`).
+    /// Returns `nil` if the URL cannot be constructed.
+    func makeSignInURL() -> URL?
 
     /// Clears the stored token and emits a sign-out event to all stream consumers.
     func signOut()
