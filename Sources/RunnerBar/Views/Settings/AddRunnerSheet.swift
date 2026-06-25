@@ -8,22 +8,26 @@ import SwiftUI
 /// Centralised URI and path constants used by `AddRunnerSheet` and its extensions.
 ///
 /// Intentionally `internal` (not `private`) because the cross-file extension split
-/// requires all extension files to access these constants.
+/// requires all extension files to access these constants. Do not promote to `public`
+/// and do not add constants unrelated to `AddRunnerSheet` here.
+///
+/// - Note: If `AddRunnerSheet` is ever consolidated back into a single file,
+///   restrict this enum to `private`.
 enum GitHubURIs {
     /// The base GitHub web URL.
-    static let base = "https://github.com/" // NOSONAR
+    static let base = "https://github.com/" // NOSONAR — centralised constant, not an inline hardcoded URI
     /// The GitHub API endpoint for the latest Actions runner release.
-    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR
+    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR — centralised constant, not an inline hardcoded URI
     /// Relative path to the user's LaunchAgents directory.
     static let launchAgentsDir = "Library/LaunchAgents"
     /// Default runner install directory relative to the user's home folder.
     static let actionsRunnerDefaultDir = "actions-runner/my-runner"
     /// System path to the curl binary used when downloading the runner package.
-    static let curlPath = "/usr/bin/curl" // NOSONAR
+    static let curlPath = "/usr/bin/curl" // NOSONAR — fixed OS path
     /// System path to the tar binary used when unpacking the runner package.
-    static let tarPath = "/usr/bin/tar"  // NOSONAR
+    static let tarPath = "/usr/bin/tar"  // NOSONAR — fixed OS path
     /// System path to the uname binary used to detect CPU architecture.
-    static let unamePath = "/usr/bin/uname" // NOSONAR
+    static let unamePath = "/usr/bin/uname" // NOSONAR — fixed OS path
 }
 
 /// Sheet view for onboarding a self-hosted runner.
@@ -35,10 +39,18 @@ enum GitHubURIs {
 ///   of RunnerBar (e.g. via terminal). Only writes the LaunchAgent plist so
 ///   the runner can be managed — no token or download needed.
 ///
+/// After successful registration/import the app writes a minimal LaunchAgent plist to
+/// `~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist` directly
+/// via FileManager, and registers the runner in `LocalRunnerStore`.
+///
+/// Requires a GitHub token for "Add new" (OAuth sign-in, GH_TOKEN, or GITHUB_TOKEN).
+///
 /// ## Visibility note
 /// All `@State` properties and extension-facing helpers are `internal` (no modifier)
 /// rather than `private` because Swift does not allow `private` members of a primary
-/// type to be accessed from extensions defined in separate files.
+/// type to be accessed from extensions defined in separate files. This is an accepted
+/// trade-off of the cross-file split; these members remain logically private to the
+/// `AddRunnerSheet` family of files.
 struct AddRunnerSheet: View {
     /// Controls whether the sheet is shown.
     @Binding var isPresented: Bool
@@ -46,7 +58,8 @@ struct AddRunnerSheet: View {
     let onComplete: () -> Void
     /// Injected local runner store — avoids direct `.shared` references inside the sheet.
     var localRunnerStore: LocalRunnerStore = .shared
-    /// Core runner state — read for synchronous duplicate checks against `localRunners`.
+    /// Core runner state — read for synchronous duplicate checks against localRunners.
+    /// No default is provided: the value is injected via `AppDelegate.wrapEnv`.
     @Environment(RunnerState.self) var runnerState: RunnerState
 
     // MARK: - Add Mode
@@ -65,10 +78,11 @@ struct AddRunnerSheet: View {
     @State var addMode: AddMode = .addNew
 
     // MARK: - Internal state (extension-accessible)
-    // These properties are `internal` (no modifier) rather than `private` so that
-    // extensions defined in sibling files (+FormFields, +Validation, +TokenSection)
-    // can read and mutate them. They must not be accessed from outside the AddRunnerSheet
-    // file family.
+    // These properties have no explicit access modifier (i.e. they are `internal`)
+    // rather than `private` so that extensions defined in sibling files
+    // (+FormFields, +Validation, +TokenSection) can read and mutate them.
+    // They are logically private to the AddRunnerSheet file family and must
+    // not be accessed from outside it.
 
     // MARK: Scope state (Add new only)
 
@@ -105,7 +119,8 @@ struct AddRunnerSheet: View {
     @State var runnerName = ""
     /// Comma-separated label string pre-populated with defaults.
     @State var labelsText = "self-hosted,macOS"
-    /// Install path; each runner needs its own folder.
+    /// Default: ~/actions-runner/my-runner — user should rename the last
+    /// component to match their runner name. Each runner needs its own folder.
     @State var installDir = FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
@@ -144,6 +159,7 @@ struct AddRunnerSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner").font(.headline)
 
+            // MARK: Mode toggle
             Picker("Mode", selection: $addMode) {
                 ForEach(AddMode.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -157,6 +173,7 @@ struct AddRunnerSheet: View {
 
             Divider()
 
+            // MARK: Form body branch
             if addMode == .addNew {
                 addNewFormBody
             } else {
@@ -209,6 +226,12 @@ struct AddRunnerSheet: View {
     ///
     /// The plist label is derived as `actions.runner.<owner>.<repo>.<runnerName>` and written
     /// atomically. Used by both the "Add new" and "Add pre-existing" flows.
+    ///
+    /// - Note: `ProgramArguments` is intentionally omitted. The runner is started by
+    ///   `launchctl` invoking `./run.sh` from the `WorkingDirectory`; RunnerBar only
+    ///   needs `Label` + `WorkingDirectory` to identify and manage the agent. A full
+    ///   `ProgramArguments` array would be added if RunnerBar ever needs to bootstrap
+    ///   the runner itself rather than relying on the existing `run.sh` mechanism.
     nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
@@ -236,6 +259,8 @@ struct AddRunnerSheet: View {
     // MARK: - Process helpers (Add new)
 
     /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
+    ///
+    /// Delegates to `ProcessRunner.runAsync` — no blocking `waitUntilExit()` on the pool.
     func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) async -> Int32 {
@@ -253,6 +278,8 @@ struct AddRunnerSheet: View {
     }
 
     /// Launches `executable` with `args` asynchronously and returns the termination status.
+    ///
+    /// Delegates to `ProcessRunner.runAsync` — stderr is discarded (default `mergeStderr: false`).
     func runSimpleProcess(_ executable: String, args: [String]) async -> Int32 {
         let result = await ProcessRunner.runAsync(
             executableURL: URL(fileURLWithPath: executable),
@@ -266,6 +293,19 @@ struct AddRunnerSheet: View {
     // MARK: - Register (Add new)
 
     /// Downloads, unpacks, configures a new runner, registers with `LocalRunnerStore`, and dismisses.
+    ///
+    /// ## Actor isolation — read before changing this function
+    /// `AddRunnerSheet` is a plain `struct … View` with **no** `@MainActor` annotation on the
+    /// type itself. Swift only synthesises `@MainActor` isolation for a SwiftUI `View` when the
+    /// conformance is on an explicitly `@MainActor`-annotated type — it does NOT do so for
+    /// unannotated structs. Only `body` and helpers explicitly marked `@MainActor` (e.g.
+    /// `setStep`) run on the main actor.
+    ///
+    /// `register()` carries **no** actor annotation. A `Task { await register() }` created from
+    /// a SwiftUI button action inherits the *caller's* actor isolation only if the callee is
+    /// itself actor-isolated. Because `register()` is unannotated, the Task runs on the
+    /// cooperative thread pool — **not** on `@MainActor`. This is the correct and intended
+    /// behaviour, not a bug.
     func register() async {
         guard canRegister else { return }
         errorMessage = nil
@@ -355,6 +395,10 @@ struct AddRunnerSheet: View {
 
         setStep("Registering service\u{2026}")
         writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
+        // Await directly — register() is already async, no Task wrapper needed.
+        // This guarantees add() completes before isPresented = false fires and
+        // onComplete() enqueues its refresh(), so the new runner row is always
+        // present in the actor's index before the scan runs.
         await localRunnerStore.add(runnerName: name, installPath: dir)
         isRegistering = false
         registrationStep = ""
