@@ -121,8 +121,9 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
     /// `config.sh remove` (falling back to the API DELETE endpoint if the script fails),
     /// deletes the install directory, and removes the LaunchAgent plist.
     ///
-    /// Returns `.corruptInstall` if the install was detected as broken during the API fallback
-    /// path — even when deregistration via the API DELETE fallback succeeded. The corrupt-install
+    /// Returns `.corruptInstall` if the install was detected as broken — either because
+    /// `config.sh` is missing/non-executable, or because its output contains a known
+    /// corruption signal — even when the API DELETE fallback succeeded. The corrupt-install
     /// signal takes priority so the caller can surface it to the user.
     /// Returns `.success` only when `config.sh` itself succeeded (no corrupt-install signal).
     /// Returns `.failed` if deregistration failed entirely.
@@ -161,6 +162,7 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
         logStep("REMOVE", "step2: got token len=\(token.count)")
 
         logStep("REMOVE", "step3: config.sh remove --token <token> in \(path)")
+        let configPath = dir.appendingPathComponent("config.sh").path
         let (cfgOk, cfgOutput) = await runScriptWithOutput(
             executableName: "config.sh", arguments: ["remove", "--token", token],
             workingDirectory: dir, timeout: 30, logTag: "config.sh remove")
@@ -169,10 +171,15 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
         var removeOk = cfgOk
         var isCorrupt = false
         if !cfgOk {
-            isCorrupt = cfgOutput.contains("No such file or directory")
-                || cfgOutput.contains("install is corrupt")
-                || cfgOutput.contains("must run from runner root")
-            logStep("REMOVE", "step3b: config.sh failed isCorrupt=\(isCorrupt) — trying API DELETE fallback")
+            // A missing or non-executable config.sh is itself a corrupt-install signal —
+            // runScriptWithOutput returns (false, "") in that case so the output-string
+            // checks below would never fire without this upfront file-system check.
+            let lowerCfgOutput = cfgOutput.lowercased()
+            isCorrupt = !FileManager.default.isExecutableFile(atPath: configPath)
+                || lowerCfgOutput.contains("no such file or directory")
+                || lowerCfgOutput.contains("install is corrupt")
+                || lowerCfgOutput.contains("must run from runner root")
+            logStep("REMOVE", "step3b: config.sh failed isCorrupt=\(isCorrupt) configExecutable=\(FileManager.default.isExecutableFile(atPath: configPath)) — trying API DELETE fallback")
             if let agentId = runner.agentId {
                 logStep("REMOVE", "step3b: calling deleteRunnerByID scope=\(scopeString) agentId=\(agentId)")
                 let apiOk = await deleteRunnerByID(scope: scopeString, runnerID: agentId)
