@@ -1,7 +1,6 @@
 // RunnerLifecycleServiceProtocol.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
-import RunnerBarCore
 
 // MARK: - RunnerLifecycleServiceProtocol
 
@@ -27,7 +26,7 @@ import RunnerBarCore
 ///     func remove(runner: RunnerModel) async -> Bool { true }
 /// }
 /// ```
-protocol RunnerLifecycleServiceProtocol: Sendable {
+public protocol RunnerLifecycleServiceProtocol: Sendable {
     /// Starts the runner's launchctl service. Returns `.success` or a failure/corrupt-install result.
     @discardableResult
     func start(runner: RunnerModel) async -> LifecycleResult

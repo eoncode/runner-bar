@@ -1,11 +1,11 @@
 // LifecycleResult.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 
 // MARK: - LifecycleResult
 
 /// The result of a runner lifecycle operation (start or stop).
-enum LifecycleResult {
+public enum LifecycleResult {
     /// The operation completed successfully.
     case success
     /// The runner installation is corrupt (e.g. missing `svc.sh`, wrong working directory).
