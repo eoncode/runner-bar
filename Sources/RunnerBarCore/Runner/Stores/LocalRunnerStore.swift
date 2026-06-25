@@ -84,16 +84,21 @@ public actor LocalRunnerStore {
     /// Widening to internal is unnecessary — the `localRunners` closure in AppDelegate+PanelSetup
     /// reads `runnerState.localRunners`, not this property directly.
     private var runners: [RunnerModel] = []
+
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     private var isScanning: Bool = false
+
     /// Task driving the fire-and-forget refresh loop; cancelled by `shutdown()`.
     private var refreshTask: Task<Void, Never>?
 
     // MARK: - Injected dependencies
+
     /// The view model this actor pushes UI state into.
     private let viewModel: any RunnerViewModelProtocol
+
     /// Persistence layer for the runner name → install path mapping.
     private let index = LocalRunnerIndex()
+
     /// Enricher that applies GitHub API data (status, busy, labels, group) to
     /// locally-discovered runners. Injected at init so unit tests can supply a stub
     /// without going through the live singleton (Phase 6b, #1326).
@@ -134,11 +139,17 @@ public actor LocalRunnerStore {
     // MARK: - Index helpers
 
     /// Adds or updates the index entry for `name`, mapping it to `installPath`, then persists.
+    ///
+    /// - Parameters:
+    ///   - name: The runner's display name.
+    ///   - installPath: The absolute path to the runner's installation directory.
     func register(name: String, installPath: String) {
         index.register(name: name, installPath: installPath)
     }
 
     /// Removes `name` from the persisted index.
+    ///
+    /// - Parameter name: The runner's display name to remove.
     func unregister(name: String) {
         index.unregister(name: name)
     }
