@@ -80,6 +80,7 @@ public struct PollResultBuilder {
     }
 
     // MARK: - Group state
+    // swiftlint:disable function_parameter_count
 
     /// Builds the action-group display list and updated caches from a background poll.
     ///
@@ -99,7 +100,6 @@ public struct PollResultBuilder {
     ///   `freezeVanishedGroups` runs, so a group that appears in both the fetched
     ///   completed list and in `snapPrevGroups` fires the hook exactly once.
     ///   Enrichment is split into two sequential sweeps — see inline comments for rationale.
-    // swiftlint:disable:next function_parameter_count
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
@@ -297,7 +297,6 @@ public struct PollResultBuilder {
     ///   - seenGroupIDs: Set of group IDs that have already fired the hook; prevents re-firing.
     ///   - scopeFromGroup: Derives the scope string for the failure hook call.
     ///   - fireFailureHook: Invoked when a newly-vanished group has a hook-triggering conclusion.
-    // swiftlint:disable:next function_parameter_count
     public static func freezeVanishedGroups(
         snapPrev: [String: WorkflowActionGroup],
         liveIDs: Set<String>,
