@@ -30,6 +30,11 @@ final class ObservableCounter {
 /// `withObservationTracking`'s onChange enqueues a `Task { @MainActor in ... }`;
 /// awaiting `Signal.wait()` unblocks the instant that Task runs `yield()` —
 /// no wall-clock delay, no CI flakiness.
+///
+/// **Hang safety:** `yield()` finishes the stream after yielding, so `wait()`
+/// always terminates — even if `yield()` is never called (the stream finishes
+/// empty and `wait()` returns immediately). A test that calls `await signal.wait()`
+/// and expects `fired == 1` will then fail on the `#expect`, not hang.
 @MainActor
 final class Signal {
     private var continuation: AsyncStream<Void>.Continuation?
@@ -41,13 +46,20 @@ final class Signal {
         continuation = cont
     }
 
-    /// Fires the signal once. Safe to call multiple times; only the first
-    /// yield matters because `wait()` returns after the first element.
+    /// Fires the signal and terminates the stream.
+    ///
+    /// Finishing the stream after the first yield ensures `wait()` always
+    /// unblocks — whether onChange fires (stream yields a value then finishes)
+    /// or a regression prevents it (stream finishes empty, `wait()` returns,
+    /// the `#expect` on `fired` fails the test correctly rather than hanging CI).
     func yield() {
         continuation?.yield(())
+        continuation?.finish()
+        continuation = nil
     }
 
-    /// Suspends until `yield()` is called.
+    /// Suspends until `yield()` is called, or returns immediately if the
+    /// stream has already finished (i.e. `yield()` was never called).
     func wait() async {
         for await _ in stream { return }
     }
