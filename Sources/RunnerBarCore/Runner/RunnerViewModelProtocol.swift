@@ -23,9 +23,11 @@ public protocol RunnerViewModelProtocol: AnyObject, Sendable {
     // MARK: Pushed by LocalRunnerStore
 
     /// Locally-installed runner agents discovered on this Mac.
-    var localRunners: [RunnerModel] { get set }
+    /// Write access is intentionally module-internal; only `LocalRunnerStore` pushes here.
+    var localRunners: [RunnerModel] { get }
     /// `true` while `LocalRunnerStore` is running a refresh cycle.
-    var isLocalScanning: Bool { get set }
+    /// Write access is intentionally module-internal; only `LocalRunnerStore` pushes here.
+    var isLocalScanning: Bool { get }
 }
 
 // MARK: - RunnerState conformance
