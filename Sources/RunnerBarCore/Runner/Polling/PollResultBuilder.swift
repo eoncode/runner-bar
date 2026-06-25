@@ -201,6 +201,13 @@ public struct PollResultBuilder {
                 if shouldFire {
                     await deps.fireFailureHook(group, scope)
                 }
+                // Append for ALL hook-eligible conclusions (failure, cancelled) AND
+                // for non-hook conclusions (success, skipped). Non-hook groups must
+                // also be registered so that freezeVanishedGroups cannot ghost-fire
+                // them later if stale state lingers in snapPrevGroups.
+                // Re-runs on the same SHA produce a new group ID (evictFreshShas
+                // resets the cache entry), so this append never pre-suppresses a
+                // fresh run.
                 newSeenGroupIDs.append(group.id)
             }
             newCache[group.id] = group.copying(isDimmed: true)
@@ -381,16 +388,30 @@ public struct PollResultBuilder {
         log("PollResultBuilder › freezeVanishedGroups — snapPrev=\(config.snapPrev.count) liveIDs=\(config.liveIDs)")
         for (groupID, group) in config.snapPrev where !config.liveIDs.contains(groupID) {
             log("PollResultBuilder › freezeVanishedGroups — vanished groupID=\(group.id) inCache=\(cache[groupID] != nil)")
-            // Register the ID before any early-exit so the invariant holds unconditionally:
-            // a group that hits the cached+dimmed fast path must still be marked seen,
+            // Register the ID unconditionally before any early-exit so the invariant holds:
+            // a group that hits the cached+dimmed fast path below must still be marked seen,
             // otherwise a re-run (which resets jobs.count) could re-arm the hook.
-            // OrderedSet.append is a no-op for duplicates, so this is always safe.
+            // This is safe for success/skipped IDs because a re-run on the same SHA
+            // produces a *new* group ID — evictFreshShas purges the old cache entry
+            // for that SHA, so the new run will never match this ID in seenGroupIDs.
+            // OrderedSet.append is a no-op for duplicates, so calling it unconditionally
+            // is always safe even when doneGroups already registered this ID first.
             let isUnseen = !seenGroupIDs.contains(groupID)
             if isUnseen { seenGroupIDs.append(groupID) }
             if let existing = cache[groupID], existing.isDimmed, existing.jobs.count >= group.jobs.count {
                 log("PollResultBuilder › freezeVanishedGroups — groupID=\(group.id) already cached+dimmed, skipping")
                 continue
             }
+            // Hook-fire gate: requires both isUnseen AND cache[groupID] == nil.
+            // isUnseen guards against re-fire after seenGroupIDs registration above.
+            // cache[groupID] == nil guards against re-fire for groups already written
+            // to cache by a previous iteration or by the doneGroups path.
+            // There is no gap: the only two paths that write to cache are doneGroups
+            // (which always appends to seenGroupIDs before caching) and this function
+            // itself (which appends to seenGroupIDs unconditionally above). A group
+            // already in cache is therefore always already in seenGroupIDs — the
+            // isUnseen check alone would be sufficient, but both guards are kept
+            // for defence in depth and to make the invariant explicit.
             if isUnseen && cache[groupID] == nil {
                 let scope = scopeFromGroup(group)
                 // Fire for any hook-triggering conclusion — failures and cancellations.
