@@ -194,6 +194,9 @@ extension ActiveJob {
             switch conclusion {
             case .success:             return .success
             case .failure:             return .failed
+            // TODO: .cancelled and .skipped map to .unknown until RBStatus gains
+            // dedicated .cancelled / .skipped cases — see matching TODO in
+            // ActionRowView.statusBadge which already renders distinct labels for both.
             case .cancelled, .skipped: return .unknown
             default:                   return .unknown
             }
@@ -201,7 +204,9 @@ extension ActiveJob {
         switch status {
         case .inProgress: return .inProgress
         case .queued:     return .queued
-        default:          return .queued
+        // .completed with no conclusion is an API race (see asCompleted).
+        // Return .unknown rather than .queued to avoid a visually wrong state.
+        default:          return .unknown
         }
     }
 }

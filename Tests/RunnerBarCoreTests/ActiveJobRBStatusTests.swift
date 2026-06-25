@@ -51,4 +51,13 @@ struct ActiveJobRBStatusTests {
         let job = ActiveJob(id: 8, name: "j", status: .inProgress, conclusion: .success)
         #expect(job.rbStatus == .success)
     }
+
+    // MARK: API race condition
+
+    /// A job with status == .completed but no conclusion is an API race (see asCompleted).
+    /// Must return .unknown, not .queued.
+    @Test func completedStatusWithNoConclusionMapsToUnknown() {
+        let job = ActiveJob(id: 9, name: "j", status: .completed)
+        #expect(job.rbStatus == .unknown)
+    }
 }
