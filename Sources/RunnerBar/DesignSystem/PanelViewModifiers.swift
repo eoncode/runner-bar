@@ -1,7 +1,7 @@
 // PanelViewModifiers.swift
 // RunnerBar
-import SwiftUI
 import RunnerBarCore
+import SwiftUI
 
 // MARK: - GlassCard
 /// Centralised Liquid Glass card modifier.

@@ -1,7 +1,7 @@
 // DonutStatusView.swift
 // RunnerBar
-import SwiftUI
 import RunnerBarCore
+import SwiftUI
 
 // MARK: - DonutStatusView
 /// Replaces the PieProgressDot for the action row status indicator.

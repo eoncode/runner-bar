@@ -1,7 +1,7 @@
 // SettingsView+Sections.swift
 // RunnerBar
-import SwiftUI
 import RunnerBarCore
+import SwiftUI
 
 // MARK: - SettingsView sections extension
 /// Settings sections broken out from `SettingsView` for readability.

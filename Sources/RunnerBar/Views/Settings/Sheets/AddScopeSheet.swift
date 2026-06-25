@@ -1,7 +1,7 @@
 // AddScopeSheet.swift
 // RunnerBar
-import SwiftUI
 import RunnerBarCore
+import SwiftUI
 
 // MARK: - ScopeType
 
