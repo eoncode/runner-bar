@@ -102,7 +102,7 @@ public struct PollResultBuilder {
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
-        snapSeenGroupIDs: OrderedSet<String> = OrderedSet<String>(),
+        snapSeenGroupIDs: OrderedSet<String>,
         fetchGroups: @Sendable ([String: WorkflowActionGroup]) async -> [WorkflowActionGroup],
         scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
         fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void,
@@ -301,7 +301,7 @@ public struct PollResultBuilder {
         liveIDs: Set<String>,
         now: Date,
         into cache: inout [String: WorkflowActionGroup],
-        seenGroupIDs: OrderedSet<String> = OrderedSet<String>(),
+        seenGroupIDs: OrderedSet<String>,
         scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
         fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void
     ) async {

@@ -601,6 +601,7 @@ struct PollResultBuilderGroupStateTests {
         let result = await PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
             snapGroupCache: [:],
+            snapSeenGroupIDs: [],
             fetchGroups: { _ in [completedGroup] },
             scopeFromGroup: { $0.repo },
             fireFailureHook: { _, _ in },
@@ -615,6 +616,7 @@ struct PollResultBuilderGroupStateTests {
         let result = await PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
             snapGroupCache: [:],
+            snapSeenGroupIDs: [],
             fetchGroups: { _ in [liveGroup] },
             scopeFromGroup: { $0.repo },
             fireFailureHook: { _, _ in },
@@ -675,6 +677,7 @@ struct PollResultBuilderGroupStateTests {
         let result = await PollResultBuilder.buildGroupState(
             snapPrevGroups: [liveGroup.id: liveGroup],
             snapGroupCache: [:],
+            snapSeenGroupIDs: [],
             fetchGroups: { _ in [completedGroup] },
             scopeFromGroup: { $0.repo },
             fireFailureHook: { _, _ in },
