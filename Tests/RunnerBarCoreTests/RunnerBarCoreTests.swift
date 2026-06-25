@@ -776,11 +776,20 @@ struct PollResultBuilderGroupStateTests {
     /// must NOT re-fire if its cache entry is later evicted by trimGroupCache and it
     /// reappears in snapPrevGroups on a subsequent poll. seenGroupIDs must survive
     /// cache eviction because it is trimmed independently (seenGroupIDsLimit >> groupCacheLimit).
+    ///
+    /// The vanished group must carry a hook-triggering conclusion on its runs for the
+    /// hook to fire at all — freezeVanishedGroups checks `run.conclusion?.isHookConclusion`.
+    /// Here we use a completed run with `conclusion: .failure` to exercise the full path.
     @Test func vanishPathHookDoesNotRefireAfterCacheEviction() async {
         let sha = "cc0011"
-        let vanishedGroup = makeGroup(id: 1003, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
+        // Build a group whose run already has a failure conclusion — this is what
+        // freezeVanishedGroups checks via `run.conclusion?.isHookConclusion == true`.
+        // An in-progress run has conclusion == nil, so the hook would never fire;
+        // we need a completed run conclusion to trigger the vanish-path hook.
+        let vanishedGroup = makeGroup(id: 1003, sha: sha, groupStatus: .completed, conclusion: "failure", isDimmed: false)
 
         // Poll 1: group is in snapPrevGroups but absent from fetchGroups — vanish path fires the hook.
+        // Note: fetchGroups returns [] so the group goes through freezeVanishedGroups, not doneGroups.
         let counter = HookCounter()
         let poll1 = await PollResultBuilder.buildGroupState(
             snapPrevGroups: [vanishedGroup.id: vanishedGroup],
