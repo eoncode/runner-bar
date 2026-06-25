@@ -335,9 +335,14 @@ struct RunnerDetailSheet: View {
         guard let installPath = runner.installPath else { return }
 
         var updatedDraft = draft
-        // `load(installPath:)` returns the decoded RunnerConfig — reuse it here
-        // so we avoid a second RunnerConfigStore.shared.load(at:) disk read.
-        let config = await updatedDraft.load(installPath: installPath)
+        // Pass stores explicitly — keeps singleton wiring in the app layer.
+        // The parameterised overload is the testable Core API; the convenience
+        // shim (load(installPath:)) is internal to Core and not visible here.
+        let config = await updatedDraft.load(
+            installPath: installPath,
+            configStore: RunnerConfigStore.shared,
+            proxyStore: RunnerProxyStore.shared
+        )
         draft = updatedDraft
         originalDraft = draft
 

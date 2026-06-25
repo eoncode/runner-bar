@@ -335,7 +335,11 @@ struct LocalRunnersView: View {
                 Task(priority: .userInitiated) {
                     var original = RunnerEditDraft(runner: runner)
                     if let installPath = runner.installPath {
-                        await original.load(installPath: installPath)
+                        await original.load(
+                            installPath: installPath,
+                            configStore: RunnerConfigStore.shared,
+                            proxyStore: RunnerProxyStore.shared
+                        )
                     }
                     let useCase = SaveRunnerEditsUseCase(
                         configStore: RunnerConfigStore.shared,
