@@ -365,6 +365,8 @@ public actor RunnerPoller {
             state.actions = groupResult.display
             state.isRateLimited = rateLimitSnapshot.isLimited
             state.rateLimitResetDate = rateLimitSnapshot.resetDate
+            // `any Error` is not Equatable — skip the write when already nil
+            // to avoid a spurious @Observable notification on every healthy cycle.
             if state.fetchError != nil { state.fetchError = nil }
         }
     }
@@ -384,21 +386,22 @@ public actor RunnerPoller {
 
     /// Surfaces a fetch failure to the `RunnerState` read model.
     ///
-    /// Snapshots rate-limit state alongside the error so the UI never shows both the
-    /// rate-limit banner and the fetch-error banner simultaneously. If `clearGhRateLimit()`
-    /// ran at the top of `fetchInternal()` and then the cycle threw, the internal
-    /// `RateLimitActor` is already clear — this snapshot reflects that, preventing
-    /// a stale `isRateLimited = true` from persisting until the next successful cycle.
+    /// Updates actor-local `isRateLimited` / `rateLimitResetDate` alongside `state.*` so
+    /// that `nextPollInterval()` reads the correct rate-limit state on the very next call.
+    /// Without this, a throw after `clearGhRateLimit()` would leave the actor-local
+    /// `isRateLimited = true` stale for one full poll cycle, causing the cadence to back
+    /// off unnecessarily. Mirrors the two assignments in `applyFetchResult`.
     ///
     /// The `fetchError` write is guarded by a `localizedDescription` comparison to avoid
     /// re-notifying `@Observable` observers on every failed cycle when the error message
-    /// is unchanged (e.g. sustained network loss). Mirrors the `if fetchError != nil` guard
-    /// in `applyFetchResult` on the success path.
+    /// is unchanged (e.g. sustained network loss).
     ///
     /// Intentionally does **not** clear `runners`, `jobs`, or `actions` — views show
     /// stale data alongside the error banner rather than an empty list.
     private func applyError(_ error: any Error & Sendable) async {
         let rateLimitSnapshot = await ghRateLimitSnapshot()
+        isRateLimited = rateLimitSnapshot.isLimited
+        rateLimitResetDate = rateLimitSnapshot.resetDate
         await MainActor.run { [state] in
             // Guard the write: `any Error` is not Equatable, so compare via
             // `localizedDescription` — the only field `fetchErrorBanner` consumes.
@@ -431,7 +434,7 @@ public actor RunnerPoller {
     ///
     /// **Install-path lookup priority** (matches the original `RunnerStore`):
     /// `byApiId ?? byAgentId ?? byFullKey ?? byName`
-    /// `byFullKey` ("scope/name" composite) ranks above `byName` so runners sharing
+    /// `byFullKey` (\"scope/name\" composite) ranks above `byName` so runners sharing
     /// a name across different scopes resolve to the correct install path.
     ///
     /// - Parameters:
