@@ -771,6 +771,53 @@ struct PollResultBuilderGroupStateTests {
         )
         #expect(await counter.value == 1, "doneGroups must be marked seen before freezeVanishedGroups runs to prevent double-fire")
     }
+/// Regression test: a group that fires the failure hook via freezeVanishedGroups
+    /// (the vanish path) must have its ID appended to seenGroupIDs so the hook
+    /// cannot re-fire on a subsequent poll when it reappears in doneGroups.
+    ///
+    /// - Poll 1: Group is in snapPrevGroups but absent from fetchGroups → vanish
+    ///   path fires → ID written into newSeenGroupIDs.
+    /// - Poll 2: Same group reappears in fetchGroups as completed → doneGroups
+    ///   path checks newSeenGroupIDs → already present → hook is suppressed.
+    @Test func freezeVanishedGroupsWriteBackPreventsReFireOnNextPoll() async {
+        let groupID = 2000
+        let sha = "vanish02"
+        let vanishedGroup = makeGroup(id: groupID, sha: sha, groupStatus: .completed, conclusion: "failure")
+        let reappearedGroup = makeGroup(id: groupID, sha: sha, groupStatus: .completed, conclusion: "failure")
+        let counter = HookCounter()
+
+        // ── Poll 1: group vanishes from the live feed ────────────────────────
+        let result1 = await PollResultBuilder.buildGroupState(
+            snapPrevGroups: [vanishedGroup.id: vanishedGroup],
+            snapGroupCache: [:],
+            snapSeenGroupIDs: [],
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [] },  // group not present — vanish path
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
+        )
+        #expect(await counter.value == 1, "Vanish path must fire the hook once")
+        #expect(
+            result1.newSeenGroupIDs.contains(vanishedGroup.id),
+            "Vanish path must record the group ID in seenGroupIDs"
+        )
+
+        // ── Poll 2: same group reappears in doneGroups ───────────────────────
+        _ = await PollResultBuilder.buildGroupState(
+            snapPrevGroups: result1.newPrevLiveGroups,   // empty — no live groups from poll 1
+            snapGroupCache: result1.newGroupCache,        // has the dimmed vanished group
+            snapSeenGroupIDs: result1.newSeenGroupIDs,     // has group ID from vanish path
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [reappearedGroup] },  // group now in doneGroups
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
+        )
+        #expect(await counter.value == 1, "Hook must NOT re-fire — group ID already in seenGroupIDs from vanish path")
+    }
 }
 
 // MARK: - ProcessRunner.runAsync stdin

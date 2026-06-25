@@ -1,6 +1,7 @@
 // PollResultBuilder.swift
 // RunnerBarCore
 import Collections
+import OrderedCollections
 import Foundation
 
 // MARK: - GroupStateDeps
@@ -170,7 +171,7 @@ public struct PollResultBuilder {
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
-        snapSeenGroupIDs: OrderedSet<String>,
+        snapSeenGroupIDs: OrderedSet<String> = [],
         deps: GroupStateDeps
     ) async -> GroupPollResult {
         log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count) snapSeenGroupIDs=\(snapSeenGroupIDs.count)")
