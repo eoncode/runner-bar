@@ -103,7 +103,8 @@ struct ActionRowView: View {
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
-        case .queued: return .queued
+        case .loading:    return .queued
+        case .queued:     return .queued
         case .completed:
             switch group.conclusion {
             case .success: return .success
@@ -185,7 +186,7 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        if group.groupStatus == .inProgress || group.groupStatus == .queued {
+        if group.groupStatus == .inProgress || group.groupStatus == .queued || group.groupStatus == .loading {
             Text(group.elapsed)
                 .font(RBFont.mono)
                 .foregroundColor(.secondary)
@@ -204,7 +205,8 @@ struct ActionRowView: View {
     @ViewBuilder private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
-        case .queued: StatusBadge(status: .queued, text: "QUEUED")
+        case .loading:    StatusBadge(status: .queued, text: "LOADING")
+        case .queued:     StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             switch group.conclusion {
             case .success: StatusBadge(status: .success, text: "SUCCESS")

@@ -66,8 +66,8 @@ runner-bar/
 ├── deploy.sh                      # push dist/ to gh-pages branch
 ├── install.sh                     # curl | bash target (also lives on gh-pages)
 └── docs/
-    ├── DEVELOPMENT.md             # This file
-    ├── DEPLOYMENT.md
+    ├── development.md             # This file
+    ├── deployment.md
     └── AGENTS.md                  # Instructions for AI coding agents
 ```
 
@@ -168,7 +168,7 @@ No lockfile conflicts, no Xcode project to regenerate.
 bash build.sh
 ```
 
-Builds an arm64-only binary via `swift build -c release --arch arm64`, assembles the `.app` bundle, ad-hoc signs it, and zips to `dist/RunnerBar.zip`. See `docs/DEPLOYMENT.md` for how to publish it.
+Builds an arm64-only binary via `swift build -c release --arch arm64`, assembles the `.app` bundle, ad-hoc signs it, and zips to `dist/RunnerBar.zip`. See `docs/deployment.md` for how to publish it.
 
 ---
 

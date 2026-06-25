@@ -121,23 +121,24 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
     /// `config.sh remove` (falling back to the API DELETE endpoint if the script fails),
     /// deletes the install directory, and removes the LaunchAgent plist.
     ///
-    /// Returns `true` if the runner was successfully deregistered from GitHub (either via
-    /// `config.sh` or the API fallback). Returns `false` if deregistration failed.
+    /// Return value priority (highest first):
+    /// - `.corruptInstall` — `config.sh` failed with a corrupt-install signal (missing/non-executable
+    ///   script, or known corruption string in output). Returned regardless of whether the API DELETE
+    ///   fallback subsequently succeeded; the broken local install still needs user attention.
+    /// - `.success` — `config.sh` exited 0 (the only path that does not go through the fallback).
+    /// - `.failed` — both `config.sh` and the API DELETE fallback failed; deregistration incomplete.
     ///
-    /// - Note: Returns `Bool` rather than `LifecycleResult` because removal is a best-effort
-    ///   multi-step operation — partial failures (e.g. corrupt install) are handled internally
-    ///   via the API fallback rather than surfaced as distinct result cases.
-    /// - Note: Local file cleanup (install directory + LaunchAgent plist) is performed only
-    ///   when deregistration succeeds (`removeOk == true`). If both `config.sh` and the API
-    ///   fallback fail, no local files are deleted so the user can retry.
+    /// - Note: Local file cleanup (install directory + LaunchAgent plist) is performed whenever
+    ///   deregistration succeeds (either path). If both paths fail, no local files are deleted
+    ///   so the user can retry.
     @discardableResult
-    public func remove(runner: RunnerModel) async -> Bool {
+    public func remove(runner: RunnerModel) async -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
         let gh = runner.gitHubUrl?.absoluteString ?? "nil"
         logStep("REMOVE", "called runner=\(runner.runnerName) installPath=\(ip) gitHubUrl=\(gh)")
         guard let path = runner.installPath else {
             logStep("REMOVE", "abort — no installPath for \(runner.runnerName)")
-            return false
+            return .failed("Install path unknown")
         }
         let dir = URL(fileURLWithPath: path)
 
@@ -149,29 +150,36 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
         guard let gitHubUrl = runner.gitHubUrl else {
             logStep("REMOVE", "abort — no gitHubUrl on runner \(runner.runnerName)")
-            return false
+            return .failed("GitHub URL unknown")
         }
         let scopeString = scopeFromGitHubUrl(gitHubUrl.absoluteString)
 
         logStep("REMOVE", "step2: fetching removal token for scope=\(scopeString)")
         guard let token = await fetchRemovalToken(scope: scopeString) else {
             logStep("REMOVE", "abort — fetchRemovalToken returned nil for scope=\(scopeString)")
-            return false
+            return .failed("Failed to fetch removal token")
         }
         logStep("REMOVE", "step2: got token len=\(token.count)")
 
         logStep("REMOVE", "step3: config.sh remove --token <token> in \(path)")
+        let configPath = dir.appendingPathComponent("config.sh").path
         let (cfgOk, cfgOutput) = await runScriptWithOutput(
             executableName: "config.sh", arguments: ["remove", "--token", token],
             workingDirectory: dir, timeout: 30, logTag: "config.sh remove")
         logStep("REMOVE", "step3 result=\(cfgOk) for \(runner.runnerName)")
 
         var removeOk = cfgOk
+        var isCorrupt = false
         if !cfgOk {
-            let isCorrupt = cfgOutput.contains("No such file or directory")
-                || cfgOutput.contains("install is corrupt")
-                || cfgOutput.contains("must run from runner root")
-            logStep("REMOVE", "step3b: config.sh failed isCorrupt=\(isCorrupt) — trying API DELETE fallback")
+            // A missing or non-executable config.sh is itself a corrupt-install signal —
+            // runScriptWithOutput returns (false, "") in that case so the output-string
+            // checks below would never fire without this upfront file-system check.
+            let lowerCfgOutput = cfgOutput.lowercased()
+            isCorrupt = !FileManager.default.isExecutableFile(atPath: configPath)
+                || lowerCfgOutput.contains("no such file or directory")
+                || lowerCfgOutput.contains("install is corrupt")
+                || lowerCfgOutput.contains("must run from runner root")
+            logStep("REMOVE", "step3b: config.sh failed isCorrupt=\(isCorrupt) configExecutable=\(FileManager.default.isExecutableFile(atPath: configPath)) — trying API DELETE fallback")
             if let agentId = runner.agentId {
                 logStep("REMOVE", "step3b: calling deleteRunnerByID scope=\(scopeString) agentId=\(agentId)")
                 let apiOk = await deleteRunnerByID(scope: scopeString, runnerID: agentId)
@@ -194,8 +202,13 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
         } else {
             logStep("REMOVE", "step4: skipping local cleanup — deregistration failed for \(runner.runnerName)")
         }
-        logStep("REMOVE", "done: svcOk=\(svcOk) cfgOk=\(cfgOk) removeOk=\(removeOk) for \(runner.runnerName)")
-        return removeOk
+        logStep("REMOVE", "done: svcOk=\(svcOk) cfgOk=\(cfgOk) removeOk=\(removeOk) isCorrupt=\(isCorrupt) for \(runner.runnerName)")
+
+        // isCorrupt takes priority: surface the broken-install signal to the caller even when the
+        // API DELETE fallback succeeded. A corrupt local install still needs user attention.
+        if isCorrupt { return .corruptInstall }
+        if removeOk { return .success }
+        return .failed("Failed to deregister runner \(runner.runnerName)")
     }
 
     // MARK: - Corrupt install detection

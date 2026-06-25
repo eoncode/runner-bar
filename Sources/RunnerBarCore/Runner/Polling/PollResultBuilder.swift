@@ -161,8 +161,9 @@ public struct PollResultBuilder {
         let display = buildGroupDisplay(live: liveGroups, cache: newCache)
         let inProgCount = liveGroups.filter { $0.groupStatus == .inProgress }.count
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
+        let loadingCount = liveGroups.filter { $0.groupStatus == .loading }.count
         log(
-            "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
+            "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued \(loadingCount) loading"
                 + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
         // ── Sweep 1: enrich the display array ────────────────────────────────────────────
@@ -354,17 +355,18 @@ public struct PollResultBuilder {
 
     /// Builds the ordered group display list from live groups and the completed cache.
     ///
-    /// Display order: in-progress → queued → cached (most-recently-completed first).
+    /// Display order: in-progress → loading → queued → cached (most-recently-completed first).
     /// Capped at `groupDisplayLimit` — analogous to `jobDisplayLimit` for jobs.
     public static func buildGroupDisplay(
         live: [WorkflowActionGroup],
         cache: [String: WorkflowActionGroup]
     ) -> [WorkflowActionGroup] {
         let inProgress = live.filter { $0.groupStatus == .inProgress }
-        let queued = live.filter { $0.groupStatus == .queued }
+        let loading    = live.filter { $0.groupStatus == .loading }
+        let queued     = live.filter { $0.groupStatus == .queued }
         // Use all live IDs (not just inProgress + queued) so that groups in other
-        // non-completed statuses (.waiting, .requested, etc.) also prevent their
-        // stale dimmed cache entry from appearing alongside the live entry.
+        // non-completed statuses (.loading, .waiting, .requested, etc.) also prevent
+        // their stale dimmed cache entry from appearing alongside the live entry.
         // Mirrors the identical reasoning in buildJobDisplay.
         let liveGroupIDs = Set(live.map { $0.id })
         let cached = cache.values.sorted {
@@ -373,6 +375,7 @@ public struct PollResultBuilder {
         }
         var display: [WorkflowActionGroup] = []
         display.appendUpTo(groupDisplayLimit, from: inProgress)
+        display.appendUpTo(groupDisplayLimit, from: loading)
         display.appendUpTo(groupDisplayLimit, from: queued)
         display.appendUpTo(groupDisplayLimit, from: cached) { !liveGroupIDs.contains($0.id) }
         return display

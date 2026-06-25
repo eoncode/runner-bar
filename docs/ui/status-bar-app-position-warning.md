@@ -93,4 +93,4 @@ All three: calling `show()` more than once per open.
 
 ---
 
-*Related: `docs/ui/nspopoer-without-jump-issues.md` (the mental model), `docs/ui/status-bar-window.md` (NSPanel alternative when `.sheet` support is needed).*
+*Related: `docs/ui/nspopover-without-jump-issues.md` (the mental model), `docs/ui/status-bar-window.md` (NSPanel alternative when `.sheet` support is needed).*

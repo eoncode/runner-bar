@@ -9,6 +9,8 @@ import Foundation
 public enum GroupStatus {
     /// At least one sibling run is in progress.
     case inProgress
+    /// Jobs have not yet loaded and no run is active — transient fetch window.
+    case loading
     /// No run is in progress, but at least one is queued.
     case queued
     /// All runs have concluded (or all jobs are done).
@@ -21,12 +23,13 @@ public enum GroupStatus {
 extension GroupStatus {
     /// Sort priority for display ordering.
     ///
-    /// Lower value = higher display priority (in-progress before queued before completed).
+    /// Lower value = higher display priority (in-progress before loading before queued before completed).
     public var sortPriority: Int {
         switch self {
         case .inProgress: return 0
-        case .queued: return 1
-        case .completed: return 2
+        case .loading:    return 1
+        case .queued:     return 2
+        case .completed:  return 3
         }
     }
 }
@@ -245,8 +248,8 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     ///    still in progress.
     /// 2. `.inProgress` — any sibling run is currently running.
     /// 3. `.queued` — any sibling run is queued but none is running.
-    /// 4. `.completed` fallthrough — jobs empty and no run is active (loading window).
-    ///    TODO: revisit when job-fetch latency is addressed; consider a `.loading` case.
+    /// 4. `.loading` — jobs have not arrived yet and no run is actively running or queued.
+    ///    Prevents the silent fallthrough to `.completed` during the initial fetch window.
     public var groupStatus: GroupStatus {
         let allRunsConcluded = runs.allSatisfy { $0.conclusion != nil }
         if allRunsConcluded, jobsTotal > 0, jobs.allSatisfy({ $0.conclusion != nil }) {
@@ -254,6 +257,11 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
         }
         if runs.contains(where: { $0.status == .inProgress }) { return .inProgress }
         if runs.contains(where: { $0.status == .queued }) { return .queued }
+        if jobs.isEmpty && !allRunsConcluded { return .loading }
+        // Intentional fallthrough: allRunsConcluded == true && jobs.isEmpty.
+        // Reached when a run concluded before any job was dispatched (e.g. immediately
+        // cancelled). .loading is correctly skipped here because !allRunsConcluded is
+        // false — a concluded-with-no-jobs run is done, not loading.
         return .completed
     }
 

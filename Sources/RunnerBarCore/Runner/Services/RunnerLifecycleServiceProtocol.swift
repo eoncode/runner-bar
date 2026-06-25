@@ -23,7 +23,7 @@ import Foundation
 /// struct StubLifecycleService: RunnerLifecycleServiceProtocol {
 ///     func start(runner: RunnerModel) async -> LifecycleResult { .success }
 ///     func stop(runner: RunnerModel) async -> LifecycleResult { .success }
-///     func remove(runner: RunnerModel) async -> Bool { true }
+///     func remove(runner: RunnerModel) async -> LifecycleResult { .success }
 /// }
 /// ```
 public protocol RunnerLifecycleServiceProtocol: Sendable {
@@ -33,7 +33,9 @@ public protocol RunnerLifecycleServiceProtocol: Sendable {
     /// Stops the runner's launchctl service. Returns `.success` or a failure/corrupt-install result.
     @discardableResult
     func stop(runner: RunnerModel) async -> LifecycleResult
-    /// Removes the runner via `svc.sh remove` and unregisters it from GitHub. Returns `true` on success.
+    /// Removes the runner via `svc.sh remove` and unregisters it from GitHub.
+    /// Returns `.success` on full deregistration, `.failed` if deregistration failed,
+    /// or `.corruptInstall` if both `config.sh` and the API fallback detected a broken install.
     @discardableResult
-    func remove(runner: RunnerModel) async -> Bool
+    func remove(runner: RunnerModel) async -> LifecycleResult
 }

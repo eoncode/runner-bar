@@ -75,11 +75,36 @@ curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash
 
 ## Docs
 
-- [DEVELOPMENT.md](docs/DEVELOPMENT.md) — build and run locally
-- [DEPLOYMENT.md](docs/DEPLOYMENT.md) — releases and deployment
-- [AGENTS.md](docs/AGENTS.md) — context for AI coding agents
-- [docs/TESTING.md](docs/UI_TESTING.md) — UI test runner setup
-- [PRIVACY.md](docs/PRIVACY.md) — OAuth scopes, token storage, data handling
+- [Development](docs/guides/development.md) — build and run locally
+- [Deployment](docs/guides/deployment.md) — releases and deployment
+- [UI Testing](docs/guides/ui-testing.md) — UI test runner setup
+- [AI Review](docs/guides/ai-review.md) — AI reviewer configuration
+- [Agents](docs/architecture/agents.md) — context for AI coding agents
+- [Privacy](docs/legal/privacy.md) — OAuth scopes, token storage, data handling
+
+---
+
+## Concurrency
+
+RunnerBar uses Swift 6.2 strict concurrency, so data-race safety is guaranteed by the compiler rather than by convention. UI runs on the main actor and background work is isolated in dedicated actors, all coordinated through structured `async`/`await`.
+
+→ [`docs/architecture/concurrency-overview.md`](docs/architecture/concurrency-overview.md)
+
+---
+
+## Module Separation
+
+Logic is kept independent of the app runtime: the `RunnerBarCore` library holds the platform-agnostic business logic, and the `RunnerBar` executable holds the macOS app shell. The compiler enforces the boundary, which keeps Core reusable and unit-testable with plain `swift test`.
+
+→ [`docs/architecture/library-rationale.md`](docs/architecture/library-rationale.md)
+
+---
+
+## Model Philosophy
+
+State is immutable by default and flows one way: domain models are value types, and the UI observes a single read model it never writes to. Configuration is typed and behaviour is expressed as dependency-injected use-cases, so everything stays testable in isolation.
+
+→ [`docs/architecture/data-model.md`](docs/architecture/data-model.md) · [`docs/principles/project-principles.md`](docs/principles/project-principles.md)
 
 ---
 
