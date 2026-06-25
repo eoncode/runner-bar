@@ -182,6 +182,7 @@ extension ActiveJob {
 
 // MARK: - RBStatus
 
+/// UI-status helpers derived from `conclusion` and `status` for display in the panel.
 extension ActiveJob {
     /// The canonical display status for this job, derived from `conclusion` and `status`.
     ///
