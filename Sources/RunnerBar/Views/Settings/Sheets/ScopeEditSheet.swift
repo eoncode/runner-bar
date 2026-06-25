@@ -27,6 +27,7 @@ import SwiftUI
 //        @MainActor isolation after the actor awaits (P9).
 //        Header now shows alias (from snapshot) when set, raw scope otherwise.
 //        confirmSave() uses modifyPreferences(for:with:) for an atomic RMW (P10).
+// #1633: Route refreshDisplayNames() through injected scopeStore instead of .shared.
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -486,7 +487,7 @@ extension ScopeEditSheet {
     /// notifyOnFailure) are preserved automatically because `modifyPreferences` starts
     /// from the live stored blob and the closure only touches the four fields above.
     ///
-    /// After saving, calls `ScopeStore.refreshDisplayNames()` so `ScopesView` reflects
+    /// After saving, calls `scopeStore.refreshDisplayNames()` so `ScopesView` reflects
     /// any alias change immediately without an app restart. (#1538)
     ///
     /// ## Isolation note (P9)
@@ -514,7 +515,7 @@ extension ScopeEditSheet {
         }
         // Refresh cached display names so ScopesView reflects the newly saved alias
         // immediately after the sheet closes, without requiring an app restart. (#1538)
-        await ScopeStore.shared.refreshDisplayNames()
+        await scopeStore.refreshDisplayNames()
         isPresented = false
     }
 
