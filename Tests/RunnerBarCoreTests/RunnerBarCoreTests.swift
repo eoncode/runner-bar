@@ -602,10 +602,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [completedGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [completedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in },
+                enrichJobs: { $0 }
+            )
         )
         #expect(result.display.filter { !$0.isDimmed }.isEmpty, "Completed group must not appear as a live (non-dimmed) row")
         #expect(!result.newGroupCache.isEmpty)
@@ -617,10 +619,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [liveGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [liveGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in },
+                enrichJobs: { $0 }
+            )
         )
         #expect(result.display.contains(where: { !$0.isDimmed }))
     }
@@ -632,10 +636,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [failedGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [failedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
         )
         #expect(await counter.value == 1, "fireFailureHook must fire exactly once for a new failed group")
     }
@@ -647,10 +653,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [successGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [successGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
         )
         #expect(await counter.value == 0)
     }
@@ -662,10 +670,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [completedGroup.id],
-            fetchGroups: { _ in [completedGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [completedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
         )
         #expect(await counter.value == 0)
     }
@@ -678,10 +688,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [liveGroup.id: liveGroup],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [completedGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [completedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in },
+                enrichJobs: { $0 }
+            )
         )
         #expect(result.display.filter { !$0.isDimmed }.isEmpty)
         #expect(result.newGroupCache[completedGroup.id] != nil)
@@ -711,10 +723,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [mixedGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [mixedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in },
+                enrichJobs: { $0 }
+            )
         )
         let displayForSha = result.display.filter { $0.headSha == sha }
         let cacheForSha   = result.newGroupCache.values.filter { $0.headSha == sha }
@@ -729,10 +743,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [failedGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [failedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
         )
         #expect(await counter.value == 1)
     }
@@ -746,10 +762,12 @@ struct PollResultBuilderGroupStateTests {
             snapPrevGroups: [liveVersion.id: liveVersion],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
-            fetchGroups: { _ in [completedVersion] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [completedVersion] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
         )
         #expect(await counter.value == 1, "doneGroups must be marked seen before freezeVanishedGroups runs to prevent double-fire")
     }
