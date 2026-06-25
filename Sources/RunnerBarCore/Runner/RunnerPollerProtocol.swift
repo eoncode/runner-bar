@@ -10,6 +10,12 @@
 public protocol RunnerPollerProtocol: AnyObject {
     /// Starts the poll loop, observers, and initial fetch.
     func start() async
+    /// The observable state object driven by this poller.
+    ///
+    /// Exposed on the protocol so callers holding `any RunnerPollerProtocol` —
+    /// including `AppDelegate` and SwiftUI preview hosts — can inject `state`
+    /// into the environment without importing the concrete type.
+    var state: RunnerState { get }
 }
 
 // MARK: - Conformance

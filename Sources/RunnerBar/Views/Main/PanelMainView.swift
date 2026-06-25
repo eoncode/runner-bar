@@ -99,7 +99,10 @@ struct PanelMainView: View {
             )
             .onAppear { systemStats.start() }
             Divider()
-            if let error = runnerState.fetchError { fetchErrorBanner(error); Divider() }
+            if let error = runnerState.fetchError {
+                fetchErrorBanner(error)
+                Divider()
+            }
             if runnerState.isRateLimited { rateLimitBanner; Divider() }
             if !activeLocalRunners.isEmpty {
                 SectionHeaderLabel(title: "Local Runners")

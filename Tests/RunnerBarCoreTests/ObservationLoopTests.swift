@@ -35,6 +35,11 @@ final class ObservableCounter {
 /// always terminates — even if `yield()` is never called (the stream finishes
 /// empty and `wait()` returns immediately). A test that calls `await signal.wait()`
 /// and expects `fired == 1` will then fail on the `#expect`, not hang.
+///
+/// **Cancellation safety:** call `cancel()` after `group.cancelAll()` in negative-case
+/// `withTaskGroup` races so the losing `signal.wait()` child task can exit.
+/// `AsyncStream` iteration is not interrupted by task cancellation alone — without
+/// an explicit `finish()`, the cancelled child remains suspended indefinitely.
 @MainActor
 final class Signal {
     private var continuation: AsyncStream<Void>.Continuation?
@@ -58,8 +63,19 @@ final class Signal {
         continuation = nil
     }
 
+    /// Finishes the stream without yielding a value.
+    ///
+    /// Call this after `group.cancelAll()` in negative-case `withTaskGroup` races
+    /// to ensure the losing `signal.wait()` child task can exit. Without this,
+    /// task cancellation alone does not terminate `AsyncStream` iteration and the
+    /// cancelled child remains suspended, preventing the task group from draining.
+    func cancel() {
+        continuation?.finish()
+        continuation = nil
+    }
+
     /// Suspends until `yield()` is called, or returns immediately if the
-    /// stream has already finished (i.e. `yield()` was never called).
+    /// stream has already finished (i.e. `yield()` or `cancel()` was already called).
     func wait() async {
         for await _ in stream { return }
     }
@@ -141,6 +157,7 @@ struct ObservationLoopTests {
             group.addTask { await signal.wait(); return true }                           // signal won
             let first = await group.next()!
             group.cancelAll()
+            signal.cancel() // finish stream so the losing wait() child can exit
             return first
         }
 
@@ -171,6 +188,7 @@ struct ObservationLoopTests {
             group.addTask { await signal.wait(); return true }
             let first = await group.next()!
             group.cancelAll()
+            signal.cancel() // finish stream so the losing wait() child can exit
             return first
         }
 
