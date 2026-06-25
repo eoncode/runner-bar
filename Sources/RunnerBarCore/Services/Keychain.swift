@@ -28,20 +28,14 @@ import Security
 // Conclusion: a KeychainActor would require all call-sites to become async with
 // no correctness benefit. The current design satisfies P16.
 //
-// Visibility rationale:
-// Keychain is intentionally internal. The public API boundary for token access
-// is the narrower githubToken() / invalidateTokenCache() pair in
-// GitHubTokenCache.swift. Exposing Keychain.save() / .delete() / .token as
-// public would allow any RunnerBarCore consumer — including test bundles — to
-// read, overwrite, or delete the stored OAuth token directly.
+// Visibility note:
+// Keychain is public because OAuthService and SettingsView in the RunnerBar
+// app target call Keychain.save(), .delete(), and .token directly. A future
+// refactor should route those call-sites through a dedicated public function
+// boundary (e.g. keychainSave/keychainDelete in GitHubTokenCache.swift) so
+// Keychain can be scoped internal. Tracked as a follow-up to this PR.
 
-/// Internal wrapper around Security.framework for storing and retrieving the GitHub OAuth token.
-///
-/// ## Visibility
-/// This type is `internal`. External callers access the token via `githubToken()`
-/// and manage cache state via `invalidateTokenCache()` (both public in
-/// `GitHubTokenCache.swift`). Direct Keychain manipulation is intentionally
-/// restricted to within `RunnerBarCore`.
+/// Wrapper around Security.framework for storing and retrieving the GitHub OAuth token.
 ///
 /// ## Thread safety
 /// `SecItem*` calls are OS-serialised by the Security framework and are safe to
@@ -49,7 +43,7 @@ import Security
 /// `Synchronization.Mutex` in `GitHubTokenCache` (P24); `invalidateTokenCache()`
 /// is called after every mutation to keep it consistent. No actor wrapper is
 /// required — see the file-level comment for the full P16 rationale.
-enum Keychain {
+public enum Keychain {
     /// Keychain service name used for RunnerBar credentials.
     private static let service = "runner-bar"
     /// Keychain account name used for the stored OAuth token.
@@ -57,7 +51,6 @@ enum Keychain {
 
     // MARK: - Private helpers
 
-    /// Returns the base Keychain query shared by all token operations.
     private static func baseQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
@@ -67,13 +60,10 @@ enum Keychain {
         ]
     }
 
-    // MARK: - Internal API
+    // MARK: - Public API
 
     /// The stored OAuth token, or nil if none is present.
-    ///
-    /// - Note: `SecItem*` calls are OS-serialised by the Security framework.
-    ///   No actor or lock is required. See file-level P16 rationale.
-    static var token: String? {
+    public static var token: String? {
         var query = baseQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -87,13 +77,8 @@ enum Keychain {
     }
 
     /// Saves (or overwrites) the token and invalidates the in-memory token cache.
-    /// Returns true if the token was successfully persisted.
-    ///
-    /// - Note: `SecItemUpdate`/`SecItemAdd` are OS-serialised.
-    ///   Concurrent writers are handled by the upsert retry guard below.
-    ///   See file-level P16 rationale.
     @discardableResult
-    static func save(_ token: String) -> Bool {
+    public static func save(_ token: String) -> Bool {
         guard let data = token.data(using: .utf8) else { return false }
         let updateStatus = SecItemUpdate(
             baseQuery() as CFDictionary,
@@ -137,13 +122,9 @@ enum Keychain {
         return succeeded
     }
 
-    /// Deletes the stored token.
-    /// Invalidates the in-memory token cache only when deletion actually succeeds
-    /// (or the item was already absent). Returns true on success.
-    ///
-    /// - Note: `SecItemDelete` is OS-serialised. See file-level P16 rationale.
+    /// Deletes the stored token and invalidates the in-memory token cache.
     @discardableResult
-    static func delete() -> Bool {
+    public static func delete() -> Bool {
         let status = SecItemDelete(baseQuery() as CFDictionary)
         let succeeded = status == errSecSuccess || status == errSecItemNotFound
         if !succeeded {

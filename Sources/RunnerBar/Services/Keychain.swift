@@ -1,10 +1,8 @@
 // Keychain.swift
 // RunnerBar
 //
-// Keychain has moved to RunnerBarCore and is intentionally internal there.
-// The public API boundary is githubToken() / invalidateTokenCache() in
-// RunnerBarCore/GitHub/GitHubTokenCache.swift, re-exported to RunnerBar
-// consumers via RunnerBar/Exports.swift (@_exported import RunnerBarCore).
+// Keychain has moved to RunnerBarCore and is re-exported here via
+// RunnerBar/Exports.swift (@_exported import RunnerBarCore).
+// This file contains no declarations.
 //
-// TODO: Delete this file — it contains no declarations and exists only as
-// a breadcrumb. Tracked for removal immediately post-merge.
+// TODO: Delete this file post-merge once confirmed redundant.
