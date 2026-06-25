@@ -1,7 +1,6 @@
 // ScopeStore.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
-import Observation
 
 // MARK: - ScopeStore
 
@@ -14,14 +13,18 @@ import Observation
 /// `activeScopes` via `withObservationTracking`/`AsyncStream` (no Combine bridge).
 @MainActor
 @Observable
-final class ScopeStore {
+public final class ScopeStore {
     /// Shared singleton — single source of truth for all scope operations.
-    static let shared = ScopeStore()
+    public static let shared = ScopeStore()
 
     /// Shared `JSONDecoder` — reused across all `load()` calls instead of per-call instantiation.
     private let decoder = JSONDecoder()
     /// Shared `JSONEncoder` — reused across all `save()` calls instead of per-call instantiation.
     private let encoder = JSONEncoder()
+
+    /// `UserDefaults` suite used for all reads and writes.
+    /// Injected via `init(store:)` so tests can pass an ephemeral suite (P7).
+    private let store: UserDefaults
 
     /// `UserDefaults` key for the JSON-encoded `[ScopeEntry]` array.
     private let entriesKey = "scopeEntries"
@@ -32,14 +35,19 @@ final class ScopeStore {
     /// `private(set)` — mutate only through the designated methods on this type
     /// (`add(_:)`, `remove(id:)`, `setEnabled(_:_:)`). `load()` via `init()` is
     /// the only other write path; it assigns during initialisation only.
-    private(set) var entries: [ScopeEntry] = []
+    public private(set) var entries: [ScopeEntry] = []
 
     /// Scopes that are currently enabled — used by `RunnerStore` for polling.
-    var activeScopes: [String] { entries.filter(\.isEnabled).map(\.scope) }
+    public var activeScopes: [String] { entries.filter(\.isEnabled).map(\.scope) }
 
-    /// Initialises the store by loading persisted entries (or migrating the
-    /// legacy `[String]` key if present).
-    private init() {
+    /// Designated initialiser.
+    ///
+    /// - Parameter store: The `UserDefaults` suite to read from and write to.
+    ///   Pass `.standard` in production (via the `shared` singleton) or an
+    ///   ephemeral suite (`UserDefaults(suiteName:)`) in unit tests to avoid
+    ///   polluting the real preferences database. (P7)
+    public init(store: UserDefaults = .standard) {
+        self.store = store
         entries = loadEntries()
     }
 
@@ -49,15 +57,15 @@ final class ScopeStore {
     /// `[String]` key when found. Returns an empty array on decode failure.
     private func loadEntries() -> [ScopeEntry] {
         // Migration: convert legacy [String] key if present.
-        if let legacy = UserDefaults.standard.stringArray(forKey: legacyKey),
+        if let legacy = store.stringArray(forKey: legacyKey),
            !legacy.isEmpty {
             log("ScopeStore › migrating \(legacy.count) legacy scope(s) to ScopeEntry")
             let migrated = legacy.map { ScopeEntry(scope: $0, isEnabled: true) }
             save(migrated)
-            UserDefaults.standard.removeObject(forKey: legacyKey)
+            store.removeObject(forKey: legacyKey)
             return migrated
         }
-        guard let data = UserDefaults.standard.data(forKey: entriesKey) else {
+        guard let data = store.data(forKey: entriesKey) else {
             log("ScopeStore › no stored entries found")
             return []
         }
@@ -77,7 +85,7 @@ final class ScopeStore {
     private func save(_ newEntries: [ScopeEntry]) {
         do {
             let data = try encoder.encode(newEntries)
-            UserDefaults.standard.set(data, forKey: entriesKey)
+            store.set(data, forKey: entriesKey)
             log("ScopeStore › saved \(newEntries.count) scope entry(ies)")
         } catch {
             log("ScopeStore › encode error: \(error)")
@@ -89,18 +97,26 @@ final class ScopeStore {
 
     // MARK: - Mutations
 
-    /// Appends a new enabled entry after trimming whitespace.
-    /// No-ops if empty or if `scope` already exists (any case).
-    func add(_ scope: String) {
-        let trimmed = scope.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Appends a new enabled entry after trimming whitespace and lowercasing.
+    /// No-ops if `scope` is empty after trimming, or if an identical (lowercased)
+    /// scope string already exists.
+    ///
+    /// Scope strings are lowercased at the point of entry so that `MyOrg/Repo`
+    /// and `myorg/repo` are treated as the same scope. This is necessary because
+    /// `ScopePreferencesStore` keys its `UserDefaults` blobs as
+    /// `"scope.<scope>.preferences"` using the raw string verbatim — storing
+    /// mixed-case variants would silently produce orphaned prefs keys and
+    /// double-poll the same upstream GitHub scope.
+    public func add(_ scope: String) {
+        let trimmed = scope.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty, !entries.contains(where: { $0.scope == trimmed }) else { return }
         entries.append(ScopeEntry(scope: trimmed))
         persist()
         log("ScopeStore › added scope: \(trimmed)")
     }
 
-    /// Removes the entry with the entry with the given ID. No-ops if not found.
-    func remove(id: UUID) {
+    /// Removes the entry with the given ID. No-ops if not found.
+    public func remove(id: UUID) {
         guard entries.contains(where: { $0.id == id }) else { return }
         entries.removeAll(where: { $0.id == id })
         persist()
@@ -111,7 +127,7 @@ final class ScopeStore {
     /// the change. `RunnerStore` observes `activeScopes` via `withObservationTracking`,
     /// so replacing the element in the `@Observable` `entries` array triggers a
     /// poll-loop restart.
-    func setEnabled(_ id: UUID, _ enabled: Bool) {
+    public func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[idx] = entries[idx].copying(isEnabled: enabled)
         persist()
@@ -136,7 +152,14 @@ final class ScopeStore {
     /// into a `[UUID: String?]` map and merges them into the *current* `entries` array
     /// after all awaits complete. Entries added or removed during the loop are
     /// unaffected; only their `displayName` field is updated when found by ID.
-    func refreshDisplayNames() async {
+    ///
+    /// ## @Observable churn avoidance
+    /// `ScopeEntry.Equatable` intentionally excludes `displayName` (it is transient,
+    /// not persisted). An unconditional array reassignment would fire `@Observable`
+    /// change notifications even when no alias actually changed, causing unnecessary
+    /// SwiftUI re-renders. This method therefore only writes back entries whose
+    /// `displayName` actually differs from the fetched alias.
+    public func refreshDisplayNames() async {
         // Iterate the snapshot to know which scopes to fetch — but do NOT write
         // this snapshot back to `entries` after the awaits.
         let snapshot = entries
@@ -151,12 +174,19 @@ final class ScopeStore {
         }
         // Merge into the *current* entries (not the pre-await snapshot) so that
         // any add/remove/setEnabled mutations that occurred during the awaits above
-        // are preserved. Entries not present in aliasByID (added after the snapshot
-        // was taken) are left unchanged.
+        // are preserved. Only write back an entry when its displayName actually
+        // changed — avoids spurious @Observable notifications for unchanged aliases.
+        var changed = false
         entries = entries.map { entry in
             guard let alias = aliasByID[entry.id] else { return entry }
+            guard alias != entry.displayName else { return entry }
+            changed = true
             return entry.copying(displayName: alias)
         }
-        log("ScopeStore › refreshed display names for \(entries.count) scope(s)")
+        if changed {
+            log("ScopeStore › refreshed display names for \(entries.count) scope(s)")
+        } else {
+            log("ScopeStore › refreshDisplayNames: no display names changed, skipping write")
+        }
     }
 }
