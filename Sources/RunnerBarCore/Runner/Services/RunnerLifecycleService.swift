@@ -152,7 +152,9 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
             logStep("REMOVE", "abort — no gitHubUrl on runner \(runner.runnerName)")
             return .failed("GitHub URL unknown")
         }
-        let scopeString = scopeFromGitHubUrl(gitHubUrl.absoluteString)
+        // Delegates to the canonical `scopeFromUrl` in GitHubURLHelpers (F-52).
+        // Falls back to the raw absoluteString so the log is always meaningful.
+        let scopeString = scopeFromUrl(gitHubUrl) ?? gitHubUrl.absoluteString
 
         logStep("REMOVE", "step2: fetching removal token for scope=\(scopeString)")
         guard let token = await fetchRemovalToken(scope: scopeString) else {
@@ -238,22 +240,6 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
                 logStep("deleteLaunchAgentPlist", "deleted \(url.path)")
             }
         }
-    }
-
-    // MARK: - Scope helper
-
-    /// Derives a GitHub scope string (`owner/repo` or `org`) from a GitHub URL.
-    ///
-    /// Examples:
-    /// - `https://github.com/acme/my-repo` → `"acme/my-repo"`
-    /// - `https://github.com/acme` → `"acme"`
-    /// - Unrecognised URL → returns the original string unchanged.
-    private func scopeFromGitHubUrl(_ urlString: String) -> String {
-        guard let url = URL(string: urlString) else { return urlString }
-        let parts = url.pathComponents.filter { $0 != "/" }
-        if parts.count >= 2 { return "\(parts[0])/\(parts[1])" }
-        if parts.count == 1 { return parts[0] }
-        return urlString
     }
 
     // MARK: - Script runner

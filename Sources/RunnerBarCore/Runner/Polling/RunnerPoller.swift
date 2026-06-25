@@ -456,13 +456,16 @@ public actor RunnerPoller {
         log("RunnerPoller › fetchAndEnrichRunners ENTER — scopes=\(scopes)")
 
         // MARK: Phase 0 — Extra org-scope derivation from local runner URLs
+        // Delegates to `scopeFromUrl(_:)` in GitHubURLHelpers (F-52).
+        // Only org-scoped URLs produce a scope string without a "/"; repo-scoped
+        // URLs ("owner/repo") are filtered out by the `!contains("/")` guard below.
         let configuredScopeSet = Set(scopes)
         var extraOrgScopes: [String] = []
         for localRunner in localRunners {
-            guard let url = localRunner.gitHubUrl else { continue }
-            let parts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
-            guard parts.count == 1 else { continue }
-            let orgScope = parts[0]
+            guard let url = localRunner.gitHubUrl,
+                  let derivedScope = scopeFromUrl(url),
+                  !derivedScope.contains("/") else { continue }
+            let orgScope = derivedScope
             guard !configuredScopeSet.contains(orgScope),
                   !extraOrgScopes.contains(orgScope)
             else { continue }

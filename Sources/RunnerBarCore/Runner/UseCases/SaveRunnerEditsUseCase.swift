@@ -187,8 +187,6 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     // MARK: - Private helpers
 
-    /// Validates the prerequisites for the labels API call and extracts the scope string.
-    ///
     /// Maps a `LabelsPrerequisiteError` to its human-readable error string.
     /// Extracted from `execute()` to keep cyclomatic complexity within the SwiftLint limit.
     private func labelsPrereqErrorMessage(_ error: LabelsPrerequisiteError) -> String {
@@ -204,8 +202,8 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     /// Validates the prerequisites for the labels API call and extracts the scope string.
     ///
-    /// Since `gitHubUrl` is now typed as `URL?`, no URL parsing can fail here;
-    /// scope extraction is pure path slicing on an already-valid URL.
+    /// Delegates path extraction to the canonical `scopeFromUrl(_:)` in
+    /// `GitHubURLHelpers` (F-52), replacing the previous inline `pathComponents` slice.
     ///
     /// - Returns: `.success((agentId, scope))` when both fields are present;
     ///   `.failure(LabelsPrerequisiteError)` identifying the first missing field.
@@ -214,16 +212,7 @@ public struct SaveRunnerEditsUseCase: Sendable {
     ) -> Result<(Int, String), LabelsPrerequisiteError> {
         guard let agentId = runner.agentId else { return .failure(.missingAgentId) }
         guard let url = runner.gitHubUrl else { return .failure(.missingGitHubUrl) }
-        let parts = url.pathComponents.filter { $0 != "/" }
-        let scope: String
-        if parts.count >= 2 {
-            scope = parts[0] + "/" + parts[1]
-        } else if parts.count == 1 {
-            scope = parts[0]
-        } else {
-            // URL is present but has no org/repo path components (e.g. bare `https://github.com`).
-            return .failure(.invalidScope(url))
-        }
+        guard let scope = scopeFromUrl(url) else { return .failure(.invalidScope(url)) }
         return .success((agentId, scope))
     }
 }
