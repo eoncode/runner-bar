@@ -740,10 +740,21 @@ struct PollResultBuilderGroupStateTests {
         #expect(cacheForSha.count == 0)
     }
 
+    /// Regression: a group ID that has been FIFO-evicted from seenGroupIDs must re-fire
+    /// the hook when it next appears — this is the documented known limitation (bounded
+    /// memory; occasional re-fire is an accepted trade-off).
+    ///
+    /// Scenario:
+    /// 1. Poll 1 — group fires hook; ID lands at index 0 of seenGroupIDs (oldest).
+    /// 2. Synthetic eviction — fill seenGroupIDs to seenGroupIDsLimit with filler IDs
+    ///    (real ID remains at index 0), then trim by 1 to evict it via FIFO.
+    /// 3. Poll 2 — ID is gone from seenGroupIDs; hook re-fires (counter reaches 2).
     @Test func evictedGroupIDRefiresHookOnNextPoll() async {
         let failedGroup = makeGroup(id: 1001, sha: "dead01", groupStatus: .completed, conclusion: "failure")
         let counter = HookCounter()
-        _ = await PollResultBuilder.buildGroupState(
+
+        // Poll 1: hook fires for the first time; ID is registered in newSeenGroupIDs.
+        let poll1 = await PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],
@@ -754,7 +765,34 @@ struct PollResultBuilderGroupStateTests {
                 enrichJobs: { $0 }
             )
         )
-        #expect(await counter.value == 1)
+        #expect(await counter.value == 1, "hook must fire once on first poll")
+        #expect(poll1.newSeenGroupIDs.contains(failedGroup.id))
+
+        // Synthetic FIFO eviction:
+        // Place the real group ID at index 0 (oldest), then fill to seenGroupIDsLimit
+        // with filler IDs. Trim by 1 — trimSeenGroupIDs removes the single oldest entry,
+        // which is the real group ID, because OrderedSet preserves insertion order.
+        var seenAfterEviction: OrderedSet<String> = [failedGroup.id]
+        for i in 0..<(PollResultBuilder.seenGroupIDsLimit - 1) {
+            seenAfterEviction.append("filler-\(i)")
+        }
+        #expect(seenAfterEviction.count == PollResultBuilder.seenGroupIDsLimit)
+        PollResultBuilder.trimSeenGroupIDs(&seenAfterEviction, limit: PollResultBuilder.seenGroupIDsLimit - 1)
+        #expect(!seenAfterEviction.contains(failedGroup.id), "real group ID must be evicted (it was the oldest entry)")
+
+        // Poll 2: ID is no longer in seenGroupIDs — hook must re-fire.
+        _ = await PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            snapSeenGroupIDs: seenAfterEviction,
+            deps: GroupStateDeps(
+                fetchGroups: { _ in [failedGroup] },
+                scopeFromGroup: { $0.repo },
+                fireFailureHook: { _, _ in await counter.increment() },
+                enrichJobs: { $0 }
+            )
+        )
+        #expect(await counter.value == 2, "hook must re-fire after FIFO eviction from seenGroupIDs")
     }
 
     @Test func doneGroupsSeenBeforeFreezeVanishedGroupsPreventsDoubleFire() async {
