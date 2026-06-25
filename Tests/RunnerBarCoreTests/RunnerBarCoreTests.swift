@@ -629,6 +629,7 @@ struct PollResultBuilderGroupStateTests {
         let resolvedJobStatus: JobStatus = jobStatus ?? {
             switch groupStatus {
             case .inProgress: return .inProgress
+            case .loading:    return .queued
             case .queued:     return .queued
             case .completed:  return .completed
             }
