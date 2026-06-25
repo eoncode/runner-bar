@@ -67,11 +67,11 @@ public func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String)
         log("fetchStepLog › urlSessionRaw returned nil for job \(jobID)")
         return nil
     }
-    guard let raw = String( data, encoding: .utf8) else {
+    guard let raw = String(data: data, encoding: .utf8) else {
         log("fetchStepLog › UTF-8 decode failed for job \(jobID) (\(data.count) bytes)")
         return nil
     }
-    guard !raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty else {
+    guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty body for job \(jobID)")
         return nil
     }
