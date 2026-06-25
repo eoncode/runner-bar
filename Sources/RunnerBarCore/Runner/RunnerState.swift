@@ -47,15 +47,6 @@ public final class RunnerState {
     /// Pushed by `LocalRunnerStore` alongside `localRunners`.
     public internal(set) var isLocalScanning: Bool = false
 
-    // MARK: - Local runner state (pushed by LocalRunnerStore)
-
-    /// Locally-installed runner agents discovered on this Mac.
-    /// Pushed by `LocalRunnerStore` via `await MainActor.run { }` after every refresh cycle.
-    public internal(set) var localRunners: [RunnerModel] = []
-    /// `true` while `LocalRunnerStore` is running a refresh cycle.
-    /// Pushed by `LocalRunnerStore` alongside `localRunners`.
-    public internal(set) var isLocalScanning: Bool = false
-
     /// The overall connectivity state of the runner fleet, derived from `runners`.
     /// Observed by `AppDelegate`'s `statusIconLoop` via `ObservationLoop`.
     public var aggregateStatus: AggregateStatus {
