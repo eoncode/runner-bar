@@ -32,7 +32,10 @@ public final class PanelSheetState {
     /// Restores the runner sheet after the popover has been shown again.
     public func restoreTransientHideStateIfNeeded() {
         // Only restore if no sheet is already active — prevents overwriting a runner set after the snapshot was captured.
-        guard editingRunner == nil, let runnerSheetSnapshot else { return }
+        guard editingRunner == nil, let runnerSheetSnapshot else {
+            runnerSheetSnapshot = nil // Discard stale snapshot; the externally-set runner takes precedence.
+            return
+        }
         editingRunner = runnerSheetSnapshot
         self.runnerSheetSnapshot = nil
     }

@@ -29,7 +29,8 @@ import Observation
 // AppDelegate:
 //   panelVisibilityState.isOpen = true
 //   panelVisibilityState.heightReported = false
-//   panelVisibilityState.onHeightReady = { [weak panel] h in
+//   panelVisibilityState.onHeightReady = { [weak self, weak panel] h in
+//       guard let self else { return }
 //       let w = AppDelegate.fixedWidth
 //       let max = self.maxHeight
 //       panel?.setFrame(NSRect(...))
