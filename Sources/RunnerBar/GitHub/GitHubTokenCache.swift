@@ -1,6 +1,14 @@
 // GitHubTokenCache.swift
 // RunnerBar
-// This file has been moved to RunnerBarCore.
-// Symbol is now resolved via `import RunnerBarCore`.
-// This stub exists only to prevent a missing-file build error during
-// the transition. Delete after confirming the build is green.
+//
+// Re-export shim — githubToken() and invalidateTokenCache() have moved to RunnerBarCore.
+// TODO: Delete this file once all call-sites in RunnerBar resolve these
+// symbols via `import RunnerBarCore` directly.
+import RunnerBarCore
+
+// Free functions cannot be typealiased, but importing RunnerBarCore here
+// re-exports githubToken() and invalidateTokenCache() into the RunnerBar
+// module scope, keeping existing unqualified call-sites compiling unchanged.
+// If RunnerBarCore removes these symbols, this file will fail to compile —
+// which is the desired guard behaviour.
+@_exported import RunnerBarCore

@@ -1,6 +1,10 @@
 // Keychain.swift
 // RunnerBar
-// This file has been moved to RunnerBarCore.
-// Symbol is now resolved via `import RunnerBarCore`.
-// This stub exists only to prevent a missing-file build error during
-// the transition. Delete after confirming the build is green.
+//
+// Re-export shim — Keychain has moved to RunnerBarCore.
+// TODO: Delete this file once all call-sites in RunnerBar have been
+// verified to resolve Keychain via `import RunnerBarCore` directly.
+import RunnerBarCore
+
+@available(*, deprecated, renamed: "RunnerBarCore.Keychain")
+public typealias Keychain = RunnerBarCore.Keychain
