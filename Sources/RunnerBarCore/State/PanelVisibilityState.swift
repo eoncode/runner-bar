@@ -1,8 +1,7 @@
 // PanelVisibilityState.swift
-// RunnerBar
+// RunnerBarCore
+import CoreGraphics
 import Observation
-import RunnerBarCore
-import SwiftUI
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️ PanelVisibilityState — SIDE-JUMP REGRESSION GUARD (ref #377 #375 #376)
@@ -30,7 +29,8 @@ import SwiftUI
 // AppDelegate:
 //   panelVisibilityState.isOpen = true
 //   panelVisibilityState.heightReported = false
-//   panelVisibilityState.onHeightReady = { [weak panel] h in
+//   panelVisibilityState.onHeightReady = { [weak self, weak panel] h in
+//       guard let self else { return }
 //       let w = AppDelegate.fixedWidth
 //       let max = self.maxHeight
 //       panel?.setFrame(NSRect(...))
@@ -61,9 +61,9 @@ import SwiftUI
 ///   the compiler verify the invariant under Swift 6 strict concurrency.
 @MainActor
 @Observable
-final class PanelVisibilityState {
+public final class PanelVisibilityState {
     /// `true` from immediately before the panel opens until after it closes.
-    var isOpen: Bool = false
+    public var isOpen: Bool = false
 
     /// Set to `true` by `hidePanel()` BEFORE it sets `isOpen = false`.
     /// Set back to `false` by `PanelContainerView.onChange` when `isOpen` becomes `true` again.
@@ -94,28 +94,26 @@ final class PanelVisibilityState {
     ///    between hidePanel() and the dim-overlay state machine.
     /// ❌ NEVER set isOpen = false in hidePanel() before setting this to true —
     ///    the flag must be visible to onChange before isOpen triggers it.
-    var isTransientHide: Bool = false
+    public var isTransientHide: Bool = false
 
     // periphery:ignore
     /// Set to `false` before each `show()`, set to `true` after first height report.
     /// Guards against repeated `setContentSize` calls on every layout pass.
     /// ❌ NEVER remove. ❌ NEVER skip resetting to false before show().
-    var heightReported: Bool = false
+    public var heightReported: Bool = false
 
     // periphery:ignore
     /// Called ONCE after the first real rendered height is known.
     /// Set by AppDelegate before show(). Calls panel.setFrame().
     /// ❌ NEVER call more than once per open.
-    var onHeightReady: ((CGFloat) -> Void)?
+    public var onHeightReady: ((CGFloat) -> Void)?
 
     /// Creates a new `PanelVisibilityState` with all flags in their initial off state.
     ///
     /// The body is intentionally empty — all stored properties carry inline defaults.
-    /// The explicit `init()` is declared rather than relying on the compiler-synthesised
-    /// default initialiser so that: (a) DocC surfaces it as part of the public API, and
-    /// (b) adding a future stored property without a default will produce a compile error
-    /// at the call site rather than silently changing the initialiser's signature.
-    init() {
+    /// The explicit `public init()` ensures the type is constructible from outside
+    /// the module (Swift synthesises only an internal init by default for classes).
+    public init() {
         // Intentionally empty — memberwise init is suppressed to ensure future stored
         // properties require an explicit default, surfacing signature changes at the call site.
     }
