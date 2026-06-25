@@ -1,5 +1,5 @@
 // RunnerEditDraft+ProductionLoad.swift
-// RunnerBarCore
+// RunnerBar
 //
 // Moved from Sources/RunnerBar/Runner/RunnerEditDraft.swift (#1618).
 

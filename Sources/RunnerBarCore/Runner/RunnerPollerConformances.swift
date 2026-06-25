@@ -1,5 +1,5 @@
 // RunnerPollerConformances.swift
-// RunnerBarCore
+// RunnerBar
 //
 // Moved from Sources/RunnerBar/Runner/RunnerPollerConformances.swift (#1618).
 // Both concrete types and both protocols are Core-resident; the conformances belong here.
