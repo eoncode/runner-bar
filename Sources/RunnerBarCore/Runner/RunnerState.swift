@@ -10,9 +10,14 @@ import Observation
 /// All mutations happen on the `MainActor`. Views and `AppDelegate` observe this
 /// object directly via `withObservationTracking` or `ObservationLoop`.
 ///
-/// The six poll-written properties are `public internal(set)` — only
+/// The six poll-written properties (`runners`, `jobs`, `actions`, `isRateLimited`,
+/// `rateLimitResetDate`, `fetchError`) are `public internal(set)` — only
 /// `RunnerPoller.applyFetchResult` (same module) should mutate them.
-/// Views and app-layer code are read-only consumers.
+/// Two additional properties (`localRunners`, `isLocalScanning`) are `public var`
+/// because Swift requires the setter to match the accessibility of a `public` protocol
+/// `{ get set }` requirement — see `RunnerViewModelProtocol` for the rationale.
+/// Only `LocalRunnerStore` (in `RunnerBarCore`) writes them in practice.
+/// Views and app-layer code are read-only consumers of all properties.
 @Observable
 @MainActor
 public final class RunnerState {
