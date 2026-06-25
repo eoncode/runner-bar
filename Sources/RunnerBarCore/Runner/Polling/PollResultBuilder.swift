@@ -161,7 +161,7 @@ public struct PollResultBuilder {
     ///     hook in a previous poll cycle. Contains `WorkflowActionGroup.id` values.
     ///     Survives `trimGroupCache` eviction so the hook cannot re-fire for old groups.
     ///     Insertion order is preserved so `trimSeenGroupIDs` evicts the oldest entries first.
-    ///     Defaults to `[]` so callers that omit this argument start with an empty set.
+    ///     Defaults to an empty set so callers that omit this argument start with an empty set.
     ///   - deps: Injected async/sync closures (fetch, scope, hook, enrich).
     ///
     /// - Important: `doneGroups` inserts into `newSeenGroupIDs` **before**
@@ -171,7 +171,7 @@ public struct PollResultBuilder {
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
-        snapSeenGroupIDs: OrderedSet<String> = [],
+        snapSeenGroupIDs: OrderedSet<String> = OrderedSet(),
         deps: GroupStateDeps
     ) async -> GroupPollResult {
         log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count) snapSeenGroupIDs=\(snapSeenGroupIDs.count)")
