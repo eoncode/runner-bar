@@ -319,12 +319,23 @@ public actor RunnerPoller {
             log("RunnerPoller › fetch — localRunners=\(localRunnersSnapshot.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })", category: .runner)
 #endif
         }
+        // Derive extra org scopes before buildInstallPathMap so byFullKey covers
+        // inferred org scopes as well as user-configured ones. Without this,
+        // installPathMap.byFullKey["\(extraOrgScope)/\(runnerName)"] always misses
+        // in Phase 2 of fetchAndEnrichRunners, silently skipping metrics for runners
+        // whose API id is unresolved and whose name is ambiguous across scopes.
+        let extraOrgScopes = deriveExtraOrgScopes(
+            from: localRunnersSnapshot,
+            configuredScopes: scopesSnapshot
+        )
+        let allScopes = scopesSnapshot + extraOrgScopes
         let installPathMap = buildInstallPathMap(
-            scopes: scopesSnapshot,
+            scopes: allScopes,
             localRunners: localRunnersSnapshot
         )
         let enrichedRunners = await fetchAndEnrichRunners(
             scopes: scopesSnapshot,
+            extraOrgScopes: extraOrgScopes,
             localRunners: localRunnersSnapshot,
             installPathMap: installPathMap
         )
@@ -340,6 +351,35 @@ public actor RunnerPoller {
             jobResult: jobResult,
             groupResult: groupResult
         )
+    }
+
+    /// Derives extra org scopes from local runner `gitHubUrl` values that are not
+    /// already present in the user-configured scope list.
+    ///
+    /// Only org-scoped URLs (single path component, no "/" in the derived scope)
+    /// are returned. Repo-scoped URLs are filtered out by the `!contains("/")` guard.
+    /// Duplicates and scopes already in `configuredScopes` are suppressed.
+    ///
+    /// Extracted from `fetchAndEnrichRunners` Phase 0 so the result is available
+    /// before `buildInstallPathMap` is called, allowing `byFullKey` to cover
+    /// inferred org scopes as well as user-configured ones.
+    func deriveExtraOrgScopes(
+        from localRunners: [RunnerModel],
+        configuredScopes: [String]
+    ) -> [String] {
+        let configuredScopeSet = Set(configuredScopes)
+        var extra: [String] = []
+        for localRunner in localRunners {
+            guard let url = localRunner.gitHubUrl,
+                  let derivedScope = scopeFromUrl(url),
+                  !derivedScope.contains("/"),
+                  !configuredScopeSet.contains(derivedScope),
+                  !extra.contains(derivedScope)
+            else { continue }
+            extra.append(derivedScope)
+            log("RunnerPoller › deriveExtraOrgScopes — derived '\(derivedScope)' from '\(localRunner.runnerName)'", category: .runner)
+        }
+        return extra
     }
 
     /// Fetches all active jobs across all scopes, injecting the source scope into each job.
