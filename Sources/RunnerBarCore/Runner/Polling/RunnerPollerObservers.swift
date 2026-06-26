@@ -5,6 +5,8 @@
 // F-35: PreferencesObserver and ScopesObserver replaced by ObservationRelay<Element>.
 // F-26: log calls use category: parameter (per-subsystem logger).
 
+import Foundation
+
 // MARK: - Typealiases
 
 /// Drives the `pollingInterval → TimeInterval` observation stream.
