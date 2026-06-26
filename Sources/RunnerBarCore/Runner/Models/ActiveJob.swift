@@ -147,6 +147,60 @@ extension ActiveJob {
         )
     }
 
+    /// Returns a copy of this job with `conclusion` replaced.
+    public func copying(conclusion newValue: JobConclusion?) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: newValue,
+            isDimmed: isDimmed,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+
+    /// Returns a copy of this job with `steps` replaced.
+    public func copying(steps newValue: [JobStep]) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: isDimmed,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            createdAt: createdAt,
+            steps: newValue
+        )
+    }
+
+    /// Returns a copy of this job with `scope` replaced.
+    public func copying(scope newValue: String?) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: isDimmed,
+            runnerName: runnerName,
+            scope: newValue,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+
     /// Returns a completed, dimmed copy of this job.
     ///
     /// Centralises the repeated "freeze a job into the cache" pattern in

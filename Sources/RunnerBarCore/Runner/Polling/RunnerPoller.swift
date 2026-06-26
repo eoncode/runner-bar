@@ -337,6 +337,80 @@ public actor RunnerPoller {
         )
     }
 
+    /// Fetches all active jobs across all scopes.
+    ///
+    /// Iterates the active scopes, fetches workflow action groups for each scope,
+    /// and returns the flattened job list from all groups. This gives the full
+    /// set of live + recently-completed jobs for `PollResultBuilder.buildJobState`
+    /// to split into live vs. cached display tiers.
+    ///
+    /// `internal` — called only via the `fetchJobs` closure passed to
+    /// `PollResultBuilder.buildJobState`.
+    func fetchAllJobs() async -> [ActiveJob] {
+        let scopes = await MainActor.run { scopeStore.activeScopes }
+        guard !scopes.isEmpty else { return [] }
+        var allJobs: [ActiveJob] = []
+        for scope in scopes {
+            let groups = await actionGroupFetcher.fetch(for: scope, cache: [:])
+            for group in groups {
+                allJobs.append(contentsOf: group.jobs)
+            }
+        }
+        log("RunnerPoller › fetchAllJobs — fetched \(allJobs.count) job(s) across \(scopes.count) scope(s)", category: .runner)
+        return allJobs
+    }
+
+    /// Fetches workflow action groups for all active scopes, using the SHA-keyed cache.
+    ///
+    /// Iterates the active scopes and calls `actionGroupFetcher.fetch(for:cache:)`
+    /// for each, merging results into a single flat array. The `shaKeyedCache`
+    /// parameter is passed through to avoid refetching groups whose SHAs have
+    /// already been fetched in the previous poll cycle.
+    ///
+    /// `internal` — called only via the `fetchGroups` closure passed to
+    /// `PollResultBuilder.buildGroupState`.
+    func fetchActionGroups(shaKeyedCache: [String: WorkflowActionGroup]) async -> [WorkflowActionGroup] {
+        let scopes = await MainActor.run { scopeStore.activeScopes }
+        guard !scopes.isEmpty else { return [] }
+        var allGroups: [WorkflowActionGroup] = []
+        for scope in scopes {
+            let groups = await actionGroupFetcher.fetch(for: scope, cache: shaKeyedCache)
+            allGroups.append(contentsOf: groups)
+        }
+        log("RunnerPoller › fetchActionGroups — fetched \(allGroups.count) group(s) across \(scopes.count) scope(s)", category: .runner)
+        return allGroups
+    }
+
+    /// Backfills step data into the completed-job cache.
+    ///
+    /// Iterates jobs in `cache` that have a conclusion but missing or in-progress steps,
+    /// fetches the full job payload from the GitHub API, and updates the cache entry.
+    ///
+    /// Uses `JobPayload` + `makeActiveJob(from:iso:isDimmed:)` — the same decoding path
+    /// used everywhere else in the codebase — because `ActiveJob` has no `Decodable`
+    /// conformance: dates are raw strings in the API response and must be parsed via
+    /// `ISO8601DateParser.shared.formatter`. Decoding directly to `ActiveJob` would
+    /// silently fail (the `try?` guard would always `continue`) and no steps would
+    /// ever be backfilled.
+    ///
+    /// `scope` is preserved from the existing cache entry because scope is a local
+    /// concept injected post-fetch — it is never present in the GitHub API job payload.
+    /// `isDimmed` is forced `true`: backfilled entries are completed jobs no longer in
+    /// the live feed and must remain visually dimmed.
+    func backfillSteps(into cache: inout [Int: ActiveJob]) async {
+        for cacheID in Array(cache.keys) {
+            guard let cached = cache[cacheID] else { continue }
+            guard cached.conclusion != nil else { continue }
+            guard cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress }) else { continue }
+            guard let scope = cached.scope else { continue }
+            guard let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)") else { continue }
+            guard let payload = try? decoder.decode(JobPayload.self, from: data) else { continue }
+            let updated = await ISO8601DateParser.shared.makeJob(from: payload, isDimmed: true)
+            // Restore scope — not present in the API payload, must be carried forward.
+            cache[cacheID] = updated.copying(scope: cached.scope)
+        }
+    }
+
     // MARK: - Apply result
 
     /// Merges a completed fetch into actor state and pushes the snapshot to `RunnerState`.

@@ -32,6 +32,7 @@ public enum LogCategory: String, CaseIterable {
 
 // MARK: - Logger instances
 
+/// The OSLog subsystem identifier for the app, shared across all log categories.
 private let subsystem = "com.eoncode.runner-bar"
 
 /// One `os.Logger` per `LogCategory`, created once at launch.
@@ -57,7 +58,6 @@ private let loggers: [LogCategory: Logger] = Dictionary(
 @inline(__always)
 private func resolvedLogger(for category: LogCategory) -> Logger {
     // allCases guarantees every case is present; subscript will never return nil.
-    // swiftlint:disable:next force_unwrap
     loggers[category]!
 }
 

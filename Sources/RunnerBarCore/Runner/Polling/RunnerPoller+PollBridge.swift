@@ -86,36 +86,6 @@ extension RunnerPoller {
         )
     }
 
-    /// Backfills step data into the completed-job cache.
-    ///
-    /// Iterates jobs in `cache` that have a conclusion but missing or in-progress steps,
-    /// fetches the full job payload from the GitHub API, and updates the cache entry.
-    ///
-    /// Uses `JobPayload` + `makeActiveJob(from:iso:isDimmed:)` — the same decoding path
-    /// used everywhere else in the codebase — because `ActiveJob` has no `Decodable`
-    /// conformance: dates are raw strings in the API response and must be parsed via
-    /// `ISO8601DateParser.shared.formatter`. Decoding directly to `ActiveJob` would
-    /// silently fail (the `try?` guard would always `continue`) and no steps would
-    /// ever be backfilled.
-    ///
-    /// `scope` is preserved from the existing cache entry because scope is a local
-    /// concept injected post-fetch — it is never present in the GitHub API job payload.
-    /// `isDimmed` is forced `true`: backfilled entries are completed jobs no longer in
-    /// the live feed and must remain visually dimmed.
-    func backfillSteps(into cache: inout [Int: ActiveJob]) async {
-        for cacheID in Array(cache.keys) {
-            guard let cached = cache[cacheID] else { continue }
-            guard cached.conclusion != nil else { continue }
-            guard cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress }) else { continue }
-            guard let scope = cached.scope else { continue }
-            guard let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)") else { continue }
-            guard let payload = try? decoder.decode(JobPayload.self, from: data) else { continue }
-            let updated = makeActiveJob(from: payload, iso: ISO8601DateParser.shared.formatter, isDimmed: true)
-            // Restore scope — not present in the API payload, must be carried forward.
-            cache[cacheID] = updated.copying(scope: cached.scope)
-        }
-    }
-
     // MARK: - Group helpers
 
     /// Derives the scope string (repo or org URL) from a `WorkflowActionGroup`.
