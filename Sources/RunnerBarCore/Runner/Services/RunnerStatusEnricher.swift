@@ -135,7 +135,7 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
         var scopeToRunnerIndices: [String: [Int]] = [:]
         for (idx, runner) in runners.enumerated() {
             guard let url = runner.gitHubUrl else {
-                log("[Enricher] SKIP '\(runner.runnerName)' — gitHubUrl is nil")
+                log("[Enricher] SKIP '\(runner.runnerName)' — gitHubUrl is nil", category: .runner)
                 continue
             }
             scopeToRunnerIndices[url.absoluteString, default: []].append(idx)
@@ -174,7 +174,7 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
             let (scopeURL, scopeDict) = entry
             for (name, payload) in scopeDict {
                 if result[name] != nil {
-                    log("[Enricher] ⚠️ fallback collision: runner '\(name)' appears in both '\(seenInFallback[name] ?? "?")' and '\(scopeURL)' — first-writer wins")
+                    log("[Enricher] ⚠️ fallback collision: runner '\(name)' appears in both '\(seenInFallback[name] ?? "?")' and '\(scopeURL)' — first-writer wins", category: .runner)
                 } else {
                     result[name] = payload
                     seenInFallback[name] = scopeURL
@@ -192,7 +192,7 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
                 result[idx] = applyEnrichment(to: result[idx], from: api)
             } else {
                 let gitHubUrl = result[idx].gitHubUrl?.absoluteString ?? "NIL"
-                log("[Enricher] NO MATCH for '\(name)' — available API names: \(scopedAPI.keys.sorted()) gitHubUrl=\(gitHubUrl)")
+                log("[Enricher] NO MATCH for '\(name)' — available API names: \(scopedAPI.keys.sorted()) gitHubUrl=\(gitHubUrl)", category: .runner)
             }
         }
         return result
@@ -265,23 +265,23 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
         while true {
             let endpoint = "\(baseEndpoint)?per_page=\(perPage)&page=\(page)"
             guard let data = await ghAPI(endpoint) else {
-                log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) — ghAPI returned nil")
+                log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) — ghAPI returned nil", category: .runner)
                 break
             }
             do {
                 let envelope = try decoder.decode(RunnerListEnvelope.self, from: data)
-                log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) returned \(envelope.runners.count) runners (total_count=\(envelope.totalCount))")
+                log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) returned \(envelope.runners.count) runners (total_count=\(envelope.totalCount))", category: .runner)
                 allRunners.append(contentsOf: envelope.runners)
                 guard envelope.runners.count == perPage,
                       allRunners.count < envelope.totalCount else { break }
                 page += 1
             } catch {
-                log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) — JSONDecoder failed: \(error)")
+                log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) — JSONDecoder failed: \(error)", category: .runner)
                 break
             }
         }
 
-        log("[Enricher] fetchRunnersForScope \(scopeURL) total collected \(allRunners.count) runners")
+        log("[Enricher] fetchRunnersForScope \(scopeURL) total collected \(allRunners.count) runners", category: .runner)
         return allRunners
     }
 

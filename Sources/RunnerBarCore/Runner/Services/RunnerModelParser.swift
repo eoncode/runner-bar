@@ -19,10 +19,10 @@ import Foundation
 ///   - installPath: The absolute path to the runner's install directory.
 /// - Returns: A hydrated `RunnerModel`, or `nil` if the `.runner` file is missing or malformed.
 public func runnerModelFromIndex(name: String, installPath: String) -> RunnerModel? {
-    log("RunnerModelParser › runnerModelFromIndex — parsing '\(name)' at \(installPath)")
+    log("RunnerModelParser › runnerModelFromIndex — parsing '\(name)' at \(installPath)", category: .runner)
     let jsonURL = URL(fileURLWithPath: installPath).appendingPathComponent(".runner")
     guard var data = try? Data(contentsOf: jsonURL) else {
-        log("RunnerModelParser › ⚠️ runnerModelFromIndex — no .runner file at \(installPath), skipping '\(name)'")
+        log("RunnerModelParser › ⚠️ runnerModelFromIndex — no .runner file at \(installPath), skipping '\(name)'", category: .runner)
         return nil
     }
 
@@ -34,7 +34,7 @@ public func runnerModelFromIndex(name: String, installPath: String) -> RunnerMod
     let bom: [UInt8] = [0xEF, 0xBB, 0xBF]
     if data.prefix(3).elementsEqual(bom) {
         data = data.dropFirst(3)
-        log("RunnerModelParser › runnerModelFromIndex — stripped UTF-8 BOM from '\(name)'")
+        log("RunnerModelParser › runnerModelFromIndex — stripped UTF-8 BOM from '\(name)'", category: .runner)
     }
 
     let decoder = JSONDecoder()
@@ -42,9 +42,9 @@ public func runnerModelFromIndex(name: String, installPath: String) -> RunnerMod
     let discovery = try? decoder.decode(RunnerDiscoveryFields.self, from: data)
 
     if config == nil {
-        log("RunnerModelParser › ⚠️ runnerModelFromIndex — RunnerConfig decode failed for '\(name)' at \(installPath). File may be malformed.")
+        log("RunnerModelParser › ⚠️ runnerModelFromIndex — RunnerConfig decode failed for '\(name)' at \(installPath). File may be malformed.", category: .runner)
     } else {
-        log("RunnerModelParser › runnerModelFromIndex — '\(name)' agentId=\(String(describing: config?.agentId)) gitHubUrl=\(String(describing: discovery?.gitHubUrl))")
+        log("RunnerModelParser › runnerModelFromIndex — '\(name)' agentId=\(String(describing: config?.agentId)) gitHubUrl=\(String(describing: discovery?.gitHubUrl))", category: .runner)
     }
 
     return RunnerModel(
@@ -53,7 +53,7 @@ public func runnerModelFromIndex(name: String, installPath: String) -> RunnerMod
         runnerName: discovery?.runnerName ?? name,
         gitHubUrl: discovery?.gitHubUrl.flatMap {
             guard let url = URL(string: $0) else {
-                log("RunnerModelParser › ⚠️ gitHubUrl '\($0)' is not a valid URL — stored as nil")
+                log("RunnerModelParser › ⚠️ gitHubUrl '\($0)' is not a valid URL — stored as nil", category: .runner)
                 return nil
             }
             return url

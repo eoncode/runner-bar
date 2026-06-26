@@ -284,6 +284,6 @@ public struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
     /// Emits a structured log line in the format `RunnerLifecycle > <tag>: <message>`.
     /// Centralises the prefix so individual methods stay concise.
     private func logStep(_ tag: String, _ message: String) {
-        log("RunnerLifecycle > \(tag): \(message)")
+        log("RunnerLifecycle > \(tag): \(message)", category: .runner)
     }
 }

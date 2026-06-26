@@ -163,7 +163,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
     @concurrent
     public func fetch(for scope: String, cache: [String: WorkflowActionGroup] = [:]) async -> [WorkflowActionGroup] {
         guard scope.contains("/") else {
-            log("fetchActionGroups -- skipping org scope \(scope)")
+            log("fetchActionGroups -- skipping org scope \(scope)", category: .runner)
             return []
         }
 
@@ -220,7 +220,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
             }
             return (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
         }
-        log("fetchActionGroups -- \(result.count) group(s) for \(scope)")
+        log("fetchActionGroups -- \(result.count) group(s) for \(scope)", category: .runner)
         return result
     }
 
@@ -355,7 +355,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
         let skippedCount = allNeedingRefresh.count - needsRefresh.count
         if skippedCount > 0 {
             log("fetchJobsForRun -- \(skippedCount) in-progress job(s) skipped beyond cap (\(maxRefreshConcurrency)) — "
-                + "these jobs will serve stale data every poll cycle until the capped jobs conclude")
+                + "these jobs will serve stale data every poll cycle until the capped jobs conclude", category: .runner)
         }
         guard !needsRefresh.isEmpty else { return initial }
 
