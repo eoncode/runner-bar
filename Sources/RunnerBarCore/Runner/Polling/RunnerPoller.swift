@@ -191,6 +191,10 @@ public actor RunnerPoller {
                 await self?.start()
                 break
             }
+            // LOAD-BEARING: keeps the ObservationRelay alive until the for-await loop above
+            // exits. Without this, ARC may drop `observer` immediately after the `let`
+            // binding above goes out of scope (the Task captures `self` weakly and the relay
+            // is not otherwise retained), silently stopping preference-change detection.
             withExtendedLifetime(observer) {}
         }
         pollLoop.setIntervalObservationTask(newTask)
@@ -221,6 +225,10 @@ public actor RunnerPoller {
                 await self?.start()
                 break
             }
+            // LOAD-BEARING: keeps the ObservationRelay alive until the for-await loop above
+            // exits. Without this, ARC may drop `observer` immediately after the `let`
+            // binding above goes out of scope (the Task captures `self` weakly and the relay
+            // is not otherwise retained), silently stopping scope-change detection.
             withExtendedLifetime(observer) {}
         }
         pollLoop.setScopeObservationTask(newTask)
