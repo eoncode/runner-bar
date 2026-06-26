@@ -68,7 +68,11 @@ extension RunnerPoller {
                     await self?.fetchActionGroups(shaKeyedCache: shaKeyedCache) ?? []
                 },
                 scopeFromGroup: { [weak self] group in
-                    self?.scopeFromActionGroup(group) ?? ""
+                    guard let self else {
+                        log("RunnerPoller › scopeFromGroup — ⚠️ self is nil, returning empty scope for groupID=\(group.id)", category: .runner)
+                        return ""
+                    }
+                    return self.scopeFromActionGroup(group)
                 },
                 fireFailureHook: { [weak self] group, scope in
                     // PollResultBuilder.buildGroupState (and freezeVanishedGroups) already

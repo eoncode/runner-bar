@@ -344,6 +344,10 @@ public actor RunnerPoller {
     /// set of live + recently-completed jobs for `PollResultBuilder.buildJobState`
     /// to split into live vs. cached display tiers.
     ///
+    /// Passes `cache: [:]` intentionally — the job-polling path does not use the
+    /// SHA-keyed deduplication that `buildGroupState` relies on. Each job poll
+    /// fetches fresh group data so that no stale SHA entries suppress a live update.
+    ///
     /// `internal` — called only via the `fetchJobs` closure passed to
     /// `PollResultBuilder.buildJobState`.
     func fetchAllJobs() async -> [ActiveJob] {
@@ -395,6 +399,8 @@ public actor RunnerPoller {
     ///
     /// `scope` is preserved from the existing cache entry because scope is a local
     /// concept injected post-fetch — it is never present in the GitHub API job payload.
+    /// Jobs whose cached `scope` is `nil` are skipped and logged — they entered the
+    /// cache before scope injection was in place and cannot be backfilled safely.
     /// `isDimmed` is forced `true`: backfilled entries are completed jobs no longer in
     /// the live feed and must remain visually dimmed.
     func backfillSteps(into cache: inout [Int: ActiveJob]) async {
@@ -402,7 +408,10 @@ public actor RunnerPoller {
             guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil else { continue }
             guard cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress }) else { continue }
-            guard let scope = cached.scope else { continue }
+            guard let scope = cached.scope else {
+                log("RunnerPoller › backfillSteps — ⚠️ skipping jobID=\(cacheID) scope is nil (entered cache before scope injection)", category: .runner)
+                continue
+            }
             guard let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)") else { continue }
             guard let payload = try? decoder.decode(JobPayload.self, from: data) else { continue }
             let updated = await ISO8601DateParser.shared.makeJob(from: payload, isDimmed: true)
