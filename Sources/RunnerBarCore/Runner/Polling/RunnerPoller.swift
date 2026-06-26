@@ -419,13 +419,19 @@ public actor RunnerPoller {
     ///
     /// This implementation reads `cached.scope` instead — the scope string injected
     /// post-fetch by `buildJobState`. Jobs whose `cached.scope` is `nil` (entered the
-    /// cache before scope injection was in place) are skipped with a warning log rather
-    /// than attempting a potentially wrong re-derivation.
+    /// cache before scope injection was in place) are evicted on first encounter to
+    /// prevent per-poll log spam for stale pre-migration entries.
     ///
     /// Additionally, the previous implementation did not call `.copying(scope:)` after
     /// `makeJob`, so every backfill cycle silently dropped the scope field from the
     /// cache entry — a latent bug that caused the nil-scope skip to fire on the very
     /// next cycle for any backfilled job. This is now fixed.
+    ///
+    /// **Org-only scopes:** The GitHub Jobs API (`repos/{owner}/{repo}/actions/jobs/{id}`)
+    /// requires a full `owner/repo` path. There is no `orgs/{org}/actions/jobs/{id}`
+    /// equivalent. When `cached.scope` is an org-only string (no "/" present), backfill
+    /// is skipped with a warning log. The cache entry is preserved and will receive correct
+    /// step data the next time the job appears in the live feed via `fetchAllJobs`.
     ///
     /// **Upgrade note:** Cache entries written before scope-injection was introduced
     /// have `scope == nil` and are **evicted** (not skipped) on first encounter.
@@ -448,6 +454,14 @@ public actor RunnerPoller {
                 // for stale pre-migration cache entries.
                 cache.removeValue(forKey: cacheID)
                 log("RunnerPoller › backfillSteps — evicted jobID=\(cacheID): scope is nil (pre-scope-injection entry)", category: .runner)
+                continue
+            }
+            // The GitHub Jobs API is always repo-scoped: repos/{owner}/{repo}/actions/jobs/{id}.
+            // There is no orgs/{org}/actions/jobs/{id} equivalent, so org-only scopes
+            // (no "/" in the string) cannot be backfilled via this endpoint.
+            // Skip with a warning rather than issuing a guaranteed-404 API call.
+            guard scope.contains("/") else {
+                log("RunnerPoller › backfillSteps — ⚠️ skipping jobID=\(cacheID): scope '\(scope)' is org-only (no repo path); GitHub Jobs API requires owner/repo", category: .runner)
                 continue
             }
             guard let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)") else { continue }
