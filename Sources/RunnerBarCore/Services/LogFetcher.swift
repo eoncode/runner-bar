@@ -77,7 +77,7 @@ public struct LogFetcher: Sendable {
             for runID in runIDs {
                 taskGroup.addTask {
                     guard let data = await transport.raw("repos/\(scope)/actions/runs/\(runID)/logs") else {
-                        log("fetchActionLogs › run \(runID) — transport.raw returned nil, skipping")
+                        log("fetchActionLogs › run \(runID) — transport.raw returned nil, skipping", category: .services)
                         return []
                     }
                     return await unzipLogs(data)

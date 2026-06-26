@@ -24,7 +24,7 @@ public enum TerminalLauncher {
         """
         var error: NSDictionary?
         if NSAppleScript(source: src)?.executeAndReturnError(&error) == nil {
-            log("TerminalLauncher › AppleScript error: \(error ?? [:])")
+            log("TerminalLauncher › AppleScript error: \(error ?? [:])", category: .services)
         }
     }
 }

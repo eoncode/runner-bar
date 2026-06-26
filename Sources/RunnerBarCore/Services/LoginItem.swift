@@ -26,7 +26,7 @@ public enum LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            log("[RunnerBar] LoginItem.setEnabled(\(enabled)) failed: \(error)")
+            log("[RunnerBar] LoginItem.setEnabled(\(enabled)) failed: \(error)", category: .services)
         }
     }
 }

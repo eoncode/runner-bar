@@ -212,7 +212,7 @@ public enum ProcessRunner {
                 do {
                     try task.run()
                 } catch {
-                    log("ProcessRunner › launch error: \(error) — \(executableURL.lastPathComponent) \(arguments.joined(separator: " "))")
+                    log("ProcessRunner › launch error: \(error) — \(executableURL.lastPathComponent) \(arguments.joined(separator: " "))", category: .services)
                     // Close both pipe write-ends so that any already-dispatched drain
                     // block receives EOF and returns cleanly. outPipe must be closed to
                     // unblock the drainQueue.async readDataToEndOfFile() call above.
@@ -263,7 +263,7 @@ public enum ProcessRunner {
                     do {
                         try await Task.sleep(for: .seconds(timeout))
                         guard task.isRunning else { return }
-                        log("ProcessRunner › timeout (\(timeout)s) — terminating \(executableURL.lastPathComponent)")
+                        log("ProcessRunner › timeout (\(timeout)s) — terminating \(executableURL.lastPathComponent)", category: .services)
                         task.terminate()
                     } catch {
                         // CancellationError from timeoutTask.cancel() — process already done.
@@ -363,7 +363,7 @@ public enum ProcessRunner {
         // See doc comment above for why this DispatchQueue.sync is intentionally retained.
         drainQueue.sync {}
         let outputData = outputBox.withLock { $0 }
-        log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableName)")
+        log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableName)", category: .services)
         continuation.resume(returning: Result(
             data: outputData.isEmpty ? nil : outputData,
             exitCode: exitCode

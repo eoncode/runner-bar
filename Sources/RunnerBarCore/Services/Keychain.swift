@@ -125,15 +125,15 @@ public enum Keychain {
                 if retryStatus == errSecSuccess {
                     succeeded = true
                 } else {
-                    log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)")
+                    log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)", category: .services)
                 }
             } else if addStatus == errSecSuccess {
                 succeeded = true
             } else {
-                log("Keychain.save › SecItemAdd failed: \(addStatus)")
+                log("Keychain.save › SecItemAdd failed: \(addStatus)", category: .services)
             }
         } else if !succeeded {
-            log("Keychain.save › SecItemUpdate failed: \(updateStatus)")
+            log("Keychain.save › SecItemUpdate failed: \(updateStatus)", category: .services)
         }
         // FIXME(P24): atomicity gap — SecItemUpdate/Add and invalidateTokenCache() are
         // not atomic. A concurrent githubToken() caller between the two calls will read
@@ -153,7 +153,7 @@ public enum Keychain {
         let status = SecItemDelete(baseQuery() as CFDictionary)
         let succeeded = status == errSecSuccess || status == errSecItemNotFound
         if !succeeded {
-            log("Keychain.delete › SecItemDelete failed: \(status)")
+            log("Keychain.delete › SecItemDelete failed: \(status)", category: .services)
             return false
         }
         invalidateTokenCache()
