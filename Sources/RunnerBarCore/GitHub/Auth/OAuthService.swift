@@ -227,6 +227,11 @@ public final class OAuthService: OAuthServiceProtocol {
         do {
             response = try decoder.decode(OAuthTokenResponse.self, from: data)
         } catch {
+            // Security note: the response body at this point is GitHub's token-exchange reply.
+            // On success it contains only `access_token`; on failure it contains `error` and
+            // `error_description` — no credentials that could be leaked. `DecodingError`
+            // describes the structural mismatch (field name, type, path) and does not echo
+            // raw JSON values in `localizedDescription`, so logging it here is safe.
             log("OAuthService › exchangeCode: decode error — \(error.localizedDescription), calling fireSignIn(false)", category: .transport)
             fireSignIn(false)
             return

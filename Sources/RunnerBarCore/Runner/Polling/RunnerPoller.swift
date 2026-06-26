@@ -395,9 +395,6 @@ public actor RunnerPoller {
             extra.append(derivedScope)
             log("RunnerPoller › deriveExtraOrgScopes — derived '\(derivedScope)' from '\(localRunner.runnerName)'", category: .runner)
         }
-        if !extra.isEmpty {
-            log("RunnerPoller › deriveExtraOrgScopes — \(extra.count) extra org scope(s) inferred: \(extra)", category: .runner)
-        }
         return extra
     }
 
@@ -478,12 +475,15 @@ public actor RunnerPoller {
     /// skipped or retried. Each is intentional and self-correcting:
     ///
     /// 1. **`scope == nil` (pre-scope-injection entries)**
-    ///    Written before scope-injection was introduced; the Jobs API requires a full
-    ///    `owner/repo` path so these can never be backfilled. Evicting them prevents
-    ///    repeated per-poll warning spam. They re-enter the cache with correct scope
-    ///    data on the next poll cycle once a new live fetch completes. This flash is
-    ///    cosmetic, happens at most once per app lifecycle after an upgrade, and
+    ///    Written before scope-injection was introduced (pre-F-26). As of F-26,
+    ///    `fetchAllJobs` always injects scope via `.copying(scope:)` at fetch time,
+    ///    so `scope == nil` entries should only appear in the first poll cycle after
+    ///    an upgrade from a pre-F-26 build. Evicting them prevents repeated per-poll
+    ///    warning spam. They re-enter the cache with correct scope data on the next
+    ///    poll cycle once a new live fetch completes. This flash is cosmetic and
     ///    self-corrects within one poll cycle.
+    ///    TODO: Remove this guard after two release cycles once pre-F-26 cache
+    ///    entries are definitively gone from the field.
     ///
     /// 2. **Org-only scope (`!scope.contains("/")`)**
     ///    The GitHub Jobs API has no `orgs/{org}/actions/jobs/{id}` endpoint — only
