@@ -69,13 +69,15 @@ nonisolated(unsafe) private let loggers: [LogCategory: Logger] = Dictionary(
 ///
 /// **Why `preconditionFailure` and not `fatalError`?**
 /// The missing-key path is unreachable by construction — `CaseIterable` synthesis
-/// guarantees `allCases` is exhaustive. `fatalError` would crash in all build
-/// configurations including production, which is unnecessarily harsh for a path
-/// that cannot be reached. `preconditionFailure` fires in debug builds and in
-/// standard `-O` release builds (including App Store and TestFlight); it is only
-/// silenced under the rarely-used `-Ounchecked` optimisation flag. Because the
-/// path is structurally unreachable, `-O` release behaviour is acceptable — the
-/// condition will never evaluate to false in a correct build.
+/// guarantees `allCases` is exhaustive. Both `preconditionFailure` and `fatalError`
+/// crash in debug builds and in standard `-O` release builds (App Store, TestFlight).
+/// The distinction is narrow: `preconditionFailure` is elided only under `-Ounchecked`,
+/// whereas `fatalError` crashes in all configurations including `-Ounchecked`.
+/// `-Ounchecked` is rarely used in production. The choice of `preconditionFailure`
+/// signals developer intent — "this is a programmer error that is structurally
+/// unreachable" — rather than a recoverable runtime failure. Either would be
+/// acceptable here; `preconditionFailure` is the conventional Swift choice for
+/// invariant violations that should never occur in a correct build.
 ///
 /// **Compile-time vs runtime safety:** The exhaustiveness guarantee comes from
 /// `CaseIterable` synthesis — `allCases` always includes every declared case.

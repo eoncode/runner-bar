@@ -415,6 +415,13 @@ public actor RunnerPoller {
             do {
                 let payload = try decoder.decode(JobPayload.self, from: data)
                 let updated = await ISO8601DateParser.shared.makeJob(from: payload, isDimmed: true)
+                // Guard against an empty-steps API response clobbering valid cached steps.
+                // Early-queued jobs may return a payload with zero steps; in that case
+                // preserve the existing cache entry unchanged and retry on the next poll.
+                guard !updated.steps.isEmpty else {
+                    log("RunnerPoller › backfillSteps — jobID=\(cacheID) API returned 0 steps, keeping existing cache entry", category: .runner)
+                    continue
+                }
                 // Restore scope — not present in the API payload, must be carried forward.
                 cache[cacheID] = updated.copying(scope: cached.scope)
             } catch {
