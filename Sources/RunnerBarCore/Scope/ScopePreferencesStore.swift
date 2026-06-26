@@ -108,11 +108,11 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     /// changing all `setXxx` protocol signatures to `throws` with no practical benefit.
     private func write(_ prefs: ScopePreferences, for scope: String) {
         guard let data = try? encoder.encode(prefs) else {
-            log("ScopePreferencesStore › encode failed for scope: \(scope) — write skipped")
+            log("ScopePreferencesStore › encode failed for scope: \(scope) — write skipped", category: .scope)
             return
         }
         store.set(data, forKey: blobKey(for: scope))
-        log("ScopePreferencesStore › saved preferences for \(scope)")
+        log("ScopePreferencesStore › saved preferences for \(scope)", category: .scope)
     }
 
     // MARK: - ScopePreferencesStoreProtocol — bulk snapshot / write
@@ -155,7 +155,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.alias = (trimmed?.isEmpty == false) ? trimmed : nil
         write(prefs, for: scope)
-        log("ScopePreferencesStore › alias for \(scope) = \(prefs.alias ?? "nil (cleared)")")
+        log("ScopePreferencesStore › alias for \(scope) = \(prefs.alias ?? "nil (cleared)")", category: .scope)
     }
 
     /// Returns the alias for `scope` if set, otherwise the raw scope string.
@@ -177,7 +177,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         prefs.pollingInterval = interval
         write(prefs, for: scope)
-        log("ScopePreferencesStore › pollingInterval for \(scope) = \(interval.map(String.init) ?? "nil (use global)")")
+        log("ScopePreferencesStore › pollingInterval for \(scope) = \(interval.map(String.init) ?? "nil (use global)")", category: .scope)
     }
 
     // MARK: - ScopePreferencesStoreProtocol — notification overrides
@@ -194,7 +194,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         prefs.notifyOnSuccess = value
         write(prefs, for: scope)
-        log("ScopePreferencesStore › notifyOnSuccess for \(scope) = \(value.map(String.init) ?? "nil (use global)")")
+        log("ScopePreferencesStore › notifyOnSuccess for \(scope) = \(value.map(String.init) ?? "nil (use global)")", category: .scope)
     }
 
     /// - Note: For single-field updates prefer this setter. For multi-field
@@ -209,7 +209,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         prefs.notifyOnFailure = value
         write(prefs, for: scope)
-        log("ScopePreferencesStore › notifyOnFailure for \(scope) = \(value.map(String.init) ?? "nil (use global)")")
+        log("ScopePreferencesStore › notifyOnFailure for \(scope) = \(value.map(String.init) ?? "nil (use global)")", category: .scope)
     }
 
     // MARK: - ScopePreferencesStoreProtocol — failure hook
@@ -226,7 +226,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         var prefs = read(scope: scope)
         prefs.failureHookEnabled = enabled
         write(prefs, for: scope)
-        log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)")
+        log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)", category: .scope)
     }
 
     /// Returns the failure hook shell command for `scope`, or `nil` if unset or blank.
@@ -240,7 +240,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.failureHookCommand = (trimmed?.isEmpty == false) ? trimmed : nil
         write(prefs, for: scope)
-        log("ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")")
+        log("ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")", category: .scope)
     }
 
     /// Returns the local repository path for `scope`, or `nil` if unset or blank.
@@ -254,7 +254,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.localRepoPath = (trimmed?.isEmpty == false) ? trimmed : nil
         write(prefs, for: scope)
-        log("ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")")
+        log("ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")", category: .scope)
     }
 
     /// Returns the failure hook branch filter for `scope`, or `nil` if unset (runs on all branches).
@@ -269,7 +269,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines)
         prefs.failureHookBranch = (trimmed?.isEmpty == false) ? trimmed : nil
         write(prefs, for: scope)
-        log("ScopePreferencesStore › failureHookBranch for \(scope) = \(prefs.failureHookBranch ?? "nil (all branches)")")
+        log("ScopePreferencesStore › failureHookBranch for \(scope) = \(prefs.failureHookBranch ?? "nil (all branches)")", category: .scope)
     }
 
     // MARK: - ScopePreferencesStoreProtocol — cleanup
@@ -291,7 +291,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         for field in Self.legacyFields {
             store.removeObject(forKey: "scope.\(scope).\(field)")
         }
-        log("ScopePreferencesStore › cleaned up all keys for scope: \(scope)")
+        log("ScopePreferencesStore › cleaned up all keys for scope: \(scope)", category: .scope)
     }
 
     // MARK: - Migration
@@ -365,6 +365,6 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
             }
         }
         store.set(true, forKey: Self.migrationKey)
-        log("ScopePreferencesStore › migration v2 complete for \(knownScopes.count) scopes")
+        log("ScopePreferencesStore › migration v2 complete for \(knownScopes.count) scopes", category: .scope)
     }
 }

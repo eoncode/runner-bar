@@ -59,22 +59,22 @@ public final class ScopeStore {
         // Migration: convert legacy [String] key if present.
         if let legacy = store.stringArray(forKey: legacyKey),
            !legacy.isEmpty {
-            log("ScopeStore › migrating \(legacy.count) legacy scope(s) to ScopeEntry")
+            log("ScopeStore › migrating \(legacy.count) legacy scope(s) to ScopeEntry", category: .scope)
             let migrated = legacy.map { ScopeEntry(scope: $0, isEnabled: true) }
             save(migrated)
             store.removeObject(forKey: legacyKey)
             return migrated
         }
         guard let data = store.data(forKey: entriesKey) else {
-            log("ScopeStore › no stored entries found")
+            log("ScopeStore › no stored entries found", category: .scope)
             return []
         }
         do {
             let decoded = try decoder.decode([ScopeEntry].self, from: data)
-            log("ScopeStore › loaded \(decoded.count) scope entry(ies)")
+            log("ScopeStore › loaded \(decoded.count) scope entry(ies)", category: .scope)
             return decoded
         } catch {
-            log("ScopeStore › decode error: \(error) — returning empty")
+            log("ScopeStore › decode error: \(error) — returning empty", category: .scope)
             return []
         }
     }
@@ -86,9 +86,9 @@ public final class ScopeStore {
         do {
             let data = try encoder.encode(newEntries)
             store.set(data, forKey: entriesKey)
-            log("ScopeStore › saved \(newEntries.count) scope entry(ies)")
+            log("ScopeStore › saved \(newEntries.count) scope entry(ies)", category: .scope)
         } catch {
-            log("ScopeStore › encode error: \(error)")
+            log("ScopeStore › encode error: \(error)", category: .scope)
         }
     }
 
@@ -112,7 +112,7 @@ public final class ScopeStore {
         guard !trimmed.isEmpty, !entries.contains(where: { $0.scope == trimmed }) else { return }
         entries.append(ScopeEntry(scope: trimmed))
         persist()
-        log("ScopeStore › added scope: \(trimmed)")
+        log("ScopeStore › added scope: \(trimmed)", category: .scope)
     }
 
     /// Removes the entry with the given ID. No-ops if not found.
@@ -120,7 +120,7 @@ public final class ScopeStore {
         guard entries.contains(where: { $0.id == id }) else { return }
         entries.removeAll(where: { $0.id == id })
         persist()
-        log("ScopeStore › removed scope id: \(id)")
+        log("ScopeStore › removed scope id: \(id)", category: .scope)
     }
 
     /// Toggles the `isEnabled` flag for the entry with the given ID and persists
@@ -133,7 +133,7 @@ public final class ScopeStore {
         persist()
         // Log the committed value from the array, not the argument, so the log
         // remains accurate if copying(isEnabled:) ever gains filtering logic.
-        log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(entries[idx].isEnabled)")
+        log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(entries[idx].isEnabled)", category: .scope)
     }
 
     // MARK: - Display name cache
@@ -184,9 +184,9 @@ public final class ScopeStore {
             return entry.copying(displayName: alias)
         }
         if changed {
-            log("ScopeStore › refreshed display names for \(entries.count) scope(s)")
+            log("ScopeStore › refreshed display names for \(entries.count) scope(s)", category: .scope)
         } else {
-            log("ScopeStore › refreshDisplayNames: no display names changed, skipping write")
+            log("ScopeStore › refreshDisplayNames: no display names changed, skipping write", category: .scope)
         }
     }
 }
