@@ -189,6 +189,50 @@ extension ActiveJob {
         )
     }
 
+    /// Returns a copy of this job with `startedAt` replaced.
+    ///
+    /// Used in the `betterSteps` branch of `fetchJobsForRun` to carry a fresher
+    /// start timestamp from the single-job refresh response back onto the cached
+    /// job entry, without touching any other field.
+    public func copying(startedAt newValue: Date?) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: isDimmed,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: newValue,
+            completedAt: completedAt,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+
+    /// Returns a copy of this job with `runnerName` replaced.
+    ///
+    /// Used in the `betterSteps` branch of `fetchJobsForRun` to pick up a runner
+    /// name from the single-job refresh response when the original job payload
+    /// had none (e.g. a queued job that was assigned a runner mid-poll).
+    public func copying(runnerName newValue: String?) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: isDimmed,
+            runnerName: newValue,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+
     /// Returns a copy of this job with `steps` replaced.
     public func copying(steps newValue: [JobStep]) -> ActiveJob {
         ActiveJob(
@@ -216,7 +260,7 @@ extension ActiveJob {
             status: status,
             conclusion: conclusion,
             isDimmed: isDimmed,
-            runnerName: runnerName,
+            runnerName: newValue == scope ? runnerName : runnerName,
             scope: newValue,
             startedAt: startedAt,
             completedAt: completedAt,
@@ -235,7 +279,7 @@ extension ActiveJob {
     /// When the job has no recorded conclusion (e.g. an API timing race where the
     /// job disappeared before the conclusion field was populated), `.neutral` is
     /// used as the fallback. `.neutral` is the correct "inconclusive" value and
-    /// avoids the semantic side-effects of `.cancelled` (hook firing, ⊘ icon).
+    /// avoids the semantic side-effects of `.cancelled` (hook firing, ⊗ icon).
     /// - Parameter fallbackDate: Date used as `completedAt` when the job has none.
     public func asCompleted(at fallbackDate: Date) -> ActiveJob {
         ActiveJob(
@@ -245,7 +289,7 @@ extension ActiveJob {
             status: .completed,
             // .neutral: inconclusive fallback for jobs that vanished before the API
             // populated their conclusion field. Avoids .cancelled side-effects
-            // (isHookConclusion=true, conclusionIcon=⊘).
+            // (isHookConclusion=true, conclusionIcon=⊗).
             conclusion: conclusion ?? .neutral,
             isDimmed: true,
             runnerName: runnerName,

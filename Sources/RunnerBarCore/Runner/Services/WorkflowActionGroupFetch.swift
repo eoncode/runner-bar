@@ -370,20 +370,15 @@ public struct WorkflowActionGroupFetcher: Sendable {
                     if fresh.conclusion != nil { return (idx, freshJob) }
                     let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
                     if betterSteps {
-                        return (idx, ActiveJob(
-                            id: job.id,
-                            name: job.name,
-                            htmlUrl: job.htmlUrl,
-                            status: job.status,
-                            conclusion: job.conclusion,
-                            isDimmed: job.isDimmed,
-                            runnerName: freshJob.runnerName ?? job.runnerName,
-                            scope: job.scope,
-                            startedAt: freshJob.startedAt ?? job.startedAt,
-                            completedAt: freshJob.completedAt ?? job.completedAt,
-                            createdAt: job.createdAt,
-                            steps: freshJob.steps
-                        ))
+                        // Use copying() helpers rather than the full constructor so that any
+                        // future field added to ActiveJob with a non-nil default is automatically
+                        // preserved from `job` without requiring a manual update here.
+                        return (idx, job
+                            .copying(runnerName: freshJob.runnerName ?? job.runnerName)
+                            .copying(startedAt: freshJob.startedAt ?? job.startedAt)
+                            .copying(completedAt: freshJob.completedAt ?? job.completedAt)
+                            .copying(steps: freshJob.steps)
+                        )
                     }
                     return (idx, nil)
                 }
