@@ -69,17 +69,17 @@ extension RunnerPoller {
                 scopeFromGroup: { [weak self] group in
                     self?.scopeFromActionGroup(group) ?? ""
                 },
-                fireFailureHook: { group, scope in
+                fireFailureHook: { [weak self] group, scope in
                     // PollResultBuilder.buildGroupState (and freezeVanishedGroups) already
                     // `await` this closure directly — no Task wrapper needed or correct here.
                     // The hook runs inline on the cooperative thread pool as part of the
                     // structured async chain that buildGroupState owns.
                     // `fireFailureHook` is injected at init by the app layer so Core never
                     // imports `FailureHookRunner`.
-                    await self.fireFailureHook(group, scope)
+                    await self?.fireFailureHook(group, scope)
                 },
-                enrichJobs: { jobs in
-                    self.enrichGroupJobs(jobs, jobCache: jobCacheSnapshot)
+                enrichJobs: { [weak self] jobs in
+                    self?.enrichGroupJobs(jobs, jobCache: jobCacheSnapshot) ?? jobs
                 }
             )
         )
@@ -91,6 +91,9 @@ extension RunnerPoller {
     /// fetches the full job payload from the GitHub API, and updates the cache entry.
     /// Uses `decoder` — a stored instance property on `RunnerPoller` — which is serialised
     /// by the actor's own executor, ensuring no concurrent access.
+    ///
+    /// `isDimmed` is preserved from the existing cache entry: backfilled jobs are completed
+    /// jobs that have already vanished from the live feed, so they must remain dimmed in the UI.
     func backfillSteps(into cache: inout [Int: ActiveJob]) async {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
@@ -98,7 +101,9 @@ extension RunnerPoller {
             guard cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress }) else { continue }
             guard let data = await ghAPI("repos/\(cached.repo)/actions/jobs/\(cacheID)") else { continue }
             guard let updated = try? decoder.decode(ActiveJob.self, from: data) else { continue }
-            cache[cacheID] = updated
+            // Preserve `isDimmed` — it is a local display flag not present in the API response.
+            // Backfilled entries are always dimmed (they are completed jobs no longer in the live feed).
+            cache[cacheID] = updated.copying(isDimmed: true)
         }
     }
 
@@ -151,6 +156,9 @@ extension RunnerPoller {
             //
             // cacheHasBetterSteps: the cache has fully-resolved steps while the live payload
             // still shows in-progress ones (backfill ran after the main fetch).
+            // The guard `!cached.steps.contains { $0.status == .inProgress }` is intentional:
+            // we must not prefer cache steps that are themselves still in-progress, as that
+            // would replace fresher live data with staler cached data.
             //
             // When only cacheHasConclusion fires (cacheHasBetterSteps is false), the merged
             // job carries conclusion from the cache and steps from the live job. This is
@@ -163,6 +171,7 @@ extension RunnerPoller {
             let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
             let cacheHasBetterSteps = !cached.steps.isEmpty
                 && (job.steps.isEmpty || job.steps.contains { $0.status == .inProgress })
+                && !cached.steps.contains { $0.status == .inProgress }
             guard cacheHasConclusion || cacheHasBetterSteps else { return job }
             return job
                 .copying(conclusion: cacheHasConclusion ? cached.conclusion : job.conclusion)
