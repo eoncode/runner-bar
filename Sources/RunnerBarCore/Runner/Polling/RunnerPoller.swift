@@ -30,48 +30,48 @@ public actor RunnerPoller {
     // MARK: - State
 
     /// Runners currently shown in the panel.
-    private(set) var runners: [Runner] = []
+    var runners: [Runner] = []
     /// Jobs currently shown in the panel, including dimmed completed entries.
-    private(set) var jobs: [ActiveJob] = []
+    var jobs: [ActiveJob] = []
     /// Workflow action groups currently shown in the panel.
-    private(set) var actions: [WorkflowActionGroup] = []
+    var actions: [WorkflowActionGroup] = []
     /// Live-job snapshot from the previous poll, used to detect vanished jobs.
-    private var prevLiveJobs: [Int: ActiveJob] = [:]
+    var prevLiveJobs: [Int: ActiveJob] = [:]
     /// Completed-job cache keyed by job ID; capped at `PollResultBuilder.jobCacheLimit`.
-    private var completedCache: [Int: ActiveJob] = [:]
+    var completedCache: [Int: ActiveJob] = [:]
     /// Live-group snapshot from the previous poll, used to detect vanished groups.
-    private var prevLiveGroups: [String: WorkflowActionGroup] = [:]
+    var prevLiveGroups: [String: WorkflowActionGroup] = [:]
     /// Group cache keyed by group ID; capped at `PollResultBuilder.groupCacheLimit`.
-    private var actionGroupCache: [String: WorkflowActionGroup] = [:]
+    var actionGroupCache: [String: WorkflowActionGroup] = [:]
     /// IDs of action groups whose failure hook has already fired.
     ///
     /// Kept separate from `actionGroupCache` so that cache eviction does not re-arm
     /// the hook for old completed groups still present in GitHub's last-completed feed.
     /// `OrderedSet` preserves insertion order so `trimSeenGroupIDs` evicts the
     /// oldest entries first (FIFO), rather than arbitrary ones as `Set` would.
-    private var seenGroupIDs: OrderedSet<String> = []
+    var seenGroupIDs: OrderedSet<String> = []
     /// Whether the GitHub API is currently rate-limiting this client.
-    private(set) var isRateLimited = false
+    var isRateLimited = false
     /// The exact moment the current rate-limit window expires, or `nil` when no
     /// rate-limit is active or the reset time is unknown.
     /// Assigned in `applyFetchResult` and written to `state`. periphery:ignore
-    private(set) var rateLimitResetDate: Date?
+    var rateLimitResetDate: Date?
     /// Owns the three structured `Task` handles for the poll loop.
-    private let pollLoop = PollLoopCoordinator()
+    let pollLoop = PollLoopCoordinator()
     /// Observable read model — the source of truth for all views and AppDelegate observers.
     public let state: RunnerState
     /// Returns the current local-runner snapshot on the `@MainActor`.
     /// Injected at init so the actor body never imports the app-layer `LocalRunnerStore`.
-    private let localRunners: @MainActor @Sendable () -> [RunnerModel]
+    let localRunners: @MainActor @Sendable () -> [RunnerModel]
     /// Writes metrics back into the local runner store.
     /// Injected at init to decouple Core from the app-layer `LocalRunnerStore` actor.
-    private let applyMetrics: @Sendable (_ metrics: RunnerMetrics?, _ runnerId: Int, _ name: String) async -> Void
+    let applyMetrics: @Sendable (_ metrics: RunnerMetrics?, _ runnerId: Int, _ name: String) async -> Void
     /// Fires a failure hook for a newly-failed workflow action group.
     /// Injected at init so Core never imports the app-layer `FailureHookRunner`.
     /// `internal` so that extension files (e.g. `RunnerPoller+PollBridge`) can call it.
     let fireFailureHook: @Sendable (_ group: WorkflowActionGroup, _ scope: String) async -> Void
     /// Injected preferences store. Provides `pollingInterval`.
-    private let preferencesStore: any AppPreferencesStoreProtocol
+    let preferencesStore: any AppPreferencesStoreProtocol
     /// Injected scope store. Provides `activeScopes`.
     /// `internal` (not `private`) so that extension files can read this property.
     internal let scopeStore: any ScopeStoreProtocol
