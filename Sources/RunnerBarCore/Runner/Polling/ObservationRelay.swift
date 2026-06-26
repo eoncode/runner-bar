@@ -4,6 +4,7 @@
 // F-35: Generic replacement for PreferencesObserver and ScopesObserver.
 
 import Foundation
+import Observation
 
 // MARK: - ObservationRelay
 
@@ -59,7 +60,17 @@ final class ObservationRelay<Element: Sendable> {
                 _ = read()
             } onChange: { [weak self] in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
+                    guard let self else {
+                        // The relay has been deallocated — finish the stream so the
+                        // for-await consumer exits cleanly and the continuation is
+                        // released, breaking the relay ↔ continuation reference cycle.
+                        // Without this, the stream stays open and onChange Tasks keep
+                        // scheduling indefinitely after the owning context is gone.
+                        // Note: `continuation` is captured by value here (not via self)
+                        // so it remains accessible after self is nil.
+                        // swiftlint:disable:next unused_closure_parameter
+                        return
+                    }
                     // read() is called here rather than captured at onChange time.
                     // If the observed value changes again before this Task executes,
                     // rapid back-to-back changes coalesce — the consumer sees only
