@@ -74,7 +74,7 @@ public actor LocalRunnerStore {
             Task { await previous.shutdown() }
         }
         sharedInstance = LocalRunnerStore(viewModel: viewModel)
-        log("LocalRunnerStore › configure — shared instance created, wired to viewModel=\(ObjectIdentifier(viewModel))")
+        log("LocalRunnerStore › configure — shared instance created, wired to viewModel=\(ObjectIdentifier(viewModel))", category: .runner)
     }
 
     // MARK: - Internal actor state
@@ -120,7 +120,7 @@ public actor LocalRunnerStore {
     ) {
         self.viewModel = viewModel
         self.enricher = enricher
-        log("LocalRunnerStore › init — runnerIndex.count=\(index.runnerIndex.count), runners=[] (call refresh() to hydrate)")
+        log("LocalRunnerStore › init — runnerIndex.count=\(index.runnerIndex.count), runners=[] (call refresh() to hydrate)", category: .runner)
     }
 
     // MARK: - Shutdown
@@ -133,7 +133,7 @@ public actor LocalRunnerStore {
     public func shutdown() {
         refreshTask?.cancel()
         refreshTask = nil
-        log("LocalRunnerStore › shutdown — refreshTask cancelled")
+        log("LocalRunnerStore › shutdown — refreshTask cancelled", category: .runner)
     }
 
     // MARK: - Index helpers
@@ -158,15 +158,15 @@ public actor LocalRunnerStore {
 
     /// Registers a new runner by name and install path.
     public func add(runnerName: String, installPath: String) {
-        log("LocalRunnerStore › add — '\(runnerName)' at \(installPath)")
+        log("LocalRunnerStore › add — '\(runnerName)' at \(installPath)", category: .runner)
         register(name: runnerName, installPath: installPath)
     }
 
     /// Immediately reflects a start/stop action before the next refresh cycle.
     public func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) async {
-        log("LocalRunnerStore › optimisticallySetRunning '\(runnerName)' isRunning=\(isRunning)")
+        log("LocalRunnerStore › optimisticallySetRunning '\(runnerName)' isRunning=\(isRunning)", category: .runner)
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else {
-            log("LocalRunnerStore › ⚠️ optimisticallySetRunning — '\(runnerName)' not found in runners (count=\(runners.count))")
+            log("LocalRunnerStore › ⚠️ optimisticallySetRunning — '\(runnerName)' not found in runners (count=\(runners.count))", category: .runner)
             return
         }
         runners[idx] = runners[idx].copying(isRunning: isRunning)
@@ -175,9 +175,9 @@ public actor LocalRunnerStore {
 
     /// Sets or clears the lifecycle warning badge for a runner.
     public func setLifecycleWarning(_ runnerName: String, warning: String?) async {
-        log("LocalRunnerStore › setLifecycleWarning '\(runnerName)' warning=\(String(describing: warning))")
+        log("LocalRunnerStore › setLifecycleWarning '\(runnerName)' warning=\(String(describing: warning))", category: .runner)
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else {
-            log("LocalRunnerStore › ⚠️ setLifecycleWarning — '\(runnerName)' not found in runners (count=\(runners.count))")
+            log("LocalRunnerStore › ⚠️ setLifecycleWarning — '\(runnerName)' not found in runners (count=\(runners.count))", category: .runner)
             return
         }
         runners[idx] = runners[idx].copying(lifecycleWarning: warning)
@@ -186,27 +186,27 @@ public actor LocalRunnerStore {
 
     /// Immediately removes `runnerName` from the index and display list without waiting for a refresh.
     public func optimisticallyRemove(_ runnerName: String) async {
-        log("LocalRunnerStore › optimisticallyRemove '\(runnerName)'")
+        log("LocalRunnerStore › optimisticallyRemove '\(runnerName)'", category: .runner)
         unregister(name: runnerName)
         let beforeCount = runners.count
         runners.removeAll { $0.runnerName == runnerName }
-        log("LocalRunnerStore › optimisticallyRemove '\(runnerName)' — runners \(beforeCount)→\(runners.count)")
+        log("LocalRunnerStore › optimisticallyRemove '\(runnerName)' — runners \(beforeCount)→\(runners.count)", category: .runner)
         await pushRunners()
     }
 
     /// Rolls back an `optimisticallyRemove` by re-registering the runner and restoring it.
     public func optimisticallyRestore(_ runner: RunnerModel) async {
-        log("LocalRunnerStore › optimisticallyRestore '\(runner.runnerName)' installPath=\(String(describing: runner.installPath))")
+        log("LocalRunnerStore › optimisticallyRestore '\(runner.runnerName)' installPath=\(String(describing: runner.installPath))", category: .runner)
         if let installPath = runner.installPath {
             register(name: runner.runnerName, installPath: installPath)
         } else {
-            log("LocalRunnerStore › ⚠️ optimisticallyRestore — no installPath for '\(runner.runnerName)', index entry NOT restored")
+            log("LocalRunnerStore › ⚠️ optimisticallyRestore — no installPath for '\(runner.runnerName)', index entry NOT restored", category: .runner)
         }
         if !runners.contains(where: { $0.runnerName == runner.runnerName }) {
             runners.append(runner)
-            log("LocalRunnerStore › optimisticallyRestore — appended '\(runner.runnerName)', runners.count=\(runners.count)")
+            log("LocalRunnerStore › optimisticallyRestore — appended '\(runner.runnerName)', runners.count=\(runners.count)", category: .runner)
         } else {
-            log("LocalRunnerStore › optimisticallyRestore — '\(runner.runnerName)' already present, skipped append")
+            log("LocalRunnerStore › optimisticallyRestore — '\(runner.runnerName)' already present, skipped append", category: .runner)
         }
         await pushRunners()
     }
@@ -221,31 +221,31 @@ public actor LocalRunnerStore {
     ///   3. runner.runnerName == name  (name-only last resort)
     public func applyMetrics(_ metrics: RunnerMetrics?, forRunnerId runnerId: Int?, name: String) async {
         #if DEBUG
-        log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))")
+        log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))", category: .runner)
         // swiftlint:disable:next line_length
-        log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
+        log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })", category: .runner)
         #endif
 
         guard let idx = runners.firstIndex(where: { runner in
             if let rid = runnerId, let aid = runner.apiId, aid == rid {
-                log("LocalRunnerStore › applyMetrics — MATCH via apiId=\(aid) for '\(runner.runnerName)'")
+                log("LocalRunnerStore › applyMetrics — MATCH via apiId=\(aid) for '\(runner.runnerName)'", category: .runner)
                 return true
             }
             if let rid = runnerId, let aid = runner.agentId, aid == rid {
-                log("LocalRunnerStore › applyMetrics — MATCH via agentId=\(aid) for '\(runner.runnerName)'")
+                log("LocalRunnerStore › applyMetrics — MATCH via agentId=\(aid) for '\(runner.runnerName)'", category: .runner)
                 return true
             }
             if runner.runnerName == name {
-                log("LocalRunnerStore › applyMetrics — MATCH via name='\(name)' for '\(runner.runnerName)'")
+                log("LocalRunnerStore › applyMetrics — MATCH via name='\(name)' for '\(runner.runnerName)'", category: .runner)
                 return true
             }
             return false
         }) else {
             // swiftlint:disable:next line_length
-            log("LocalRunnerStore › ⚠️ applyMetrics — NO MATCH for runnerId=\(String(describing: runnerId)) name=\(name). runners=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
+            log("LocalRunnerStore › ⚠️ applyMetrics — NO MATCH for runnerId=\(String(describing: runnerId)) name=\(name). runners=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })", category: .runner)
             return
         }
-        log("LocalRunnerStore › applyMetrics — writing metrics=\(String(describing: metrics)) to '\(runners[idx].runnerName)'")
+        log("LocalRunnerStore › applyMetrics — writing metrics=\(String(describing: metrics)) to '\(runners[idx].runnerName)'", category: .runner)
         runners[idx] = runners[idx].copying(metrics: metrics)
         await pushRunners()
     }
@@ -261,7 +261,7 @@ public actor LocalRunnerStore {
     /// called after `runners` is fully populated — ensuring cycle-1 `installPathMap`
     /// is never empty and metrics appear on first runner appearance.
     public func refresh() {
-        log("LocalRunnerStore › refresh() — fire-and-forget wrapper")
+        log("LocalRunnerStore › refresh() — fire-and-forget wrapper", category: .runner)
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             await self?.performRefresh()
@@ -283,32 +283,32 @@ public actor LocalRunnerStore {
     /// IMPORTANT: This is the ONLY way `runners` gets populated.
     /// `init()` only loads `runnerIndex` (name→path). `runners` stays `[]` until this runs.
     private func performRefresh() async {
-        log("LocalRunnerStore › performRefresh() — isScanning=\(isScanning) runnerIndex.count=\(index.runnerIndex.count) runners.count=\(runners.count)")
+        log("LocalRunnerStore › performRefresh() — isScanning=\(isScanning) runnerIndex.count=\(index.runnerIndex.count) runners.count=\(runners.count)", category: .runner)
         guard !isScanning else {
-            log("LocalRunnerStore › performRefresh() — already scanning, skipping (isScanning=true)")
+            log("LocalRunnerStore › performRefresh() — already scanning, skipping (isScanning=true)", category: .runner)
             return
         }
         isScanning = true
         await MainActor.run { [viewModel] in viewModel.isLocalScanning = true }
         let currentIndex = index.runnerIndex
-        log("LocalRunnerStore › performRefresh() — starting with index=\(currentIndex.keys.sorted())")
+        log("LocalRunnerStore › performRefresh() — starting with index=\(currentIndex.keys.sorted())", category: .runner)
 
         // 1. Hydrate from installPath/.runner JSON
         var hydrated: [RunnerModel] = currentIndex.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
-        log("LocalRunnerStore › performRefresh() hydrated \(hydrated.count) runner(s) from disk (index had \(currentIndex.count) entries)")
+        log("LocalRunnerStore › performRefresh() hydrated \(hydrated.count) runner(s) from disk (index had \(currentIndex.count) entries)", category: .runner)
         if hydrated.count != currentIndex.count {
             let hydratedNames = Set(hydrated.map { $0.runnerName })
             let missing = currentIndex.keys.filter { !hydratedNames.contains($0) }
-            log("LocalRunnerStore › ⚠️ performRefresh() — \(currentIndex.count - hydrated.count) runner(s) failed to hydrate (missing .runner JSON): \(missing)")
+            log("LocalRunnerStore › ⚠️ performRefresh() — \(currentIndex.count - hydrated.count) runner(s) failed to hydrate (missing .runner JSON): \(missing)", category: .runner)
         }
 
         // 2. Mark live services via launchctl.
         let liveLabels = await scanLiveServices()
-        log("LocalRunnerStore › performRefresh() — launchctl liveLabels.count=\(liveLabels.count): \(liveLabels)")
+        log("LocalRunnerStore › performRefresh() — launchctl liveLabels.count=\(liveLabels.count): \(liveLabels)", category: .runner)
         hydrated = hydrated.map { runner in
             let live = liveLabels.contains { $0.contains(runner.runnerName) }
             #if DEBUG
-            log("LocalRunnerStore › performRefresh() — '\(runner.runnerName)' isRunning=\(live)")
+            log("LocalRunnerStore › performRefresh() — '\(runner.runnerName)' isRunning=\(live)", category: .runner)
             #endif
             return runner.copying(isRunning: live)
         }
@@ -316,11 +316,11 @@ public actor LocalRunnerStore {
         // 3. Enrich via GitHub API (concurrent scope fetches).
         // Uses the injected enricher — pass RunnerStatusEnricher() in production,
         // or a StubEnricher in unit tests (Phase 6b, #1326).
-        log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
+        log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)", category: .runner)
         let enriched = await enricher.enrich(runners: hydrated)
-        log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
+        log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched", category: .runner)
         #if DEBUG
-        log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
+        log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })", category: .runner)
         #endif
 
         await applyRefreshResults(enriched)
@@ -337,7 +337,7 @@ public actor LocalRunnerStore {
     /// (not via a fire-and-forget Task) so that a concurrent scan cannot set it back
     /// to `true` between `isScanning = false` and the main-actor push.
     private func applyRefreshResults(_ enriched: [RunnerModel]) async {
-        log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
+        log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)", category: .runner)
 
         var metricsByApiId: [Int: RunnerMetrics] = [:]
         var metricsByAgentId: [Int: RunnerMetrics] = [:]
@@ -349,36 +349,36 @@ public actor LocalRunnerStore {
             metricsByName[runner.runnerName] = preservedMetrics  // Priority 3: name (last resort)
         }
         #if DEBUG
-        log("LocalRunnerStore › applyRefreshResults — preserved metrics: byApiId=\(metricsByApiId.keys.sorted()) byAgentId=\(metricsByAgentId.keys.sorted()) byName=\(metricsByName.keys.sorted())")
+        log("LocalRunnerStore › applyRefreshResults — preserved metrics: byApiId=\(metricsByApiId.keys.sorted()) byAgentId=\(metricsByAgentId.keys.sorted()) byName=\(metricsByName.keys.sorted())", category: .runner)
         #endif
 
         let preserved: [RunnerModel] = enriched.map { runner in
             if let id = runner.apiId, let metrics = metricsByApiId[id] {
                 #if DEBUG
-                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)")
+                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)", category: .runner)
                 #endif
                 return runner.copying(metrics: metrics)
             }
             if let id = runner.agentId, let metrics = metricsByAgentId[id] {
                 #if DEBUG
-                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)")
+                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)", category: .runner)
                 #endif
                 return runner.copying(metrics: metrics)
             }
             if let metrics = metricsByName[runner.runnerName] {
                 #if DEBUG
-                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name")
+                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name", category: .runner)
                 #endif
                 return runner.copying(metrics: metrics)
             }
             #if DEBUG
-            log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)'")
+            log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)'", category: .runner)
             #endif
             return runner
         }
         runners = preserved.sorted { $0.runnerName < $1.runnerName }
         isScanning = false
-        log("LocalRunnerStore › applyRefreshResults — DONE. runners.count=\(runners.count) isScanning=false")
+        log("LocalRunnerStore › applyRefreshResults — DONE. runners.count=\(runners.count) isScanning=false", category: .runner)
         // Await directly — not fire-and-forget — so isLocalScanning cannot be
         // reset to false by a stale Task after a second scan has already started.
         let snapshot = runners
@@ -409,7 +409,7 @@ public actor LocalRunnerStore {
 
     /// Runs `launchctl list` and returns lines that contain `actions.runner`.
     private func scanLiveServices() async -> [String] {
-        log("LocalRunnerStore › scanLiveServices — running launchctl list")
+        log("LocalRunnerStore › scanLiveServices — running launchctl list", category: .runner)
         let result = await ProcessRunner.runAsync(
             executableURL: Self.launchctlURL,
             arguments: ["list"],
@@ -417,11 +417,11 @@ public actor LocalRunnerStore {
         )
         guard let data = result.data,
               let output = String(data: data, encoding: .utf8) else {
-            log("LocalRunnerStore › ⚠️ scanLiveServices — launchctl returned no data or non-UTF8 output")
+            log("LocalRunnerStore › ⚠️ scanLiveServices — launchctl returned no data or non-UTF8 output", category: .runner)
             return []
         }
         let lines = output.components(separatedBy: "\n").filter { $0.contains("actions.runner") }
-        log("LocalRunnerStore › scanLiveServices — found \(lines.count) live actions.runner service(s)")
+        log("LocalRunnerStore › scanLiveServices — found \(lines.count) live actions.runner service(s)", category: .runner)
         return lines
     }
 }

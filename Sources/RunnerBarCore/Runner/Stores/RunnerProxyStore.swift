@@ -101,7 +101,7 @@ private func loadProxyFiles(proxyURL: URL, credURL: URL) async -> RunnerProxyCon
     } catch let err as NSError where err.code == NSFileNoSuchFileError {
         url = ""
     } catch {
-        log("RunnerProxyStore › .proxy read error (using empty): \(error)")
+        log("RunnerProxyStore › .proxy read error (using empty): \(error)", category: .runner)
         url = ""
     }
 
@@ -113,7 +113,7 @@ private func loadProxyFiles(proxyURL: URL, credURL: URL) async -> RunnerProxyCon
     } catch let err as NSError where err.code == NSFileNoSuchFileError {
         // Missing credentials file is expected — most runners have no proxy.
     } catch {
-        log("RunnerProxyStore › .proxycredentials read error (using empty): \(error)")
+        log("RunnerProxyStore › .proxycredentials read error (using empty): \(error)", category: .runner)
     }
 
     return RunnerProxyConfig(url: url, user: user, password: credential)
@@ -144,7 +144,7 @@ private func saveProxyFiles(
         try writeProxyURL(url, to: proxyURL)
     } catch {
         let msg = ".proxy write error: \(error)"
-        log("RunnerProxyStore › \(msg)")
+        log("RunnerProxyStore › \(msg)", category: .runner)
         messages.append(msg)
     }
 
@@ -152,7 +152,7 @@ private func saveProxyFiles(
         try writeProxyCredentials(user: user, secret: secret, to: credURL)
     } catch {
         let msg = ".proxycredentials write error: \(error)"
-        log("RunnerProxyStore › \(msg)")
+        log("RunnerProxyStore › \(msg)", category: .runner)
         messages.append(msg)
     }
 

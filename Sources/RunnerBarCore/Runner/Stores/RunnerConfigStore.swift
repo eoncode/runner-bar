@@ -111,7 +111,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
         } catch {
-            log("RunnerConfigStore › load failed for \(url.path): \(error)")
+            log("RunnerConfigStore › load failed for \(url.path): \(error)", category: .runner)
             throw RunnerConfigStoreError.decodeFailed(installPath)
         }
     }
@@ -215,7 +215,7 @@ private func saveRunnerConfig(
             // File is readable but not decodable as JSON — malformed.
             // Proceeding from an empty dict would silently drop agent-managed
             // keys (e.g. jitConfig), de-registering ephemeral JIT runners.
-            log("RunnerConfigStore › save: existing .runner at \(url.path) is malformed; aborting save to protect agent-managed keys")
+            log("RunnerConfigStore › save: existing .runner at \(url.path) is malformed; aborting save to protect agent-managed keys", category: .runner)
             throw RunnerConfigStoreError.malformedExistingFile(installPath)
         }
     } catch let configError as RunnerConfigStoreError {
@@ -225,12 +225,12 @@ private func saveRunnerConfig(
         if isNoSuchFileError(error) {
             // File does not exist yet — first registration. Writing from an empty
             // dict is correct; there are no agent-managed keys to preserve.
-            log("RunnerConfigStore › save: no existing .runner at \(url.path); writing from scratch")
+            log("RunnerConfigStore › save: no existing .runner at \(url.path); writing from scratch", category: .runner)
         } else {
             // File is present but could not be read (permissions, I/O error).
             // Proceeding from an empty dict would silently drop agent-managed keys
             // (e.g. jitConfig, gitHubUrl). Throw so the caller surfaces the error. (#1499)
-            log("RunnerConfigStore › save: could not read existing .runner at \(url.path): \(error); aborting to protect agent-managed keys")
+            log("RunnerConfigStore › save: could not read existing .runner at \(url.path): \(error); aborting to protect agent-managed keys", category: .runner)
             throw RunnerConfigStoreError.ioReadFailedDuringSave(installPath, error)
         }
     }
@@ -261,9 +261,9 @@ private func saveRunnerConfig(
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(raw)
         try data.write(to: url, options: .atomic)
-        log("RunnerConfigStore › saved config to \(url.path)")
+        log("RunnerConfigStore › saved config to \(url.path)", category: .runner)
     } catch {
-        log("RunnerConfigStore › save failed for \(url.path): \(error)")
+        log("RunnerConfigStore › save failed for \(url.path): \(error)", category: .runner)
         throw RunnerConfigStoreError.writeFailed(installPath, error)
     }
 }

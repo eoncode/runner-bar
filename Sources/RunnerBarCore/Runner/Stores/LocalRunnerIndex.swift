@@ -44,14 +44,14 @@ public final class LocalRunnerIndex {
 
     /// Adds or updates the index entry for `name`, mapping it to `installPath`, then persists.
     public func register(name: String, installPath: String) {
-        log("LocalRunnerIndex › register — '\(name)' at \(installPath) (was: \(String(describing: runnerIndex[name])))")
+        log("LocalRunnerIndex › register — '\(name)' at \(installPath) (was: \(String(describing: runnerIndex[name])))", category: .runner)
         runnerIndex[name] = installPath
         persistIndex()
     }
 
     /// Removes `name` from the persisted index.
     public func unregister(name: String) {
-        log("LocalRunnerIndex › unregister '\(name)'")
+        log("LocalRunnerIndex › unregister '\(name)'", category: .runner)
         runnerIndex.removeValue(forKey: name)
         persistIndex()
     }
@@ -71,9 +71,9 @@ public final class LocalRunnerIndex {
         if let data = defaults.data(forKey: Self.indexKey) {
             do {
                 runnerIndex = try JSONDecoder().decode([String: String].self, from: data)
-                log("LocalRunnerIndex › loadIndex — \(runnerIndex.count) entry(ies): \(runnerIndex.keys.sorted())")
+                log("LocalRunnerIndex › loadIndex — \(runnerIndex.count) entry(ies): \(runnerIndex.keys.sorted())", category: .runner)
             } catch {
-                log("LocalRunnerIndex › loadIndex — JSON decode failed: \(error). Starting with empty index.")
+                log("LocalRunnerIndex › loadIndex — JSON decode failed: \(error). Starting with empty index.", category: .runner)
                 runnerIndex = [:]
             }
         } else if let legacy = defaults.dictionary(forKey: Self.indexKey) as? [String: String] {
@@ -85,13 +85,13 @@ public final class LocalRunnerIndex {
             runnerIndex = legacy
             persistIndex()
             if defaults.data(forKey: Self.indexKey) != nil {
-                log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON")
+                log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON", category: .runner)
             } else {
-                log("LocalRunnerIndex › loadIndex — migration encode failed; plist retained, will retry next launch")
+                log("LocalRunnerIndex › loadIndex — migration encode failed; plist retained, will retry next launch", category: .runner)
             }
         } else {
             runnerIndex = [:]
-            log("LocalRunnerIndex › loadIndex — no data found, starting empty")
+            log("LocalRunnerIndex › loadIndex — no data found, starting empty", category: .runner)
         }
     }
 
@@ -101,9 +101,9 @@ public final class LocalRunnerIndex {
         do {
             let data = try JSONEncoder().encode(runnerIndex)
             defaults.set(data, forKey: Self.indexKey)
-            log("LocalRunnerIndex › persistIndex — \(runnerIndex.count) entry(ies) written")
+            log("LocalRunnerIndex › persistIndex — \(runnerIndex.count) entry(ies) written", category: .runner)
         } catch {
-            log("LocalRunnerIndex › persistIndex — encode failed: \(error)")
+            log("LocalRunnerIndex › persistIndex — encode failed: \(error)", category: .runner)
         }
     }
 }
