@@ -38,10 +38,10 @@ private let subsystem = "com.eoncode.runner-bar"
 /// One `os.Logger` per `LogCategory`, created once at launch.
 ///
 /// Built from `LogCategory.allCases` via `uniqueKeysWithValues`, so the dictionary
-/// is guaranteed to contain every current case. `resolvedLogger(for:)` depends on this
-/// invariant — if a new case is added without a corresponding entry in this dictionary,
-/// `resolvedLogger` will call `fatalError` and crash in all builds, surfacing the
-/// omission immediately rather than silently allocating a new `Logger` per call.
+/// is guaranteed to contain every current case at the time this line executes.
+/// `resolvedLogger(for:)` depends on this invariant and uses `fatalError` (not
+/// `preconditionFailure`) if a key is ever missing — see that function for the
+/// detailed rationale.
 ///
 /// `nonisolated(unsafe)` suppresses the `#MutableGlobalVariable` warning that Swift 6
 /// strict-concurrency mode emits for top-level `let` bindings of non-`Sendable` types.
@@ -55,14 +55,26 @@ nonisolated(unsafe) private let loggers: [LogCategory: Logger] = Dictionary(
 
 /// Returns the `os.Logger` for the given category.
 ///
-/// `loggers` is built from `LogCategory.allCases` and is therefore guaranteed to
-/// contain every case. A missing entry means a `LogCategory` case was added without
-/// a corresponding entry in `loggers` — a programmer error. `fatalError` crashes
-/// in all builds (not debug-only), making the omission impossible to miss regardless
-/// of build configuration.
+/// Under normal operation this function always succeeds: `loggers` is built from
+/// `LogCategory.allCases` via `uniqueKeysWithValues`, guaranteeing every case is
+/// present. The `guard` branch is therefore structurally unreachable at runtime.
+///
+/// **Why `fatalError` and not `preconditionFailure`?**
+/// `preconditionFailure` is eliminated by the optimiser in `-Ounchecked` release
+/// builds, making it invisible in App Store / notarised binaries. `fatalError` is
+/// never stripped — it fires in every build configuration. Because a missing entry
+/// can only arise from a programmer error (adding a `LogCategory` case without
+/// re-checking this file), it should crash loudly everywhere, not just in debug.
+/// The crash message names the missing category so the fix is self-evident.
+///
+/// **Why not `assertionFailure` + a silent fallback logger?**
+/// A silent fallback would silently allocate a new `os.Logger` instance on every
+/// `log()` call for the unrecognised category, producing log output under the wrong
+/// (or empty) category string with no indication anything is wrong. That failure
+/// mode is harder to diagnose than an immediate crash.
 @inline(__always)
 private func resolvedLogger(for category: LogCategory) -> Logger {
-    // allCases guarantees every case is present; a nil result is a programmer error.
+    // This guard is structurally unreachable — see doc comment above for rationale.
     guard let logger = loggers[category] else {
         fatalError("Logger for category '\(category.rawValue)' not found — add it to LogCategory.allCases")
     }
