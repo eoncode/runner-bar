@@ -177,9 +177,14 @@ extension RunnerPoller {
             //
             // cacheHasBetterSteps: the cache has fully-resolved steps while the live payload
             // still shows in-progress ones (backfill ran after the main fetch).
-            // The guard `!cached.steps.contains { $0.status == .inProgress }` is intentional:
-            // we must not prefer cache steps that are themselves still in-progress, as that
-            // would replace fresher live data with staler cached data.
+            //
+            // The third clause `(job.steps.isEmpty || !cached.steps.contains { .inProgress })`
+            // guards against overwriting fresher live steps with staler cached in-progress ones.
+            // The `job.steps.isEmpty` short-circuit is intentional: when the live payload has
+            // no steps at all, there is no live data to protect — showing partial cached steps
+            // (even if some are still in-progress) is strictly better than showing zero rows
+            // for an entire poll cycle. The settled-cache guard only applies when the live
+            // payload itself has step entries that could be overwritten.
             //
             // When only cacheHasConclusion fires (cacheHasBetterSteps is false), the merged
             // job carries conclusion from the cache and steps from the live job. This is
@@ -200,7 +205,7 @@ extension RunnerPoller {
             let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
             let cacheHasBetterSteps = !cached.steps.isEmpty
                 && (job.steps.isEmpty || job.steps.contains { $0.status == .inProgress })
-                && !cached.steps.contains { $0.status == .inProgress }
+                && (job.steps.isEmpty || !cached.steps.contains { $0.status == .inProgress })
             guard cacheHasConclusion || cacheHasBetterSteps else { return job }
             if cacheHasConclusion {
                 return job
