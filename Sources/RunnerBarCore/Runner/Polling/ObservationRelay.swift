@@ -3,7 +3,6 @@
 //
 // F-35: Generic replacement for PreferencesObserver and ScopesObserver.
 
-import Foundation
 import Observation
 
 // MARK: - ObservationRelay
