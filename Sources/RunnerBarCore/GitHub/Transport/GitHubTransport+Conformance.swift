@@ -322,6 +322,8 @@ extension GitHubTransport {
             log("\(logPrefix) › unexpected empty body for \(endpoint) (204?)", category: .transport)
             return nil
         }
+        /// Short-lived installation token returned by the GitHub runner token endpoint.
+        /// `private` to `fetchRunnerToken` — not part of any public API surface.
         struct TokenResponse: Decodable { let token: String }
         guard let resp = try? decoder.decode(TokenResponse.self, from: outputData) else {
             log("\(logPrefix) › decode failed (\(outputData.count)b)", category: .transport)
