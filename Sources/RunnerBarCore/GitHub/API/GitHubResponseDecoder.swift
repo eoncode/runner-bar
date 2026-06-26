@@ -118,8 +118,8 @@ func extractNextURL(from header: String?) -> String? {
     for part in header.components(separatedBy: ",") {
         let segments = part.components(separatedBy: ";")
         guard segments.count >= 2 else { continue }
-        let hasNextRel = segments.dropFirst().contains {
-            $0.trimmingCharacters(in: .whitespaces) == "rel=\"next\""
+        let hasNextRel = segments.dropFirst().contains { segment in
+            segment.trimmingCharacters(in: .whitespaces) == "rel=\"next\""
         }
         guard hasNextRel else { continue }
         let urlPart = segments[0].trimmingCharacters(in: .whitespaces)

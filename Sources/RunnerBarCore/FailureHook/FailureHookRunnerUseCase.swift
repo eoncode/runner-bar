@@ -202,8 +202,8 @@ public struct FailureHookRunnerUseCase: Sendable {
             if let tail = entry.logTail, !tail.isEmpty {
                 parts.append(tail)
             } else {
-                let failedSteps = job.steps.filter {
-                    guard let conclusion = $0.conclusion else { return false }
+                let failedSteps = job.steps.filter { step in
+                    guard let conclusion = step.conclusion else { return false }
                     return conclusion.isHookConclusion
                 }
                 var lines: [String] = ["Job: \(job.name) [failed]"]

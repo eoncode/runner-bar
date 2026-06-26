@@ -80,9 +80,10 @@ public struct GitHubTransport: GitHubTransportProtocol {
 
 // MARK: - GitHubTransport: core execution
 
-/// Core execution pipeline shared by all `GitHubTransportProtocol` methods.
 extension GitHubTransport {
 
+    /// Core execution pipeline shared by all `GitHubTransportProtocol` methods.
+    ///
     /// Single shared token-guard → URL-resolve → send → handle-response pipeline
     /// used by all `GitHubTransportProtocol` methods on this struct.
     ///

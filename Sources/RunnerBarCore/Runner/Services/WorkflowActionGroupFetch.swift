@@ -260,8 +260,8 @@ public struct WorkflowActionGroupFetcher: Sendable {
             ?? representative.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
         let title = String(rawTitle.prefix(40))
-        let runs: [WorkflowRunRef] = shaRuns.map {
-            WorkflowRunRef(id: $0.id, name: $0.name, status: $0.status, conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
+        let runs: [WorkflowRunRef] = shaRuns.map { run in
+            WorkflowRunRef(id: run.id, name: run.name, status: run.status, conclusion: run.conclusion, htmlUrl: run.htmlUrl)
         }
         let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
         let starts = allJobs.compactMap { $0.startedAt }

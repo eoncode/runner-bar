@@ -166,8 +166,8 @@ public final class ScopeStore {
         var aliasByID: [UUID: String?] = [:]
         for entry in snapshot {
             let prefs = await ScopePreferencesStore.shared.preferences(for: entry.scope)
-            let alias = prefs.alias.flatMap {
-                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            let alias = prefs.alias.flatMap { raw in
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 return trimmed.isEmpty ? nil : trimmed
             }
             aliasByID[entry.id] = alias

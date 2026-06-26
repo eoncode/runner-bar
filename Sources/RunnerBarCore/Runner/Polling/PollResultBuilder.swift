@@ -300,10 +300,10 @@ public struct PollResultBuilder {
     /// Trims the job cache to at most `limit` entries, keeping the most recently completed.
     public static func trimJobCache(_ cache: inout [Int: ActiveJob], limit: Int) {
         guard cache.count > limit else { return }
-        let sorted = cache.values.sorted {
-            ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
+        let sorted = cache.values.sorted { lhs, rhs in
+            (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
         }
-        cache = [Int: ActiveJob](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
+        cache = [Int: ActiveJob](uniqueKeysWithValues: sorted.prefix(limit).map { job in (job.id, job) })
     }
 
     /// Builds the ordered job display list from live jobs and the completed cache.
@@ -314,8 +314,8 @@ public struct PollResultBuilder {
     public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress: [ActiveJob] = live.filter { $0.status == .inProgress }
         let queued: [ActiveJob] = live.filter { $0.status == .queued }
-        let cached: [ActiveJob] = cache.values.sorted {
-            ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
+        let cached: [ActiveJob] = cache.values.sorted { lhs, rhs in
+            (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
         }
         // Use all live IDs (not just inProgress + queued) so that jobs in other
         // non-completed statuses (.waiting, .requested, .pending) also prevent
@@ -446,11 +446,11 @@ public struct PollResultBuilder {
     /// Trims the group cache to at most `limit` entries, keeping the most recently completed.
     public static func trimGroupCache(_ cache: inout [String: WorkflowActionGroup], limit: Int) {
         guard cache.count > limit else { return }
-        let sorted = cache.values.sorted {
-            ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
-                > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
+        let sorted = cache.values.sorted { lhs, rhs in
+            (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
+                > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
         }
-        cache = [String: WorkflowActionGroup](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
+        cache = [String: WorkflowActionGroup](uniqueKeysWithValues: sorted.prefix(limit).map { group in (group.id, group) })
     }
 
     /// Evicts the oldest entries from `ids` (FIFO) until `ids.count <= limit`.
@@ -483,9 +483,9 @@ public struct PollResultBuilder {
         // their stale dimmed cache entry from appearing alongside the live entry.
         // Mirrors the identical reasoning in buildJobDisplay.
         let liveGroupIDs = Set(live.map { $0.id })
-        let cached = cache.values.sorted {
-            ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
-                > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
+        let cached = cache.values.sorted { lhs, rhs in
+            (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
+                > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
         }
         var display: [WorkflowActionGroup] = []
         display.appendUpTo(groupDisplayLimit, from: inProgress)
