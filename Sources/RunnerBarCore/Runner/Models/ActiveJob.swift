@@ -233,6 +233,28 @@ extension ActiveJob {
         )
     }
 
+    /// Returns a copy of this job with `createdAt` replaced.
+    ///
+    /// Used in the `betterSteps` branch of `fetchJobsForRun` to carry the
+    /// creation timestamp forward from the single-job refresh response, ensuring
+    /// elapsed-time display is never reset to zero on a mid-poll refresh.
+    public func copying(createdAt newValue: Date?) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: isDimmed,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            createdAt: newValue,
+            steps: steps
+        )
+    }
+
     /// Returns a copy of this job with `steps` replaced.
     public func copying(steps newValue: [JobStep]) -> ActiveJob {
         ActiveJob(
