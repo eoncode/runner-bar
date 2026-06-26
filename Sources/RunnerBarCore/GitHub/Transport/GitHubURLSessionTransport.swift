@@ -106,12 +106,12 @@ extension GitHubTransport {
         configure: @Sendable (URLRequest) -> URLRequest = { $0 }
     ) async -> ExecuteResult {
         guard let token = tokenProvider() else {
-            log("\(logTag) › no token available")
+            log("\(logTag) › no token available", category: .transport)
             return .noToken
         }
         let urlString = resolveURL(endpoint)
         guard let url = URL(string: urlString) else {
-            log("\(logTag) › invalid URL: \(urlString)")
+            log("\(logTag) › invalid URL: \(urlString)", category: .transport)
             return .networkError(URLError(.badURL))
         }
         let baseReq = useRawAccept
@@ -148,7 +148,7 @@ extension GitHubTransport {
             let linkHeader = http.value(forHTTPHeaderField: "Link")
             return .success(data, statusCode: http.statusCode, linkHeader: linkHeader)
         } catch {
-            log("\(logTag) › \(urlString) network error: \(error.localizedDescription)")
+            log("\(logTag) › \(urlString) network error: \(error.localizedDescription)", category: .transport)
             return .networkError(error)
         }
     }

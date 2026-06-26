@@ -47,58 +47,58 @@ extension GitHubTransport {
                     allItems.append(contentsOf: page)
                     nextURL = extractNextURL(from: linkHeader)
                 } else {
-                    log("apiPaginated › unexpected non-array response at \(urlString) — stopping pagination")
+                    log("apiPaginated › unexpected non-array response at \(urlString) — stopping pagination", category: .transport)
                     break pagination
                 }
             case .noToken:
                 didFailAuth = true
                 break pagination
             case .httpError(401):
-                log("apiPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
+                log("apiPaginated › 401 Unauthorized — token may have been revoked, stopping pagination", category: .transport)
                 didFailAuth = true
                 break pagination
             case .httpError:
-                log("apiPaginated › non-2xx error at \(urlString) — stopping pagination")
+                log("apiPaginated › non-2xx error at \(urlString) — stopping pagination", category: .transport)
                 break pagination
             case .rateLimited:
-                log("apiPaginated › rate limited — \(allItems.count) items collected so far")
+                log("apiPaginated › rate limited — \(allItems.count) items collected so far", category: .transport)
                 didRateLimit = true
                 break pagination
             case .permissionDenied:
-                log("apiPaginated › permission denied at \(urlString) — stopping pagination and discarding \(allItems.count) collected items")
+                log("apiPaginated › permission denied at \(urlString) — stopping pagination and discarding \(allItems.count) collected items", category: .transport)
                 didFailAuth = true
                 break pagination
             case .networkError:
-                log("apiPaginated › network error at \(urlString) — stopping pagination")
+                log("apiPaginated › network error at \(urlString) — stopping pagination", category: .transport)
                 break pagination
             }
         }
 
         if didFailAuth {
             if allItems.isEmpty {
-                log("apiPaginated › auth/permission failure on first page — returning nil")
+                log("apiPaginated › auth/permission failure on first page — returning nil", category: .transport)
             } else {
-                log("apiPaginated › auth/permission failure mid-pagination — discarding \(allItems.count) collected items")
+                log("apiPaginated › auth/permission failure mid-pagination — discarding \(allItems.count) collected items", category: .transport)
             }
             return nil
         }
         if didRateLimit {
             if allItems.isEmpty {
-                log("apiPaginated › rate limited on first page — no items collected, returning nil")
+                log("apiPaginated › rate limited on first page — no items collected, returning nil", category: .transport)
                 return nil
             }
-            log("apiPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
+            log("apiPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items", category: .transport)
         }
         guard hadAtLeastOneSuccessfulPage else {
-            log("apiPaginated › loop ended without any successful page — returning nil")
+            log("apiPaginated › loop ended without any successful page — returning nil", category: .transport)
             return nil
         }
         do {
             let encoded = try encoder.encode(allItems)
-            log("apiPaginated › returning \(allItems.count) items (\(encoded.count)b)")
+            log("apiPaginated › returning \(allItems.count) items (\(encoded.count)b)", category: .transport)
             return encoded
         } catch {
-            log("apiPaginated › encode failed: \(error) — returning nil")
+            log("apiPaginated › encode failed: \(error) — returning nil", category: .transport)
             return nil
         }
     }
@@ -111,7 +111,7 @@ extension GitHubTransport {
         guard case .success(let data, _, _) = await execute(
             endpoint, timeout: timeout, logTag: "raw", useRawAccept: true
         ) else { return nil }
-        log("raw › \(endpoint) → \(data.count)b")
+        log("raw › \(endpoint) → \(data.count)b", category: .transport)
         return data
     }
 
@@ -131,7 +131,7 @@ extension GitHubTransport {
             return request
         }
         guard case .success(let data, let statusCode, _) = result else { return nil }
-        log("post › \(endpoint) → \(statusCode)")
+        log("post › \(endpoint) → \(statusCode)", category: .transport)
         return data
     }
 
@@ -148,7 +148,7 @@ extension GitHubTransport {
             return request
         }
         guard case .success(let data, let statusCode, _) = result else { return nil }
-        log("put › \(endpoint) → \(statusCode)")
+        log("put › \(endpoint) → \(statusCode)", category: .transport)
         return data
     }
 
@@ -164,7 +164,7 @@ extension GitHubTransport {
             return request
         }
         if case .success = result {
-            log("delete › \(endpoint) → success")
+            log("delete › \(endpoint) → success", category: .transport)
             return true
         }
         return false
@@ -180,14 +180,14 @@ extension GitHubTransport {
     @discardableResult
     public func cancelRun(runID: Int, scope scopeString: String) async -> Bool {
         guard let scope = Scope.parse(scopeString) else {
-            log("cancelRun › invalid scope: \(scopeString)")
+            log("cancelRun › invalid scope: \(scopeString)", category: .transport)
             return false
         }
         // Intentionally repo-only: GitHub has no uniform org-scope cancel endpoint.
         // POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel exists; the org-level
         // equivalent does not. Org/enterprise callers must resolve to a repo scope first.
         guard case .repo = scope else {
-            log("cancelRun › scope must be a repo (owner/name), got: \(scopeString)")
+            log("cancelRun › scope must be a repo (owner/name), got: \(scopeString)", category: .transport)
             return false
         }
         let endpoint = "\(scope.apiPrefix)/actions/runs/\(runID)/cancel"
@@ -198,22 +198,22 @@ extension GitHubTransport {
         }
         switch executeResult {
         case .success:
-            log("cancelRun › run=\(runID) scope=\(scopeString) success=true")
+            log("cancelRun › run=\(runID) scope=\(scopeString) success=true", category: .transport)
             return true
         case .httpError(let code):
-            log("cancelRun › run=\(runID) scope=\(scopeString) failed — HTTP \(code)")
+            log("cancelRun › run=\(runID) scope=\(scopeString) failed — HTTP \(code)", category: .transport)
             return false
         case .noToken:
-            log("cancelRun › run=\(runID) scope=\(scopeString) failed — no token")
+            log("cancelRun › run=\(runID) scope=\(scopeString) failed — no token", category: .transport)
             return false
         case .rateLimited:
-            log("cancelRun › run=\(runID) scope=\(scopeString) failed — rate limited")
+            log("cancelRun › run=\(runID) scope=\(scopeString) failed — rate limited", category: .transport)
             return false
         case .permissionDenied:
-            log("cancelRun › run=\(runID) scope=\(scopeString) failed — permission denied")
+            log("cancelRun › run=\(runID) scope=\(scopeString) failed — permission denied", category: .transport)
             return false
         case .networkError(let error):
-            log("cancelRun › run=\(runID) scope=\(scopeString) failed — network error: \(error.localizedDescription)")
+            log("cancelRun › run=\(runID) scope=\(scopeString) failed — network error: \(error.localizedDescription)", category: .transport)
             return false
         }
     }
@@ -237,26 +237,26 @@ extension GitHubTransport {
     @discardableResult
     public func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
         guard let scope = Scope.parse(scopeString) else {
-            log("patchRunnerLabels › invalid scope: \(scopeString)")
+            log("patchRunnerLabels › invalid scope: \(scopeString)", category: .transport)
             return nil
         }
         let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
-        log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
+        log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)", category: .transport)
         guard let bodyData = try? encoder.encode(["labels": labels]) else {
-            log("patchRunnerLabels › failed to serialise request body")
+            log("patchRunnerLabels › failed to serialise request body", category: .transport)
             return nil
         }
         guard let outData = await put(endpoint, body: bodyData) else {
-            log("patchRunnerLabels › request failed for endpoint=\(endpoint)")
+            log("patchRunnerLabels › request failed for endpoint=\(endpoint)", category: .transport)
             return nil
         }
         guard let resp = try? decoder.decode(LabelsResponse.self, from: outData) else {
             let raw = String(data: outData, encoding: .utf8) ?? ""
-            log("patchRunnerLabels › decode failed raw=\(raw.prefix(200))")
+            log("patchRunnerLabels › decode failed raw=\(raw.prefix(200))", category: .transport)
             return nil
         }
         let names = resp.labels.map(\.name)
-        log("patchRunnerLabels › success labels=\(names)")
+        log("patchRunnerLabels › success labels=\(names)", category: .transport)
         return names
     }
 
@@ -266,13 +266,13 @@ extension GitHubTransport {
     @concurrent
     public func fetchRegistrationToken(scope scopeString: String) async -> String? {
         guard let scope = Scope.parse(scopeString) else {
-            log("fetchRegistrationToken › invalid scope: \(scopeString)")
+            log("fetchRegistrationToken › invalid scope: \(scopeString)", category: .transport)
             return nil
         }
         guard let token = await fetchRunnerToken(
             type: "registration-token", scope: scope, logPrefix: "fetchRegistrationToken"
         ) else { return nil }
-        log("fetchRegistrationToken › got registration token")
+        log("fetchRegistrationToken › got registration token", category: .transport)
         return token
     }
 
@@ -280,13 +280,13 @@ extension GitHubTransport {
     @concurrent
     public func fetchRemovalToken(scope scopeString: String) async -> String? {
         guard let scope = Scope.parse(scopeString) else {
-            log("fetchRemovalToken › invalid scope: \(scopeString)")
+            log("fetchRemovalToken › invalid scope: \(scopeString)", category: .transport)
             return nil
         }
         guard let token = await fetchRunnerToken(
             type: "remove-token", scope: scope, logPrefix: "fetchRemovalToken"
         ) else { return nil }
-        log("fetchRemovalToken › got removal token")
+        log("fetchRemovalToken › got removal token", category: .transport)
         return token
     }
 
@@ -297,13 +297,13 @@ extension GitHubTransport {
     @discardableResult
     public func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
         guard let scope = Scope.parse(scopeString) else {
-            log("deleteRunnerByID › invalid scope: \(scopeString)")
+            log("deleteRunnerByID › invalid scope: \(scopeString)", category: .transport)
             return false
         }
         let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)"
-        log("deleteRunnerByID › DELETE \(endpoint) runnerID=\(runnerID)")
+        log("deleteRunnerByID › DELETE \(endpoint) runnerID=\(runnerID)", category: .transport)
         let success = await delete(endpoint)
-        if !success { log("deleteRunnerByID › failed for runnerID=\(runnerID)") }
+        if !success { log("deleteRunnerByID › failed for runnerID=\(runnerID)", category: .transport) }
         return success
     }
 
@@ -313,18 +313,18 @@ extension GitHubTransport {
     @concurrent
     private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) async -> String? {
         let endpoint = "\(scope.apiPrefix)/actions/runners/\(type)"
-        log("\(logPrefix) › POSTing \(endpoint)")
+        log("\(logPrefix) › POSTing \(endpoint)", category: .transport)
         guard let outputData = await post(endpoint) else {
-            log("\(logPrefix) › request failed for \(endpoint)")
+            log("\(logPrefix) › request failed for \(endpoint)", category: .transport)
             return nil
         }
         guard !outputData.isEmpty else {
-            log("\(logPrefix) › unexpected empty body for \(endpoint) (204?)")
+            log("\(logPrefix) › unexpected empty body for \(endpoint) (204?)", category: .transport)
             return nil
         }
         struct TokenResponse: Decodable { let token: String }
         guard let resp = try? decoder.decode(TokenResponse.self, from: outputData) else {
-            log("\(logPrefix) › decode failed (\(outputData.count)b)")
+            log("\(logPrefix) › decode failed (\(outputData.count)b)", category: .transport)
             return nil
         }
         return resp.token

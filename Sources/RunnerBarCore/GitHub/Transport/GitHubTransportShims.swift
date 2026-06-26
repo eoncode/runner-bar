@@ -90,7 +90,7 @@ public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data?
 public func ghPost(_ endpoint: String) async -> Bool {
     let result = await sharedGitHubTransport.post(endpoint)
     let success = result != nil
-    log("ghPost › \(endpoint) success=\(success)")
+    log("ghPost › \(endpoint) success=\(success)", category: .transport)
     return success
 }
 
