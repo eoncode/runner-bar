@@ -381,6 +381,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
                             scope: job.scope,
                             startedAt: freshJob.startedAt ?? job.startedAt,
                             completedAt: freshJob.completedAt ?? job.completedAt,
+                            createdAt: job.createdAt,
                             steps: freshJob.steps
                         ))
                     }
