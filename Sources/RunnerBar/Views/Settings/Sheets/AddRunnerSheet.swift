@@ -252,13 +252,13 @@ struct AddRunnerSheet: View {
 
     /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
     ///
-    /// Intentionally `nonisolated`: called via `await` from `@MainActor register()`, which
-    /// hops off the main actor for the duration of the subprocess, then returns. This is
-    /// the load-bearing design that keeps the main thread free during shell execution.
+    /// `nonisolated`: called via `await` from `@MainActor register()`, which hops off the
+    /// main actor for the duration of the subprocess, then returns. This is the load-bearing
+    /// design that keeps the main thread free during shell execution.
     /// Do not annotate `@MainActor` — that would prevent the hop and stall the UI.
     ///
     /// Delegates to `ProcessRunner.runAsync` — no blocking `waitUntilExit()` on the pool.
-    func runRegistrationCommand(
+    nonisolated func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) async -> Int32 {
         var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
@@ -276,12 +276,12 @@ struct AddRunnerSheet: View {
 
     /// Launches `executable` with `args` asynchronously and returns the termination status.
     ///
-    /// Intentionally `nonisolated`: called via `await` from `@MainActor register()`, which
-    /// hops off the main actor for the duration of the subprocess, then returns. This is
-    /// the load-bearing design that keeps the main thread free during shell execution.
+    /// `nonisolated`: called via `await` from `@MainActor register()`, which hops off the
+    /// main actor for the duration of the subprocess, then returns. This is the load-bearing
+    /// design that keeps the main thread free during shell execution.
     /// Do not annotate `@MainActor` — that would prevent the hop and stall the UI.
     /// Stderr is discarded (default `mergeStderr: false`).
-    func runSimpleProcess(_ executable: String, args: [String]) async -> Int32 {
+    nonisolated func runSimpleProcess(_ executable: String, args: [String]) async -> Int32 {
         let result = await ProcessRunner.runAsync(
             executableURL: URL(fileURLWithPath: executable),
             arguments: args,
