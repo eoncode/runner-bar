@@ -342,9 +342,9 @@ public actor RunnerPoller {
             localRunners: localRunnersSnapshot,
             installPathMap: installPathMap
         )
-        // Pass scopesSnapshot directly so fetchAllJobs and fetchActionGroups use the
-        // same scope list as the rest of fetchInternal, eliminating the TOCTOU window
-        // that would arise from re-reading scopeStore.activeScopes inside those methods.
+        // Pass scopesSnapshot directly to fetchAllJobs and fetchActionGroups so both
+        // use the same scope list captured at the top of this fetch cycle, eliminating
+        // the TOCTOU window that arose when each re-read scopeStore.activeScopes.
         let jobResult = await buildJobState(
             snapPrev: snapPrev,
             snapCache: snapCache,
@@ -434,7 +434,7 @@ public actor RunnerPoller {
         return allJobs
     }
 
-    /// Fetches workflow action groups for the given scopes concurrently, using the
+    /// Fetches workflow action groups for all active scopes concurrently, using the
     /// SHA-keyed cache.
     ///
     /// - Parameter scopes: The scope snapshot captured by `fetchInternal` — passed in
@@ -476,8 +476,8 @@ public actor RunnerPoller {
     ///    The GitHub Jobs API has no `orgs/{org}/actions/jobs/{id}` endpoint — only
     ///    `repos/{owner}/{repo}/actions/jobs/{id}`. Keeping these entries would log a
     ///    warning every poll cycle with no path to ever resolve them. Eviction is a
-    ///    one-time operation; the entry cannot re-populate via any backfill path
-    ///    (no GitHub org/actions/jobs endpoint exists).
+    ///    one-time operation; the entry cannot be re-populated via backfill, but will
+    ///    re-appear in the live feed on the next poll if the job is still active.
     ///
     /// 3. **Empty-steps API response**
     ///    Early-queued jobs may return zero steps transiently. The guard
@@ -497,7 +497,6 @@ public actor RunnerPoller {
             }
             guard scope.contains("/") else {
                 cache.removeValue(forKey: cacheID)
-                // swiftlint:disable:next line_length
                 log("RunnerPoller › backfillSteps — evicted jobID=\(cacheID): org-only scope '\(scope)' has no repo path; org-only jobs cannot be backfilled (no GitHub org/actions/jobs endpoint)", category: .runner)
                 continue
             }
