@@ -82,7 +82,7 @@ nonisolated(unsafe) private let loggers: [LogCategory: Logger] = Dictionary(
 private func resolvedLogger(for category: LogCategory) -> Logger {
     // allCases guarantees every case is present; a nil result is a programmer error.
     guard let logger = loggers[category] else {
-        preconditionFailure("Logger for category '\(category.rawValue)' not found — add it to LogCategory.allCases")
+        preconditionFailure("Logger for category '\(category.rawValue)' not found — add a matching case to LogCategory")
     }
     return logger
 }

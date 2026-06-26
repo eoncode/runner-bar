@@ -13,10 +13,13 @@
 /// This matches the previous `RunnerStore` behaviour; views sort
 /// runners independently for display.
 ///
-/// `private` is not available at file scope for a type used across extension
-/// files in the same module; `internal` (the default) is the narrowest correct
-/// access level here. This type has no intended public API surface and is an
-/// implementation detail of `RunnerPoller.fetchAndEnrichRunners`.
+/// `fileprivate` would be narrower than `internal`, but this type is
+/// accessed from `RunnerPoller+FetchAndEnrich.swift` — a separate file
+/// in the same module — so `fileprivate` would confine it to this file
+/// only and cause a compile error in that extension. `internal` (the
+/// default) is therefore the narrowest correct access level given the
+/// cross-file usage. This type has no intended public API surface and
+/// is an implementation detail of `RunnerPoller.fetchAndEnrichRunners`.
 struct IndexedScopedRunner {
     /// The GitHub scope URL string (repo or org) this runner belongs to.
     var scope: String
