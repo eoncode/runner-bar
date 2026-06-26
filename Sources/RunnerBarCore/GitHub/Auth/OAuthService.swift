@@ -214,6 +214,11 @@ public final class OAuthService: OAuthServiceProtocol {
             let (responseData, _) = try await URLSession.shared.data(for: req)
             data = responseData
         } catch {
+            // Security note: `clientSecret` is sent as a JSON POST body field, not as part
+            // of the request URL. `URLError.localizedDescription` never includes HTTP request
+            // body content — only the URL and a human-readable error string — so logging
+            // `error.localizedDescription` here cannot leak the client secret.
+            // The endpoint URL (accessTokenURL) is not sensitive; it is a public GitHub API path.
             log("OAuthService › exchangeCode: network error — \(error.localizedDescription), calling fireSignIn(false)", category: .transport)
             fireSignIn(false)
             return

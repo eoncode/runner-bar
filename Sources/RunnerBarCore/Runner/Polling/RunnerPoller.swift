@@ -418,6 +418,9 @@ public actor RunnerPoller {
     ///
     /// Results are collected in task-completion order; no downstream consumer depends on
     /// scope-ordering of the returned array.
+    ///
+    /// `internal` — required for cross-file extension access from `RunnerPoller+PollBridge.swift`;
+    /// not a public API. Call sites are exclusively within `RunnerBarCore`.
     func fetchAllJobs(scopes: [String]) async -> [ActiveJob] {
         guard !scopes.isEmpty else { return [] }
         let dec = decoder
@@ -445,6 +448,9 @@ public actor RunnerPoller {
     ///
     /// Results are collected in task-completion order; no downstream consumer depends on
     /// scope-ordering of the returned array.
+    ///
+    /// `internal` — required for cross-file extension access from `RunnerPoller+PollBridge.swift`;
+    /// not a public API. Call sites are exclusively within `RunnerBarCore`.
     func fetchActionGroups(scopes: [String], shaKeyedCache: [String: WorkflowActionGroup]) async -> [WorkflowActionGroup] {
         guard !scopes.isEmpty else { return [] }
         var allGroups: [WorkflowActionGroup] = []
