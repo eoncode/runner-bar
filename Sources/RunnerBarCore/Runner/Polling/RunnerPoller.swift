@@ -535,7 +535,14 @@ public actor RunnerPoller {
 
     // MARK: - Private(set) write-through
 
-    /// Sets display properties in a single controlled call.
+    /// Sets the actor-local display properties in a single controlled call.
+    ///
+    /// **Scope:** this function manages `runners`, `jobs`, `actions`, `isRateLimited`,
+    /// and `rateLimitResetDate` only. The five poll-cycle state properties
+    /// (`completedCache`, `prevLiveJobs`, `actionGroupCache`, `prevLiveGroups`,
+    /// `seenGroupIDs`) are written directly by `applyFetchResult` before calling this
+    /// function — they are not routed through `setDisplayState` because they are not
+    /// display properties and have no partial-update semantics.
     ///
     /// **Partial-update contract:** `runners`, `jobs`, and `actions` are optional.
     /// Passing `nil` for any of these means "leave the current value unchanged" —
@@ -550,9 +557,9 @@ public actor RunnerPoller {
     ///
     /// `private(set)` prevents arbitrary writes from outside the actor, but Swift's
     /// file-scoped `private` means extension files in separate source files cannot
-    /// write these properties either. This internal setter is the single controlled
-    /// mutation path used exclusively by `applyFetchResult` and `applyError`
-    /// (in `RunnerPoller+ApplyResult.swift`).
+    /// write these properties either. This internal setter is therefore the controlled
+    /// mutation path for display properties, used exclusively by `applyFetchResult`
+    /// and `applyError` (in `RunnerPoller+ApplyResult.swift`).
     func setDisplayState(
         runners newRunners: [Runner]? = nil,
         jobs newJobs: [ActiveJob]? = nil,
