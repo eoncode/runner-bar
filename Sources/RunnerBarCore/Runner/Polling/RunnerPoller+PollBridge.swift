@@ -55,9 +55,9 @@ extension RunnerPoller {
     func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
-        snapSeenGroupIDs: OrderedSet<String>
+        snapSeenGroupIDs: OrderedSet<String>,
+        jobCache: [Int: ActiveJob]
     ) async -> GroupPollResult {
-        let jobCacheSnapshot = completedCache
         return await PollResultBuilder.buildGroupState(
             snapPrevGroups: snapPrevGroups,
             snapGroupCache: snapGroupCache,
@@ -79,7 +79,7 @@ extension RunnerPoller {
                     await self?.fireFailureHook(group, scope)
                 },
                 enrichJobs: { [weak self] jobs in
-                    self?.enrichGroupJobs(jobs, jobCache: jobCacheSnapshot) ?? jobs
+                    self?.enrichGroupJobs(jobs, jobCache: jobCache) ?? jobs
                 }
             )
         )
