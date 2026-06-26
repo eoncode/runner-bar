@@ -39,9 +39,9 @@ private let subsystem = "com.eoncode.runner-bar"
 ///
 /// Built from `LogCategory.allCases` via `uniqueKeysWithValues`, so the dictionary
 /// is guaranteed to contain every current case. `resolvedLogger(for:)` depends on this
-/// invariant — if a new case is added without updating this initialiser the force-unwrap
-/// below will crash at the first call site in debug builds, surfacing the omission
-/// immediately rather than silently allocating a new `Logger` instance per log call.
+/// invariant — if a new case is added without a corresponding entry in this dictionary,
+/// `resolvedLogger` will call `fatalError` and crash in all builds, surfacing the
+/// omission immediately rather than silently allocating a new `Logger` per call.
 ///
 /// `nonisolated(unsafe)` suppresses the `#MutableGlobalVariable` warning that Swift 6
 /// strict-concurrency mode emits for top-level `let` bindings of non-`Sendable` types.
@@ -57,8 +57,9 @@ nonisolated(unsafe) private let loggers: [LogCategory: Logger] = Dictionary(
 ///
 /// `loggers` is built from `LogCategory.allCases` and is therefore guaranteed to
 /// contain every case. A missing entry means a `LogCategory` case was added without
-/// a corresponding entry in `loggers` — a programmer error that should crash loudly
-/// in development rather than silently allocate a new `Logger` instance on every call.
+/// a corresponding entry in `loggers` — a programmer error. `fatalError` crashes
+/// in all builds (not debug-only), making the omission impossible to miss regardless
+/// of build configuration.
 @inline(__always)
 private func resolvedLogger(for category: LogCategory) -> Logger {
     // allCases guarantees every case is present; a nil result is a programmer error.

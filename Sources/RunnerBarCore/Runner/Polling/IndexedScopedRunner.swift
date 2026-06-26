@@ -12,6 +12,11 @@
 /// non-deterministic: `withTaskGroup` tasks complete in arrival order.
 /// This matches the previous `RunnerStore` behaviour; views sort
 /// runners independently for display.
+///
+/// `private` is not available at file scope for a type used across extension
+/// files in the same module; `internal` (the default) is the narrowest correct
+/// access level here. This type has no intended public API surface and is an
+/// implementation detail of `RunnerPoller.fetchAndEnrichRunners`.
 struct IndexedScopedRunner {
     /// The GitHub scope URL string (repo or org) this runner belongs to.
     var scope: String
