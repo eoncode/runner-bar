@@ -5,12 +5,34 @@ import Foundation
 // MARK: - InstallPathMap
 
 /// Lookup maps built from the local runner list, used by `fetchAndEnrichRunners`.
+///
+/// `public` so the app target can reference the type (e.g. in tests and in
+/// `AppDelegate+StoreSetup` for DI wiring). `buildInstallPathMap` is `internal`
+/// — it is only called from within `RunnerBarCore`.
 public struct InstallPathMap {
+    /// Maps "scope/runnerName" to installPath (exact scope-prefixed match).
     public let byFullKey: [String: String]
+    /// Maps "runnerName" to installPath (name-only fallback).
     public let byName: [String: String]
+    /// Maps local `.runner` JSON `AgentId` to installPath (scope-agnostic).
+    ///
+    /// Keyed on `localRunner.agentId`, **not** the GitHub REST API runner id.
+    /// Use `byApiId` when resolving API runner ids (they differ for org runners).
     public let byAgentId: [Int: String]
+    /// Maps apiId to installPath using the GitHub REST API runner id from the last enrichment cycle.
+    ///
+    /// For org runners the GitHub API assigns an `id` that differs from the local
+    /// `.runner` JSON `AgentId`. This map is keyed on the API id so that metrics
+    /// can be resolved for org runners even when `byAgentId` misses.
     public let byApiId: [Int: String]
 
+    /// Creates an `InstallPathMap` with pre-built lookup dictionaries.
+    ///
+    /// - Parameters:
+    ///   - byFullKey: Maps "scope/runnerName" to installPath.
+    ///   - byName: Maps runnerName to installPath (name-only fallback).
+    ///   - byAgentId: Maps local `.runner` JSON AgentId to installPath.
+    ///   - byApiId: Maps GitHub REST API runner id to installPath.
     public init(
         byFullKey: [String: String],
         byName: [String: String],
@@ -25,6 +47,10 @@ public struct InstallPathMap {
 }
 
 /// Builds four lookup maps from the local runner list.
+///
+/// `internal` — called only by `RunnerPoller.fetch()` inside `RunnerBarCore`.
+/// Kept as a top-level free function (rather than `extension RunnerPoller`) so
+/// it can be tested without an actor instance.
 func buildInstallPathMap(
     scopes: [String],
     localRunners: [RunnerModel]
