@@ -165,6 +165,30 @@ extension ActiveJob {
         )
     }
 
+    /// Returns a copy of this job with `completedAt` replaced.
+    ///
+    /// Used in `enrichGroupJobs` to carry the cached completion timestamp forward
+    /// when bridging a conclusion from the completed-job cache onto a live job
+    /// that the API still reports as in-progress. Without this, a job with a
+    /// bridged conclusion would show `completedAt == nil` and render a running
+    /// timer in the panel for one poll cycle.
+    public func copying(completedAt newValue: Date?) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: isDimmed,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: newValue,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+
     /// Returns a copy of this job with `steps` replaced.
     public func copying(steps newValue: [JobStep]) -> ActiveJob {
         ActiveJob(

@@ -158,6 +158,7 @@ extension RunnerPoller {
             guard cacheHasConclusion || cacheHasBetterSteps else { return job }
             return job
                 .copying(conclusion: cacheHasConclusion ? cached.conclusion : job.conclusion)
+                .copying(completedAt: cacheHasConclusion ? cached.completedAt ?? job.completedAt : job.completedAt)
                 .copying(steps: cacheHasBetterSteps ? cached.steps : job.steps)
         }
     }
