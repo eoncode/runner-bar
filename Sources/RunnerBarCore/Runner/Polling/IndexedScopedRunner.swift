@@ -22,7 +22,8 @@
 /// is an implementation detail of `RunnerPoller.fetchAndEnrichRunners`.
 struct IndexedScopedRunner {
     /// The GitHub scope URL string (repo or org) this runner belongs to.
-    var scope: String
+    /// Immutable after construction — only `runner` is mutated in Phase 2.
+    let scope: String
     /// The enriched `Runner` value. Mutated in-place during Phase 2 to add metrics.
     var runner: Runner
 }
