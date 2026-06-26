@@ -10,7 +10,7 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
     guard let data, !data.isEmpty else { return }
     let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
     let preview = body.count > 400 ? String(body.prefix(400)) + "…" : body
-    log("HTTP \(status) \(endpoint): \(preview)")
+    log("HTTP \(status) \(endpoint): \(preview)", category: .transport)
 }
 
 // MARK: - Rate-limit response handler
@@ -71,7 +71,7 @@ func handleRateLimitResponse(
     // Remaining == 0 or a Retry-After window is present.
     let isRealRateLimit = statusCode == 429 || remaining == 0 || retryAfter != nil
     guard isRealRateLimit else {
-        log("RateLimit › 403 permission error (not rate limit) — \(endpoint)")
+        log("RateLimit › 403 permission error (not rate limit) — \(endpoint)", category: .transport)
         return false
     }
 
@@ -100,7 +100,8 @@ func handleRateLimitResponse(
         "RateLimit › ⚠️ rate limited (\(limitKind)) — \(endpoint) "
             + "status=\(statusCode) "
             + "retryAfter=\(String(describing: retryAfter)) "
-            + "resetAt=\(String(describing: resetAt))"
+            + "resetAt=\(String(describing: resetAt))",
+        category: .transport
     )
     await rateLimiter.set(resetAt: resetAt)
     return true

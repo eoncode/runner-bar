@@ -84,7 +84,7 @@ public final class OAuthService: OAuthServiceProtocol {
 
     /// Yields `success` to every registered sign-in continuation.
     private func fireSignIn(_ success: Bool) {
-        log("OAuthService › fireSignIn — success=\(success), consumers=\(signInContinuations.count)")
+        log("OAuthService › fireSignIn — success=\(success), consumers=\(signInContinuations.count)", category: .transport)
         signInContinuations.values.forEach { $0.yield(success) }
     }
 
@@ -109,11 +109,11 @@ public final class OAuthService: OAuthServiceProtocol {
     /// `exchangeCode(_:)` fire stream events, because those represent real sign-in
     /// outcomes.
     public func makeSignInURL() -> URL? {
-        log("OAuthService › makeSignInURL — building OAuth URL")
+        log("OAuthService › makeSignInURL — building OAuth URL", category: .transport)
         let state = UUID().uuidString
         pendingState = state
         guard var comps = URLComponents(string: authorizeURL) else {
-            log("OAuthService › makeSignInURL: malformed authorizeURL — aborting")
+            log("OAuthService › makeSignInURL: malformed authorizeURL — aborting", category: .transport)
             pendingState = nil
             return nil
         }
@@ -124,11 +124,11 @@ public final class OAuthService: OAuthServiceProtocol {
             URLQueryItem(name: "state", value: state)
         ]
         guard let url = comps.url else {
-            log("OAuthService › makeSignInURL: failed to build URL — aborting")
+            log("OAuthService › makeSignInURL: failed to build URL — aborting", category: .transport)
             pendingState = nil
             return nil
         }
-        log("OAuthService › makeSignInURL — URL built, returning to caller")
+        log("OAuthService › makeSignInURL — URL built, returning to caller", category: .transport)
         return url
     }
 
@@ -136,15 +136,15 @@ public final class OAuthService: OAuthServiceProtocol {
 
     /// Clears the stored token and emits a sign-out event to all stream consumers.
     public func signOut() {
-        log("OAuthService › signOut — called, pendingState=\(pendingState != nil ? "set" : "nil")")
+        log("OAuthService › signOut — called, pendingState=\(pendingState != nil ? "set" : "nil")", category: .transport)
         pendingState = nil
         let deleted = Keychain.delete()
-        log("OAuthService › signOut — Keychain.delete result=\(deleted)")
+        log("OAuthService › signOut — Keychain.delete result=\(deleted)", category: .transport)
         if deleted {
-            log("OAuthService › signOut — emitting didSignOut to \(signOutContinuations.count) consumer(s)")
+            log("OAuthService › signOut — emitting didSignOut to \(signOutContinuations.count) consumer(s)", category: .transport)
             signOutContinuations.values.forEach { $0.yield(()) }
         } else {
-            log("OAuthService › signOut: Keychain.delete failed — sign-out suppressed to prevent ghost sign-in")
+            log("OAuthService › signOut: Keychain.delete failed — sign-out suppressed to prevent ghost sign-in", category: .transport)
         }
     }
 
@@ -152,27 +152,27 @@ public final class OAuthService: OAuthServiceProtocol {
 
     /// Handles the OAuth redirect URL from AppDelegate, verifying state and exchanging the code.
     public func handleCallback(_ url: URL) {
-        log("OAuthService › handleCallback — url=\(url.absoluteString)")
+        log("OAuthService › handleCallback — url=\(url.absoluteString)", category: .transport)
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
         else {
-            log("OAuthService › handleCallback — missing code param, calling fireSignIn(false)")
+            log("OAuthService › handleCallback — missing code param, calling fireSignIn(false)", category: .transport)
             fireSignIn(false)
             return
         }
         guard let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value else {
-            log("OAuthService › handleCallback: no state param in redirect URL")
+            log("OAuthService › handleCallback: no state param in redirect URL", category: .transport)
             pendingState = nil
             fireSignIn(false)
             return
         }
         guard returnedState == pendingState else {
-            log("OAuthService › handleCallback: state mismatch — possible CSRF attempt, rejecting")
+            log("OAuthService › handleCallback: state mismatch — possible CSRF attempt, rejecting", category: .transport)
             pendingState = nil
             fireSignIn(false)
             return
         }
-        log("OAuthService › handleCallback — state OK, exchanging code")
+        log("OAuthService › handleCallback — state OK, exchanging code", category: .transport)
         pendingState = nil
         Task { await exchangeCode(code) }
     }
@@ -181,7 +181,7 @@ public final class OAuthService: OAuthServiceProtocol {
 
     /// POSTs the authorization code to GitHub and saves the returned access token to Keychain.
     private func exchangeCode(_ code: String) async {
-        log("OAuthService › exchangeCode — POST to GitHub")
+        log("OAuthService › exchangeCode — POST to GitHub", category: .transport)
         guard let url = URL(string: accessTokenURL) else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -195,7 +195,7 @@ public final class OAuthService: OAuthServiceProtocol {
         // OAuthTokenRequest contains only String fields — encode never throws in practice.
         // Treat a nil result as a hard failure rather than using do/catch.
         guard let httpBody = try? encoder.encode(body) else {
-            log("OAuthService › exchangeCode: failed to encode request body — aborting")
+            log("OAuthService › exchangeCode: failed to encode request body — aborting", category: .transport)
             fireSignIn(false)
             return
         }
@@ -203,25 +203,25 @@ public final class OAuthService: OAuthServiceProtocol {
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let response = try? decoder.decode(OAuthTokenResponse.self, from: data)
         else {
-            log("OAuthService › exchangeCode — network/parse failure, calling fireSignIn(false)")
+            log("OAuthService › exchangeCode — network/parse failure, calling fireSignIn(false)", category: .transport)
             fireSignIn(false)
             return
         }
         if let errorCode = response.error {
             let desc = response.errorDescription ?? ""
-            log("OAuthService › exchangeCode: GitHub error=\(errorCode) \(desc)")
+            log("OAuthService › exchangeCode: GitHub error=\(errorCode) \(desc)", category: .transport)
             fireSignIn(false)
             return
         }
         guard let token = response.accessToken, !token.isEmpty else {
-            log("OAuthService › exchangeCode: no access_token in response — keys=\(response.debugKeys)")
+            log("OAuthService › exchangeCode: no access_token in response — keys=\(response.debugKeys)", category: .transport)
             fireSignIn(false)
             return
         }
-        log("OAuthService › exchangeCode — got access_token (len=\(token.count)), saving to Keychain")
+        log("OAuthService › exchangeCode — got access_token (len=\(token.count)), saving to Keychain", category: .transport)
         let saved = Keychain.save(token)
-        log("OAuthService › exchangeCode — Keychain.save result=\(saved), calling fireSignIn(\(saved))")
-        if !saved { log("OAuthService › exchangeCode: Keychain.save failed") }
+        log("OAuthService › exchangeCode — Keychain.save result=\(saved), calling fireSignIn(\(saved))", category: .transport)
+        if !saved { log("OAuthService › exchangeCode: Keychain.save failed", category: .transport) }
         fireSignIn(saved)
     }
 }

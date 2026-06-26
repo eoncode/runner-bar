@@ -34,7 +34,7 @@ private let tokenCache = Mutex<String?>(nil)
 /// already provides the necessary scoping.
 public func invalidateTokenCache() {
     tokenCache.withLock { $0 = nil }
-    log("GitHubTokenCache › invalidateTokenCache — cache cleared")
+    log("GitHubTokenCache › invalidateTokenCache — cache cleared", category: .transport)
 }
 
 /// Returns a GitHub personal access token from the first available source.
@@ -50,14 +50,14 @@ public func githubToken() -> String? {
     // 1. In-memory cache
     if let cached = tokenCache.withLock({ $0 }) {
         #if DEBUG
-        log("GitHubTokenCache › githubToken — resolved from cache (len=\(cached.count))")
+        log("GitHubTokenCache › githubToken — resolved from cache (len=\(cached.count))", category: .transport)
         #endif
         return cached
     }
     // 2. Keychain — preferred; set by OAuthService after native OAuth sign-in
     if let token = Keychain.token {
         #if DEBUG
-        log("GitHubTokenCache › githubToken — resolved from Keychain (len=\(token.count)), populating cache")
+        log("GitHubTokenCache › githubToken — resolved from Keychain (len=\(token.count)), populating cache", category: .transport)
         #endif
         // Thundering-herd on cold-start: two concurrent callers can both miss the
         // cache check above and both reach here. This is intentional — both reads
@@ -69,24 +69,24 @@ public func githubToken() -> String? {
         return token
     }
     #if DEBUG
-    log("GitHubTokenCache › githubToken — Keychain: nil")
+    log("GitHubTokenCache › githubToken — Keychain: nil", category: .transport)
     #endif
     // 3–4. CI / environment variable fallbacks
     for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
         if let token = ProcessInfo.processInfo.environment[key], !token.isEmpty {
             #if DEBUG
-            log("GitHubTokenCache › githubToken — resolved from env var \(key) (len=\(token.count)), populating cache")
+            log("GitHubTokenCache › githubToken — resolved from env var \(key) (len=\(token.count)), populating cache", category: .transport)
             #endif
             tokenCache.withLock { if $0 == nil { $0 = token } }
             return token
         } else {
             #if DEBUG
-            log("GitHubTokenCache › githubToken — env var \(key): nil/empty")
+            log("GitHubTokenCache › githubToken — env var \(key): nil/empty", category: .transport)
             #endif
         }
     }
     #if DEBUG
-    log("GitHubTokenCache › githubToken — returning nil (no token from any source)")
+    log("GitHubTokenCache › githubToken — returning nil (no token from any source)", category: .transport)
     #endif
     return nil
 }

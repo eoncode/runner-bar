@@ -53,30 +53,30 @@ private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
 /// two-step redirect implementation.
 public func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
-        log("fetchStepLog › invalid scope: \(scopeString)")
+        log("fetchStepLog › invalid scope: \(scopeString)", category: .transport)
         return nil
     }
     guard case .repo = scope else {
-        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scopeString))")
+        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scopeString))", category: .transport)
         return nil
     }
     let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
-    log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
+    log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)", category: .transport)
 
     guard let data = await urlSessionRaw(endpoint) else {
-        log("fetchStepLog › urlSessionRaw returned nil for job \(jobID)")
+        log("fetchStepLog › urlSessionRaw returned nil for job \(jobID)", category: .transport)
         return nil
     }
     guard let raw = String(data: data, encoding: .utf8) else {
-        log("fetchStepLog › UTF-8 decode failed for job \(jobID) (\(data.count) bytes)")
+        log("fetchStepLog › UTF-8 decode failed for job \(jobID) (\(data.count) bytes)", category: .transport)
         return nil
     }
     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        log("fetchStepLog › empty body for job \(jobID)")
+        log("fetchStepLog › empty body for job \(jobID)", category: .transport)
         return nil
     }
     if raw.hasPrefix("{") {
-        log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
+        log("fetchStepLog › error JSON returned: \(raw.prefix(120))", category: .transport)
         return nil
     }
     return parseStepLog(raw, stepNumber: stepNumber)
@@ -102,21 +102,22 @@ private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
         // lines before the first ##[group] marker are preamble and intentionally skipped
     }
     if seenGroup, !current.isEmpty { sections.append(current.joined(separator: "\n")) }
-    log("parseStepLog › parsed \(sections.count) section(s) from log")
+    log("parseStepLog › parsed \(sections.count) section(s) from log", category: .transport)
     if sections.isEmpty {
-        log("parseStepLog › no group markers, returning full raw log")
+        log("parseStepLog › no group markers, returning full raw log", category: .transport)
         return cleaned
     }
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
         log(
             "parseStepLog › stepNumber \(stepNumber) out of range "
-                + "(sections=\(sections.count)), returning full log"
+                + "(sections=\(sections.count)), returning full log",
+            category: .transport
         )
         return cleaned
     }
     let section = sections[index]
-    log("parseStepLog › step \(stepNumber) → \(section.count)ch")
+    log("parseStepLog › step \(stepNumber) → \(section.count)ch", category: .transport)
     return section
 }
 
