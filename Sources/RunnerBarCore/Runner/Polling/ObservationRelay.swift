@@ -60,6 +60,13 @@ final class ObservationRelay<Element: Sendable> {
             } onChange: { [weak self] in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
+                    // read() is called here rather than captured at onChange time.
+                    // If the observed value changes again before this Task executes,
+                    // rapid back-to-back changes coalesce — the consumer sees only
+                    // the latest value. This is inherited behaviour (present in the
+                    // original PreferencesObserver/ScopesObserver) and intentional:
+                    // current use-sites are restart-only consumers, so skipping
+                    // intermediate values is harmless.
                     self.continuation.yield(self.read())
                     self.start()
                 }
