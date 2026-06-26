@@ -38,7 +38,8 @@ extension RunnerPoller {
             snapPrev: snapPrev,
             snapCache: snapCache,
             fetchJobs: { [weak self] in
-                await self?.fetchJobs() ?? []
+                guard let self else { return [] }
+                return await self.fetchAllJobs()
             },
             backfill: { [weak self] cache in
                 // `self?` optional-chaining cannot be used with an inout argument.
