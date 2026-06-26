@@ -252,6 +252,11 @@ struct AddRunnerSheet: View {
 
     /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
     ///
+    /// Intentionally `nonisolated`: called via `await` from `@MainActor register()`, which
+    /// hops off the main actor for the duration of the subprocess, then returns. This is
+    /// the load-bearing design that keeps the main thread free during shell execution.
+    /// Do not annotate `@MainActor` — that would prevent the hop and stall the UI.
+    ///
     /// Delegates to `ProcessRunner.runAsync` — no blocking `waitUntilExit()` on the pool.
     func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
@@ -271,7 +276,11 @@ struct AddRunnerSheet: View {
 
     /// Launches `executable` with `args` asynchronously and returns the termination status.
     ///
-    /// Delegates to `ProcessRunner.runAsync` — stderr is discarded (default `mergeStderr: false`).
+    /// Intentionally `nonisolated`: called via `await` from `@MainActor register()`, which
+    /// hops off the main actor for the duration of the subprocess, then returns. This is
+    /// the load-bearing design that keeps the main thread free during shell execution.
+    /// Do not annotate `@MainActor` — that would prevent the hop and stall the UI.
+    /// Stderr is discarded (default `mergeStderr: false`).
     func runSimpleProcess(_ executable: String, args: [String]) async -> Int32 {
         let result = await ProcessRunner.runAsync(
             executableURL: URL(fileURLWithPath: executable),
@@ -294,9 +303,9 @@ struct AddRunnerSheet: View {
     /// non-isolated async context is a concurrency error.
     ///
     /// Being on `@MainActor` does **not** block the main thread during `await` calls:
-    /// each `await ProcessRunner.runAsync(…)` suspends and releases the main actor
-    /// while the subprocess runs, then resumes on the main actor when complete.
-    /// `setStep(_:)` is also `@MainActor`, so no hop is required.
+    /// each `await` on a `nonisolated` helper (`runSimpleProcess`, `runRegistrationCommand`)
+    /// hops off the main actor while the subprocess runs, then resumes on the main actor
+    /// when complete. `setStep(_:)` is also `@MainActor`, so no hop is required.
     @MainActor
     func register() async {
         guard canRegister else { return }

@@ -112,10 +112,8 @@ extension AddRunnerSheet {
                 .keyboardShortcut(.cancelAction)
                 .disabled(isRegistering)
             Button {
-                // Task inherits @MainActor from the enclosing SwiftUI button closure
-                // (the surrounding scope). Actor inheritance comes from the enclosing
-                // scope, not the callee; register()'s @MainActor annotation protects
-                // its own body but plays no role in the Task's actor selection here.
+                // Task runs on @MainActor because this Button closure is
+                // @MainActor-isolated (SwiftUI View body context).
                 Task { await register() }
             } label: {
                 if isRegistering {
