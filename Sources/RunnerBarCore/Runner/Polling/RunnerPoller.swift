@@ -382,7 +382,8 @@ public actor RunnerPoller {
         return extra
     }
 
-    /// Fetches all active jobs across all scopes, injecting the source scope into each job.
+    /// Fetches all active jobs across all scopes concurrently, injecting the source scope
+    /// into each job.
     ///
     /// `fetchActiveJobs(for:decoder:)` returns `ActiveJob` values with `scope == nil`
     /// because the GitHub Jobs API payload has no scope field. Without `.copying(scope:)`
@@ -395,26 +396,40 @@ public actor RunnerPoller {
     /// `guard scope.contains("/") else { return [] }`, which silently drops org-scoped jobs.
     /// That guard is correct for group fetching (org-level workflow run endpoints differ),
     /// but the standalone job endpoint handles both scope kinds via `scope.apiPrefix`.
+    ///
+    /// Results are collected in task-completion order; no downstream consumer depends on
+    /// scope-ordering of the returned array.
     func fetchAllJobs() async -> [ActiveJob] {
         let scopes = await MainActor.run { scopeStore.activeScopes }
         guard !scopes.isEmpty else { return [] }
         var allJobs: [ActiveJob] = []
-        for scope in scopes {
-            allJobs.append(contentsOf: await fetchActiveJobs(for: scope, decoder: decoder)
-                .map { $0.copying(scope: scope) })
+        await withTaskGroup(of: [ActiveJob].self) { group in
+            for scope in scopes {
+                group.addTask {
+                    await self.fetchActiveJobs(for: scope, decoder: self.decoder)
+                        .map { $0.copying(scope: scope) }
+                }
+            }
+            for await jobs in group { allJobs.append(contentsOf: jobs) }
         }
         log("RunnerPoller › fetchAllJobs — fetched \(allJobs.count) job(s) across \(scopes.count) scope(s)", category: .runner)
         return allJobs
     }
 
-    /// Fetches workflow action groups for all active scopes, using the SHA-keyed cache.
+    /// Fetches workflow action groups for all active scopes concurrently, using the
+    /// SHA-keyed cache.
+    ///
+    /// Results are collected in task-completion order; no downstream consumer depends on
+    /// scope-ordering of the returned array.
     func fetchActionGroups(shaKeyedCache: [String: WorkflowActionGroup]) async -> [WorkflowActionGroup] {
         let scopes = await MainActor.run { scopeStore.activeScopes }
         guard !scopes.isEmpty else { return [] }
         var allGroups: [WorkflowActionGroup] = []
-        for scope in scopes {
-            let groups = await actionGroupFetcher.fetch(for: scope, cache: shaKeyedCache)
-            allGroups.append(contentsOf: groups)
+        await withTaskGroup(of: [WorkflowActionGroup].self) { group in
+            for scope in scopes {
+                group.addTask { await self.actionGroupFetcher.fetch(for: scope, cache: shaKeyedCache) }
+            }
+            for await groups in group { allGroups.append(contentsOf: groups) }
         }
         log("RunnerPoller › fetchActionGroups — fetched \(allGroups.count) group(s) across \(scopes.count) scope(s)", category: .runner)
         return allGroups
