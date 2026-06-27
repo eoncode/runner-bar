@@ -246,11 +246,7 @@ extension GitHubTransport {
       return false
     case .rateLimited:
       log(
-        "cancelRun › run=\(runID) scope=\(scopeString) failed — rate limited", category: .transport)
-      return false
-    case .permissionDenied:
-      log(
-        "cancelRun › run=\(runID) scope=\(scopeString) failed — permission denied",
+        "cancelRun › run=\(runID) scope=\(scopeString) failed — rate limited\", category: .transport)\n      return false\n    case .permissionDenied:\n      log(\n        \"cancelRun › run=\\(runID) scope=\\(scopeString) failed — permission denied\",
         category: .transport)
       return false
     case .networkError(let error):
@@ -386,8 +382,8 @@ extension GitHubTransport {
 
 // MARK: - PaginationAction
 
-/// The outcome of processing a single page result in ``PaginationState/apply(_:decoder:)``.
-private enum PaginationAction {
+/// The outcome of processing a single page result in `PaginationState.apply(_:decoder:)`.
+enum PaginationAction {
   /// Fetch succeeded — advance to the given link header (caller resolves next URL).
   case advance(next: String?)
   /// Pagination should stop for the given reason.
@@ -417,8 +413,8 @@ private enum PaginationAction {
 /// Accumulates per-page results and stop-conditions for ``GitHubTransport/apiPaginated(_:timeout:)``.
 ///
 /// Extracted from `apiPaginated` to reduce its cyclomatic complexity (SW-R1002).
-/// All mutation happens through ``apply(_:decoder:)``.
-private struct PaginationState {
+/// All mutation happens through `apply(_:decoder:)`.
+struct PaginationState {
   /// The URL to fetch on the next iteration, or `nil` when pagination is complete.
   var nextURL: String?
   /// All decoded items accumulated across successful pages.
