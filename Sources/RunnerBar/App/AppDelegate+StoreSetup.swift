@@ -27,9 +27,12 @@ extension AppDelegate {
     /// `ScopePreferencesStore` before the v2 blobs exist. The sequence is:
     ///
     /// 1. Configure transports (synchronous, no actor reads).
-    /// 2. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
-    /// 3. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
-    /// 4. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
+    /// 2. Configure `LocalRunnerStore` — must happen before any await so that
+    ///    no lazy observation or indirect `.shared` access can fire against an
+    ///    unconfigured store during steps 3–4. (#1741)
+    /// 3. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
+    /// 4. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
+    /// 5. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
     ///    observers start only after migration is complete.
     ///
     /// ## statusIconLoop ordering
@@ -38,7 +41,7 @@ extension AppDelegate {
     /// has a chance to fire. Here is why that ordering is guaranteed:
     ///
     /// `setupPanel → setupSubscriptions` creates the `RunnerPoller` and then
-    /// spawns an *inner* `Task(name: “AppDelegate.startup: …”)` that suspends on
+    /// spawns an *inner* `Task(name: "AppDelegate.startup: …")` that suspends on
     /// `await localRunnerStore.refreshAsync()` before calling `store.start()`.
     /// Because `refreshAsync()` suspends, the inner Task yields back to the
     /// `@MainActor` queue — this outer `Task {}` continues to the
@@ -78,13 +81,26 @@ extension AppDelegate {
         // Plain Task{} inherits @MainActor from AppDelegate; all three setup
         // calls below run on the main actor after the two awaits resolve. (#1538)
         Task {
-            // Step 2: migrate legacy flat keys → v2 blobs.
+            // Step 2: configure LocalRunnerStore BEFORE the first await.
+            //
+            // ⚠️  This call MUST precede migrateIfNeeded and refreshDisplayNames.
+            // A lazy observation dependency (or any indirect LocalRunnerStore.shared
+            // access) can fire during either of those awaits. If configure() has not
+            // been called yet, LocalRunnerStore.shared fatalErrors immediately.
+            //
+            // The matching call inside setupSubscriptions() is retained for
+            // documentation and structural clarity; its own idempotency guard
+            // (guard runnerStore == nil) makes it a no-op when reached. (#1741)
+            LocalRunnerStore.configure(viewModel: runnerState)
+            log("AppDelegate › applicationDidFinishLaunching — LocalRunnerStore configured")
+
+            // Step 3: migrate legacy flat keys → v2 blobs.
             await ScopePreferencesStore.shared.migrateIfNeeded(knownScopes: knownScopes)
 
-            // Step 3: hydrate ScopeEntry.displayName from freshly-migrated blobs.
+            // Step 4: hydrate ScopeEntry.displayName from freshly-migrated blobs.
             await ScopeStore.shared.refreshDisplayNames()
 
-            // Step 4: start UI and observers — guaranteed to see migrated prefs.
+            // Step 5: start UI and observers — guaranteed to see migrated prefs.
             setupStatusItem()
             setupPanel()
             setupSignOutSubscription()
