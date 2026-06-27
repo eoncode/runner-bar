@@ -216,44 +216,17 @@ public struct FailureHookRunnerUseCase: Sendable {
 
   /// Builds the `$FAILURE_LOG` content from failed job results.
   ///
-  /// Falls back to a run-level summary (failed run IDs and conclusions) when
-  /// `jobs` is empty. Otherwise concatenates available log tails, or
-  /// failed step names when no log tail was fetched.
+  /// Falls back to a run-level summary when `jobs` is empty.
+  /// Otherwise joins the per-job log entries produced by `logEntry(for:)`.
+  ///
+  /// Complexity: 2 (one guard branch).
   internal static func buildLogContent(
     group: WorkflowActionGroup,
     scope _: String,
     jobs: [FailedJobResult]
   ) -> String {
-    guard !jobs.isEmpty else {
-      let lines: [String] = group.runs.compactMap { run in
-        guard let conclusion = run.conclusion, conclusion.isHookConclusion else { return nil }
-        return "FAILED run \(run.id): conclusion=\(conclusion.rawValue) workflow=\(run.name)"
-      }
-      return lines.joined(separator: "\n")
-    }
-    var parts: [String] = []
-    for entry in jobs {
-      let job = entry.job
-      if let tail = entry.logTail, !tail.isEmpty {
-        parts.append(tail)
-      } else {
-        let failedSteps = job.steps.filter { step in
-          guard let conclusion = step.conclusion else { return false }
-          return conclusion.isHookConclusion
-        }
-        var lines: [String] = ["Job: \(job.name) [failed]"]
-        if failedSteps.isEmpty {
-          lines.append("  (no failed steps reported)")
-        } else {
-          for step in failedSteps {
-            let conclusionStr = step.conclusion?.rawValue ?? step.status.rawValue
-            lines.append("  x Step \(step.number): \(step.name) -- \(conclusionStr)")
-          }
-        }
-        parts.append(lines.joined(separator: "\n"))
-      }
-    }
-    return parts.joined(separator: "\n\n")
+    guard !jobs.isEmpty else { return runLevelSummary(group: group) }
+    return jobs.map { logEntry(for: $0) }.joined(separator: "\n\n")
   }
 
   // MARK: - Internal types
@@ -267,6 +240,50 @@ public struct FailureHookRunnerUseCase: Sendable {
   }
 
   // MARK: - Private helpers
+
+  /// Returns a run-level summary used as a fallback when no job details are available.
+  ///
+  /// Complexity: 2 (one `compactMap` predicate).
+  private static func runLevelSummary(group: WorkflowActionGroup) -> String {
+    let lines: [String] = group.runs.compactMap { run in
+      guard let conclusion = run.conclusion, conclusion.isHookConclusion else { return nil }
+      return "FAILED run \(run.id): conclusion=\(conclusion.rawValue) workflow=\(run.name)"
+    }
+    return lines.joined(separator: "\n")
+  }
+
+  /// Produces the log entry string for a single failed job.
+  ///
+  /// Returns the raw log tail when one is available; otherwise falls back to
+  /// a human-readable summary of the failed steps via `stepLines(for:)`.
+  ///
+  /// Complexity: 2 (one `if let` branch).
+  private static func logEntry(for entry: FailedJobResult) -> String {
+    if let tail = entry.logTail, !tail.isEmpty {
+      return tail
+    }
+    return stepLines(for: entry.job).joined(separator: "\n")
+  }
+
+  /// Formats the failed-step list for a job into printable lines.
+  ///
+  /// Complexity: 3 (one filter predicate, one isEmpty branch).
+  private static func stepLines(for job: JobPayload) -> [String] {
+    let failedSteps = job.steps.filter { step in
+      guard let conclusion = step.conclusion else { return false }
+      return conclusion.isHookConclusion
+    }
+    var lines: [String] = ["Job: \(job.name) [failed]"]
+    if failedSteps.isEmpty {
+      lines.append("  (no failed steps reported)")
+    } else {
+      for step in failedSteps {
+        let conclusionStr = step.conclusion?.rawValue ?? step.status.rawValue
+        lines.append("  x Step \(step.number): \(step.name) -- \(conclusionStr)")
+      }
+    }
+    return lines
+  }
 
   /// Returns `true` if any run in `group` has a hook-triggering failure conclusion.
   private static func isFailure(group: WorkflowActionGroup) -> Bool {

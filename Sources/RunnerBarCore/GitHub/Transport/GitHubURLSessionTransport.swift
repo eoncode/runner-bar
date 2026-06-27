@@ -107,51 +107,94 @@ public struct GitHubTransport: GitHubTransportProtocol {
       log("\(logTag) › no token available", category: .transport)
       return .noToken
     }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-      log("\(logTag) › invalid URL: \(urlString)", category: .transport)
+    guard let req = buildRequest(
+      endpoint: endpoint,
+      token: token,
+      timeout: timeout,
+      useRawAccept: useRawAccept,
+      configure: configure,
+      logTag: logTag
+    ) else {
       return .networkError(URLError(.badURL))
     }
-    let baseReq =
-      useRawAccept
-      ? makeRawRequest(url: url, token: token, timeout: timeout)
-      : makeRequest(url: url, token: token, timeout: timeout)
-    let req = configure(baseReq)
     do {
       let (data, response) = try await session.data(for: req)
-      guard let http = response as? HTTPURLResponse else {
-        return .networkError(URLError(.badServerResponse))
-      }
-      if http.statusCode == 403 || http.statusCode == 429 {
-        // Use the Bool return value from handleRateLimitResponse to classify
-        // this response directly from its headers — never from the actor state.
-        // Reading the actor after the call is a TOCTOU: a prior concurrent
-        // request may have already armed the actor, causing a plain
-        // permission-denied 403 (no rate-limit headers) to be misclassified
-        // as .rateLimited instead of .permissionDenied.
-        let wasRateLimited = await handleRateLimitResponse(
-          statusCode: http.statusCode, data, response: http,
-          endpoint: urlString, rateLimiter: rateLimiter
-        )
-        return wasRateLimited ? .rateLimited : .permissionDenied
-      }
-      guard (200..<300).contains(http.statusCode) else {
-        logErrorBody(data, endpoint: urlString, status: http.statusCode)
-        return .httpError(http.statusCode)
-      }
-      // Clear the rate-limit flag after a successful 2xx response, but only
-      // when the actor is not currently limited. A single `clearIfNotLimited()`
-      // call performs the check and the clear in one atomic actor hop, eliminating
-      // the TOCTOU window that existed with the old snapshot+clear two-hop pattern.
-      await rateLimiter.clearIfNotLimited()
-      let linkHeader = http.value(forHTTPHeaderField: "Link")
-      return .success(data, statusCode: http.statusCode, linkHeader: linkHeader)
+      return await interpretHTTPResponse(
+        response, data: data, urlString: resolveURL(endpoint)
+      )
     } catch {
       log(
-        "\(logTag) › \(urlString) network error: \(error.localizedDescription)",
+        "\(logTag) › \(resolveURL(endpoint)) network error: \(error.localizedDescription)",
         category: .transport)
       return .networkError(error)
     }
+  }
+
+  // MARK: - Request building
+
+  /// Resolves `endpoint` to an absolute URL string, builds the typed `URLRequest`,
+  /// applies `configure`, and logs + returns `nil` if the URL is malformed.
+  private func buildRequest(
+    endpoint: String,
+    token: String,
+    timeout: TimeInterval,
+    useRawAccept: Bool,
+    configure: @Sendable (URLRequest) -> URLRequest,
+    logTag: String
+  ) -> URLRequest? {
+    let urlString = resolveURL(endpoint)
+    guard let url = URL(string: urlString) else {
+      log("\(logTag) › invalid URL: \(urlString)", category: .transport)
+      return nil
+    }
+    let base =
+      useRawAccept
+      ? makeRawRequest(url: url, token: token, timeout: timeout)
+      : makeRequest(url: url, token: token, timeout: timeout)
+    return configure(base)
+  }
+
+  // MARK: - HTTP response interpretation
+
+  /// Interprets a completed HTTP response, handling rate-limit, non-2xx, and
+  /// success cases. Extracted from `execute` to reduce its cyclomatic complexity.
+  ///
+  /// - Parameters:
+  ///   - response: The raw `URLResponse` returned by `URLSession`.
+  ///   - data: The response body.
+  ///   - urlString: The resolved absolute URL string used only for logging.
+  private func interpretHTTPResponse(
+    _ response: URLResponse,
+    data: Data,
+    urlString: String
+  ) async -> ExecuteResult {
+    guard let http = response as? HTTPURLResponse else {
+      return .networkError(URLError(.badServerResponse))
+    }
+    if http.statusCode == 403 || http.statusCode == 429 {
+      // Use the Bool return value from handleRateLimitResponse to classify
+      // this response directly from its headers — never from the actor state.
+      // Reading the actor after the call is a TOCTOU: a prior concurrent
+      // request may have already armed the actor, causing a plain
+      // permission-denied 403 (no rate-limit headers) to be misclassified
+      // as .rateLimited instead of .permissionDenied.
+      let wasRateLimited = await handleRateLimitResponse(
+        statusCode: http.statusCode, data, response: http,
+        endpoint: urlString, rateLimiter: rateLimiter
+      )
+      return wasRateLimited ? .rateLimited : .permissionDenied
+    }
+    guard (200..<300).contains(http.statusCode) else {
+      logErrorBody(data, endpoint: urlString, status: http.statusCode)
+      return .httpError(http.statusCode)
+    }
+    // Clear the rate-limit flag after a successful 2xx response, but only
+    // when the actor is not currently limited. A single `clearIfNotLimited()`
+    // call performs the check and the clear in one atomic actor hop, eliminating
+    // the TOCTOU window that existed with the old snapshot+clear two-hop pattern.
+    await rateLimiter.clearIfNotLimited()
+    let linkHeader = http.value(forHTTPHeaderField: "Link")
+    return .success(data, statusCode: http.statusCode, linkHeader: linkHeader)
   }
 }
 

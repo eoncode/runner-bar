@@ -482,9 +482,7 @@ public actor RunnerPoller {
   /// `internal` — required for cross-file extension access from `RunnerPoller+PollBridge.swift`;
   /// not a public API. Call sites are exclusively within `RunnerBarCore`.
   func fetchActionGroups(scopes: [String], shaKeyedCache: [String: WorkflowActionGroup]) async
-    -> [WorkflowActionGroup]
-  // swiftlint:disable:next opening_brace
-  {
+    -> [WorkflowActionGroup] {
     guard !scopes.isEmpty else { return [] }
     var allGroups: [WorkflowActionGroup] = []
     await withTaskGroup(of: [WorkflowActionGroup].self) { group in
@@ -499,80 +497,16 @@ public actor RunnerPoller {
     return allGroups
   }
 
-  /// Backfills step data into the completed-job cache.
-  ///
-  /// Iterates jobs in `cache` that have a conclusion but missing or in-progress steps,
-  /// fetches the full job payload from the GitHub API, and updates the cache entry.
-  ///
-  /// **Eviction rationale — these are NOT data-loss bugs:**
-  /// Three categories of cache entry are evicted (via `removeValue`) rather than
-  /// skipped or retried. Each is intentional and self-correcting:
-  ///
-  /// 1. **`scope == nil` (pre-scope-injection entries)**
-  ///    Written before scope-injection was introduced (pre-F-26). As of F-26,
-  ///    `fetchAllJobs` always injects scope via `.copying(scope:)` at fetch time,
-  ///    so `scope == nil` entries should only appear in the first poll cycle after
-  ///    an upgrade from a pre-F-26 build. Evicting them prevents repeated per-poll
-  ///    warning spam. They re-enter the cache with correct scope data on the next
-  ///    poll cycle once a new live fetch completes. This flash is cosmetic and
-  ///    self-corrects within one poll cycle.
-  ///    TODO: Remove this guard after two release cycles once pre-F-26 cache
-  ///    entries are definitively gone from the field.
-  ///
-  /// 2. **Org-only scope (`!scope.contains("/")`)**
-  ///    The GitHub Jobs API has no `orgs/{org}/actions/jobs/{id}` endpoint — only
-  ///    `repos/{owner}/{repo}/actions/jobs/{id}`. Keeping these entries would log a
-  ///    warning every poll cycle with no path to ever resolve them. Eviction is a
-  ///    one-time operation; the entry cannot re-populate via any backfill path
-  ///    (no GitHub org/actions/jobs endpoint exists).
-  ///
-  /// 3. **Empty-steps API response**
-  ///    Early-queued jobs may return zero steps transiently. The guard
-  ///    `guard !updated.steps.isEmpty` keeps the existing cache entry unchanged and
-  ///    retries on the next poll — this is a *skip*, not an eviction.
-  ///
-  /// The `removeValue` calls for cases 1 and 2 are therefore intentional, not data loss.
-  func backfillSteps(into cache: inout [Int: ActiveJob]) async {
-    for cacheID in Array(cache.keys) {
-      guard let cached = cache[cacheID] else { continue }
-      guard cached.conclusion != nil else { continue }
-      guard cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress })
-      else { continue }
-      guard let scope = validRepoScope(for: cached, jobID: cacheID, cache: &cache) else { continue }
-      guard let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)") else { continue }
-      if let refreshed = await decodedBackfillJob(data, jobID: cacheID, existingScope: cached.scope) {
-        cache[cacheID] = refreshed
-      }
-    }
-  }
-
   // MARK: - Private(set) write-through
 
   /// Sets the actor-local display properties in a single controlled call.
   ///
-  /// **Scope:** this function manages `runners`, `jobs`, `actions`, `isRateLimited`,
-  /// and `rateLimitResetDate` only. The five poll-cycle state properties
-  /// (`completedCache`, `prevLiveJobs`, `actionGroupCache`, `prevLiveGroups`,
-  /// `seenGroupIDs`) are written directly by `applyFetchResult` before calling this
-  /// function — they are not routed through `setDisplayState` because they are not
-  /// display properties and have no partial-update semantics.
-  ///
   /// **Partial-update contract:** `runners`, `jobs`, and `actions` are optional.
-  /// Passing `nil` for any of these means "leave the current value unchanged" —
-  /// it does **not** clear the list. `isRateLimited` and `rateLimitResetDate` are
-  /// non-optional and are **always** updated on every call.
+  /// Passing `nil` means "leave unchanged" — it does **not** clear the list.
+  /// `isRateLimited` and `rateLimitResetDate` are always updated on every call.
   ///
-  /// This asymmetry is intentional: `applyError` calls this function with
-  /// `runners/jobs/actions` all `nil` to preserve stale display data during an
-  /// error cycle (views continue to show the last known state). Do not call this
-  /// function with `nil` display lists intending to clear them — use explicit
-  /// empty arrays instead.
-  ///
-  /// `private(set)` prevents arbitrary writes from outside the actor, but Swift's
-  /// file-scoped `private` means extension files in separate source files cannot
-  /// write these properties either. This internal setter is therefore the controlled
-  /// mutation path for display properties, used exclusively by `applyFetchResult`
-  /// and `applyError` (in `RunnerPoller+ApplyResult.swift`).
+  /// `applyError` passes `nil` display lists to preserve stale data during error
+  /// cycles. Do not pass `nil` intending to clear — use explicit empty arrays.
   func setDisplayState(
     isRateLimited newIsRateLimited: Bool,
     rateLimitResetDate newResetDate: Date?,

@@ -106,7 +106,7 @@ struct DonutStatusView: View {
         }
     }
 
-    /// Queued state ring: solid yellow stroke.
+    /// Queued state ring: solid yellow stroke with no symbol.
     private var queuedRing: some View {
         Circle()
             .stroke(Color.rbWarning, lineWidth: strokeWidth)
@@ -114,6 +114,9 @@ struct DonutStatusView: View {
     }
 
     /// Terminal state (success/failed): solid colored ring + SF Symbol in the centre.
+    /// - Parameters:
+    ///   - color: The stroke and icon tint color (`.rbSuccess` or `.rbDanger`).
+    ///   - symbol: The SF Symbol name to render in the centre of the ring.
     private func terminalRing(color: Color, symbol: String) -> some View {
         ZStack {
             Circle()
