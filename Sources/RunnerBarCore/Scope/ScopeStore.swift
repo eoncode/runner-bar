@@ -6,9 +6,6 @@ import Foundation
 
 /// Persists the list of watched GitHub scopes as `[ScopeEntry]` in `UserDefaults`.
 ///
-/// Migration: if the legacy `"scopes"` key (plain `[String]`) is present on first
-/// launch it is converted to `[ScopeEntry]` (all enabled) and the old key is deleted.
-///
 /// Mutations update the `@Observable` `entries` array; `RunnerStore` observes
 /// `activeScopes` via `withObservationTracking`/`AsyncStream` (no Combine bridge).
 @MainActor
@@ -28,8 +25,6 @@ public final class ScopeStore {
 
   /// `UserDefaults` key for the JSON-encoded `[ScopeEntry]` array.
   private let entriesKey = "scopeEntries"
-  /// `UserDefaults` key for the legacy plain `[String]` scopes array, kept for migration only.
-  private let legacyKey = "scopes"
 
   /// All scope entries, persisted as JSON in `UserDefaults`.
   /// `private(set)` — mutate only through the designated methods on this type
@@ -53,18 +48,8 @@ public final class ScopeStore {
 
   // MARK: - Persistence
 
-  /// Loads `[ScopeEntry]` from `UserDefaults`, migrating the legacy
-  /// `[String]` key when found. Returns an empty array on decode failure.
+  /// Loads `[ScopeEntry]` from `UserDefaults`. Returns an empty array on decode failure.
   private func loadEntries() -> [ScopeEntry] {
-    // Migration: convert legacy [String] key if present.
-    if let legacy = store.stringArray(forKey: legacyKey),
-      !legacy.isEmpty {
-      log("ScopeStore › migrating \(legacy.count) legacy scope(s) to ScopeEntry", category: .scope)
-      let migrated = legacy.map { ScopeEntry(scope: $0, isEnabled: true) }
-      save(migrated)
-      store.removeObject(forKey: legacyKey)
-      return migrated
-    }
     guard let data = store.data(forKey: entriesKey) else {
       log("ScopeStore › no stored entries found", category: .scope)
       return []
