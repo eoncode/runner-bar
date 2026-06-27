@@ -131,7 +131,7 @@ internal extension SettingsView {
     }
 
     // MARK: - General
-    /// General section: polling interval, notification toggles, launch-at-login, and popover arrow.
+    /// General section: polling interval, API call counter, notification toggles, launch-at-login, and popover arrow.
     ///
     /// `settings` and `notifications` are injected `let` properties on an `@Observable` type.
     /// SwiftUI cannot synthesise `$`-bindings from plain `let` stored properties, so we
@@ -152,6 +152,11 @@ internal extension SettingsView {
             Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
                 .font(.caption).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
+            Divider().padding(.leading, RBSpacing.md)
+            APICallCounterRow()
+                .font(.system(size: 12))
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, 8)
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Notify on success").font(.system(size: 12)); Spacer()
