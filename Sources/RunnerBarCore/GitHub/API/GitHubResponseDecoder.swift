@@ -6,9 +6,9 @@ import Foundation
 // MARK: - Error logging
 
 /// Logs the response body (up to 400 chars) for non-2xx responses.
-func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
+func logErrorBody(_  Data?, endpoint: String, status: Int) {
   guard let data, !data.isEmpty else { return }
-  let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
+  let body = String( data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
   let preview = body.count > 400 ? String(body.prefix(400)) + "…" : body
   log("HTTP \(status) \(endpoint): \(preview)", category: .transport)
 }
@@ -46,7 +46,7 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 ///   (default actor) → `urlSessionExecute` (passes actor through) → here.
 ///
 /// - Parameter statusCode: The HTTP status code of the response.
-/// - Parameter data: The response body, if any.
+/// - Parameter  The response body, if any.
 /// - Parameter response: The full `HTTPURLResponse`.
 /// - Parameter endpoint: The endpoint string, used for logging.
 /// - Parameter rateLimiter: The rate-limit actor to arm on a genuine rate-limit response.
@@ -54,19 +54,15 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 /// See https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api
 func handleRateLimitResponse(
   statusCode: Int,
-  _ data: Data?,
+  _  Data?,
   response: HTTPURLResponse,
   endpoint: String,
   rateLimiter: some RateLimitActorProtocol
 ) async -> Bool {
-  let retryAfter = response.value(forHTTPHeaderField: "Retry-After")
-    .flatMap(Double.init)
-  let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
-    .flatMap(Int.init)
-  let resetHeader = response.value(forHTTPHeaderField: "X-RateLimit-Reset")
-    .flatMap(TimeInterval.init)
+  let retryAfter = response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init)
+  let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap(Int.init)
+  let resetHeader = response.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init)
 
-  // Distinguish genuine rate-limit 403s from permission-denied 403s.
   // A 429 is always a rate limit; a 403 is only a rate limit when
   // Remaining == 0 or a Retry-After window is present.
   let isRealRateLimit = statusCode == 429 || remaining == 0 || retryAfter != nil
@@ -75,27 +71,10 @@ func handleRateLimitResponse(
     return false
   }
 
-  // Primary = quota exhausted (X-RateLimit-Remaining: 0).
-  // Secondary = abuse / concurrency throttle (Retry-After present, or 429).
-  // The distinction is operationally useful: primary means wait for reset window;
-  // secondary means back off from request rate.
-  let limitKind: String
-  if retryAfter != nil || statusCode == 429 {
-    limitKind = "secondary"
-  } else {
-    limitKind = "primary"
-  }
-
-  // Log the response body to aid debugging — rate-limit responses from GitHub
-  // often include a message field explaining the specific limit that was hit.
+  let limitKind = rateLimitKind(retryAfter: retryAfter, statusCode: statusCode)
   logErrorBody(data, endpoint: endpoint, status: statusCode)
 
-  let resetAt: TimeInterval?
-  if let retryAfter {
-    resetAt = Date().timeIntervalSince1970 + retryAfter
-  } else {
-    resetAt = resetHeader
-  }
+  let resetAt = resetTimestamp(retryAfter: retryAfter, resetHeader: resetHeader)
   log(
     "RateLimit › ⚠️ rate limited (\(limitKind)) — \(endpoint) "
       + "status=\(statusCode) "
@@ -105,6 +84,26 @@ func handleRateLimitResponse(
   )
   await rateLimiter.set(resetAt: resetAt)
   return true
+}
+
+/// Returns `"secondary"` for 429s or responses with a `Retry-After` header;
+/// returns `"primary"` for quota-exhausted 403s (`X-RateLimit-Remaining: 0`).
+///
+/// Primary = quota exhausted — wait for the reset window.
+/// Secondary = abuse / concurrency throttle — back off from request rate.
+private func rateLimitKind(retryAfter: Double?, statusCode: Int) -> String {
+  retryAfter != nil || statusCode == 429 ? "secondary" : "primary"
+}
+
+/// Computes the absolute reset timestamp from the rate-limit response headers.
+///
+/// Prefers `Retry-After` (a relative delay in seconds added to `now`) over the
+/// absolute `X-RateLimit-Reset` epoch value.
+private func resetTimestamp(retryAfter: Double?, resetHeader: TimeInterval?) -> TimeInterval? {
+  if let retryAfter {
+    return Date().timeIntervalSince1970 + retryAfter
+  }
+  return resetHeader
 }
 
 // MARK: - Pagination
@@ -118,14 +117,20 @@ func extractNextURL(from header: String?) -> String? {
   for part in header.components(separatedBy: ",") {
     let segments = part.components(separatedBy: ";")
     guard segments.count >= 2 else { continue }
-    let hasNextRel = segments.dropFirst().contains { segment in
-      segment.trimmingCharacters(in: .whitespaces) == "rel=\"next\""
+    let hasNextRel = segments.dropFirst().contains {
+      $0.trimmingCharacters(in: .whitespaces) == "rel=\"next\""
     }
     guard hasNextRel else { continue }
-    let urlPart = segments[0].trimmingCharacters(in: .whitespaces)
-    if urlPart.hasPrefix("<"), urlPart.hasSuffix(">") {
-      return String(urlPart.dropFirst().dropLast())
-    }
+    if let url = extractURL(from: segments[0]) { return url }
   }
   return nil
+}
+
+/// Strips the RFC 8288 angle-bracket delimiters from a `Link` header URL segment.
+///
+/// Returns the bare URL string when the segment is in `<url>` form, or `nil` otherwise.
+private func extractURL(from segment: String) -> String? {
+  let trimmed = segment.trimmingCharacters(in: .whitespaces)
+  guard trimmed.hasPrefix("<"), trimmed.hasSuffix(">") else { return nil }
+  return String(trimmed.dropFirst().dropLast())
 }
