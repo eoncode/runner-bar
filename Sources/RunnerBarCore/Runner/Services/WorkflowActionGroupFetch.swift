@@ -223,7 +223,9 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
 
   // MARK: - Private helpers
 
-  private func decodeRuns(from  Data, into payloads: inout [RunPayload], seenIDs: inout Set<Int>) {
+  /// Decodes workflow runs from the given API response data, appending new (unseen) runs
+  /// to the `payloads` array. Duplicates are silently skipped via `seenIDs`.
+  private func decodeRuns(from data: Data, into payloads: inout [RunPayload], seenIDs: inout Set<Int>) {
     guard let resp = try? decoder.decode(ActionRunsResponse.self, from: data) else { return }
     for run in resp.workflowRuns {
       guard seenIDs.insert(run.id).inserted else { continue }
@@ -231,6 +233,7 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
     }
   }
 
+  /// Sorts action groups by sort priority (ascending), then by creation date (descending).
   private func sort(groups: [WorkflowActionGroup]) -> [WorkflowActionGroup] {
     groups.sorted { lhs, rhs in
       if lhs.groupStatus.sortPriority != rhs.groupStatus.sortPriority {
