@@ -35,7 +35,7 @@ extension GitHubTransport {
     var state = PaginationState(nextURL: resolveURL(endpoint))
     while let urlString = state.nextURL {
       let result = await execute(urlString, timeout: timeout, logTag: "apiPaginated")
-      let action = state.apply(result, urlString: urlString, decoder: decoder)
+      let action = state.apply(result, decoder: decoder)
       applyPaginationLog(action, urlString: urlString, count: state.allItems.count)
       if case .advance(let linkHeader) = action {
         state.nextURL = extractNextURL(from: linkHeader)
@@ -43,7 +43,7 @@ extension GitHubTransport {
         break
       }
     }
-    return encodePaginationResult(&state)
+    return encodePaginationResult(state)
   }
 
   /// Logs the outcome of a single pagination step.
@@ -76,13 +76,15 @@ extension GitHubTransport {
           "apiPaginated › network error at \(urlString) — stopping pagination", category: .transport
         )
       case .noToken:
-        break
+        log(
+          "apiPaginated › no GitHub token available — stopping pagination",
+          category: .transport)
       }
     }
   }
 
   /// Finalises and encodes the accumulated pagination result.
-  private func encodePaginationResult(_ state: inout PaginationState) -> Data? {
+  private func encodePaginationResult(_ state: PaginationState) -> Data? {
     if state.didFailAuth {
       if state.allItems.isEmpty {
         log(
@@ -105,6 +107,12 @@ extension GitHubTransport {
       log(
         "apiPaginated › pagination stopped by rate limit — returning \(state.allItems.count) partial items",
         category: .transport)
+    }
+    if state.didEncounterNonPartialFailure {
+      log(
+        "apiPaginated › pagination stopped by non-recoverable failure — discarding \(state.allItems.count) collected items",
+        category: .transport)
+      return nil
     }
     guard state.hadAtLeastOneSuccessfulPage else {
       log(
@@ -143,8 +151,7 @@ extension GitHubTransport {
   /// Sends a POST to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
   @concurrent
   @discardableResult
-  public func post(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data?
-  {
+  public func post(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
     let result = await execute(endpoint, timeout: timeout, logTag: "post") { req in
       var request = req
       request.httpMethod = "POST"
@@ -267,8 +274,7 @@ extension GitHubTransport {
   @concurrent
   @discardableResult
   public func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async
-    -> [String]?
-  {
+    -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
       log("patchRunnerLabels › invalid scope: \(scopeString)", category: .transport)
       return nil
@@ -361,7 +367,10 @@ extension GitHubTransport {
     }
     /// Short-lived installation token returned by the GitHub runner token endpoint.
     /// `private` to `fetchRunnerToken` — not part of any public API surface.
-    struct TokenResponse: Decodable { let token: String }
+    struct TokenResponse: Decodable {
+      /// The short-lived token value.
+      let token: String
+    }
     guard let resp = try? decoder.decode(TokenResponse.self, from: outputData) else {
       log("\(logPrefix) › decode failed (\(outputData.count)b)", category: .transport)
       return nil
@@ -413,21 +422,23 @@ private struct PaginationState {
   var didFailAuth = false
   /// Set to `true` when a rate-limit response stops pagination.
   var didRateLimit = false
+  /// Set to `true` when a non-partial failure stops pagination.
+  var didEncounterNonPartialFailure = false
   /// Set to `true` after the first page decodes successfully.
   var hadAtLeastOneSuccessfulPage = false
 
   /// Applies a single `ExecuteResult` to the state and returns the action to take.
   ///
   /// Side-effects: updates `allItems`, `didFailAuth`, `didRateLimit`,
-  /// `hadAtLeastOneSuccessfulPage`, and `nextURL` on success.
+  /// `didEncounterNonPartialFailure`, and `hadAtLeastOneSuccessfulPage`.
   mutating func apply(
     _ result: ExecuteResult,
-    urlString: String,
     decoder: JSONDecoder
   ) -> PaginationAction {
     switch result {
     case .success(let data, _, let linkHeader):
       guard let page = try? decoder.decode([AnyJSON].self, from: data) else {
+        didEncounterNonPartialFailure = true
         return .stop(.nonArrayBody)
       }
       hadAtLeastOneSuccessfulPage = true
@@ -440,6 +451,7 @@ private struct PaginationState {
       didFailAuth = true
       return .stop(.unauthorized)
     case .httpError:
+      didEncounterNonPartialFailure = true
       return .stop(.httpError)
     case .rateLimited:
       didRateLimit = true
