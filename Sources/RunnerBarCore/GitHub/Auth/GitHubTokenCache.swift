@@ -37,6 +37,60 @@ public func invalidateTokenCache() {
     log("GitHubTokenCache › invalidateTokenCache — cache cleared", category: .transport)
 }
 
+// MARK: - Resolution helpers (SW-R1002: extracted to reduce cyclomatic complexity)
+
+/// Returns the cached token if one has already been resolved, else `nil`.
+private func resolveFromCache() -> String? {
+    let cached = tokenCache.withLock { $0 }
+    #if DEBUG
+    if let cached {
+        log("GitHubTokenCache › githubToken — resolved from cache (len=\(cached.count))", category: .transport)
+    }
+    #endif
+    return cached
+}
+
+/// Reads the OAuth token from Keychain and populates the in-memory cache.
+///
+/// Thundering-herd on cold-start: two concurrent callers can both miss the
+/// cache check and both reach here. Both reads are idempotent Keychain reads
+/// returning the same value. The compare-before-write eliminates the redundant
+/// second store, and the window only exists on first resolution (after that
+/// every caller hits the cache in `resolveFromCache()`).
+private func resolveFromKeychain() -> String? {
+    guard let token = Keychain.token else {
+        #if DEBUG
+        log("GitHubTokenCache › githubToken — Keychain: nil", category: .transport)
+        #endif
+        return nil
+    }
+    #if DEBUG
+    log("GitHubTokenCache › githubToken — resolved from Keychain (len=\(token.count)), populating cache", category: .transport)
+    #endif
+    tokenCache.withLock { if $0 == nil { $0 = token } }
+    return token
+}
+
+/// Checks `GH_TOKEN` then `GITHUB_TOKEN` environment variables.
+/// Populates the in-memory cache on first match.
+private func resolveFromEnvironment() -> String? {
+    for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
+        if let token = ProcessInfo.processInfo.environment[key], !token.isEmpty {
+            #if DEBUG
+            log("GitHubTokenCache › githubToken — resolved from env var \(key) (len=\(token.count)), populating cache", category: .transport)
+            #endif
+            tokenCache.withLock { if $0 == nil { $0 = token } }
+            return token
+        }
+        #if DEBUG
+        log("GitHubTokenCache › githubToken — env var \(key): nil/empty", category: .transport)
+        #endif
+    }
+    return nil
+}
+
+// MARK: - Public API
+
 /// Returns a GitHub personal access token from the first available source.
 ///
 /// Priority order:
@@ -47,44 +101,9 @@ public func invalidateTokenCache() {
 ///
 /// Returns `nil` if no token is available from any source.
 public func githubToken() -> String? {
-    // 1. In-memory cache
-    if let cached = tokenCache.withLock({ $0 }) {
-        #if DEBUG
-        log("GitHubTokenCache › githubToken — resolved from cache (len=\(cached.count))", category: .transport)
-        #endif
-        return cached
-    }
-    // 2. Keychain — preferred; set by OAuthService after native OAuth sign-in
-    if let token = Keychain.token {
-        #if DEBUG
-        log("GitHubTokenCache › githubToken — resolved from Keychain (len=\(token.count)), populating cache", category: .transport)
-        #endif
-        // Thundering-herd on cold-start: two concurrent callers can both miss the
-        // cache check above and both reach here. This is intentional — both reads
-        // are idempotent Keychain reads returning the same value. The
-        // compare-before-write below eliminates the redundant second store, and
-        // the window only exists on first resolution (after that every caller
-        // hits the cache at the top of this function).
-        tokenCache.withLock { if $0 == nil { $0 = token } }
-        return token
-    }
-    #if DEBUG
-    log("GitHubTokenCache › githubToken — Keychain: nil", category: .transport)
-    #endif
-    // 3–4. CI / environment variable fallbacks
-    for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
-        if let token = ProcessInfo.processInfo.environment[key], !token.isEmpty {
-            #if DEBUG
-            log("GitHubTokenCache › githubToken — resolved from env var \(key) (len=\(token.count)), populating cache", category: .transport)
-            #endif
-            tokenCache.withLock { if $0 == nil { $0 = token } }
-            return token
-        } else {
-            #if DEBUG
-            log("GitHubTokenCache › githubToken — env var \(key): nil/empty", category: .transport)
-            #endif
-        }
-    }
+    if let token = resolveFromCache() { return token }
+    if let token = resolveFromKeychain() { return token }
+    if let token = resolveFromEnvironment() { return token }
     #if DEBUG
     log("GitHubTokenCache › githubToken — returning nil (no token from any source)", category: .transport)
     #endif
