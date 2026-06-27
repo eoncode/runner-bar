@@ -44,6 +44,11 @@ extension RunnerPoller {
       category: .runner)
     var indexed = await fetchRawRunners(allScopes: allScopes)
     indexed = await enrichBusyRunners(indexed, installPathMap: installPathMap)
+    // Sequential by design: `applyMetrics` is a lightweight actor-local write
+    // (updates a local runner model, no network call). The number of busy runners
+    // with resolved metrics is small in practice (typically < 5). A `withTaskGroup`
+    // wrapper would add task-spawn overhead without measurable benefit. Revisit only
+    // if `applyMetrics` ever becomes slow (e.g. if it starts performing I/O).
     let metricsUpdates = indexed.filter { $0.runner.busy && $0.runner.metrics != nil }
     if !metricsUpdates.isEmpty {
       for entry in metricsUpdates {
