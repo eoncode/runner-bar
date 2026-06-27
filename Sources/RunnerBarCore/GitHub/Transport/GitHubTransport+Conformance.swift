@@ -109,10 +109,15 @@ extension GitHubTransport {
         category: .transport)
     }
     if state.didEncounterNonPartialFailure {
+      if !state.hadAtLeastOneSuccessfulPage {
+        log(
+          "apiPaginated › pagination stopped by non-recoverable failure on first page — returning nil",
+          category: .transport)
+        return nil
+      }
       log(
-        "apiPaginated › pagination stopped by non-recoverable failure — discarding \(state.allItems.count) collected items",
+        "apiPaginated › pagination stopped by non-recoverable failure mid-pagination — returning \(state.allItems.count) partial items",
         category: .transport)
-      return nil
     }
     guard state.hadAtLeastOneSuccessfulPage else {
       log(
