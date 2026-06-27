@@ -209,10 +209,9 @@ public enum PollResultBuilder {
     let freezeConfig = FreezeVanishedConfig(snapPrev: snapPrevGroups, liveIDs: liveIDs, now: now)
     await freezeVanishedGroups(
       config: freezeConfig,
+      deps: deps,
       into: &newCache,
-      seenGroupIDs: &newSeenGroupIDs,
-      scopeFromGroup: deps.scopeFromGroup,
-      fireFailureHook: deps.fireFailureHook
+      seenGroupIDs: &newSeenGroupIDs
     )
     trimGroupCache(&newCache, limit: groupCacheLimit)
     trimSeenGroupIDs(&newSeenGroupIDs, limit: seenGroupIDsLimit)
@@ -317,7 +316,7 @@ public enum PollResultBuilder {
   /// Freezes action groups that were live in the previous poll but have since
   /// vanished from the live feed (i.e. completed without appearing in fetchGroups).
   ///
-  /// Fires `fireFailureHook` for unseen groups with a hook-triggering conclusion
+  /// Fires `deps.fireFailureHook` for unseen groups with a hook-triggering conclusion
   /// (`isHookConclusion` — genuine failures and cancellations).
   /// Successfully completed vanished groups are cached and dimmed without an alert.
   ///
@@ -345,16 +344,14 @@ public enum PollResultBuilder {
   ///
   /// - Parameters:
   ///   - config: Snapshot, live-IDs, and timestamp bundled into a `FreezeVanishedConfig`.
+  ///   - deps: Injected closures (scope derivation and failure hook).
   ///   - cache: Group cache to mutate in place.
   ///   - seenGroupIDs: Set of group IDs that have already fired the hook; mutated in place.
-  ///   - scopeFromGroup: Derives the scope string for the failure hook call.
-  ///   - fireFailureHook: Invoked when a newly-vanished group has a hook-triggering conclusion.
   public static func freezeVanishedGroups(
     config: FreezeVanishedConfig,
+    deps: GroupStateDeps,
     into cache: inout [String: WorkflowActionGroup],
-    seenGroupIDs: inout OrderedSet<String>,
-    scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
-    fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void
+    seenGroupIDs: inout OrderedSet<String>
   ) async {
     log(
       "PollResultBuilder › freezeVanishedGroups — snapPrev=\(config.snapPrev.count) liveIDs=\(config.liveIDs)",
@@ -364,10 +361,9 @@ public enum PollResultBuilder {
         groupID: groupID,
         group: group,
         config: config,
+        deps: deps,
         into: &cache,
-        seenGroupIDs: &seenGroupIDs,
-        scopeFromGroup: scopeFromGroup,
-        fireFailureHook: fireFailureHook
+        seenGroupIDs: &seenGroupIDs
       )
     }
   }
@@ -518,14 +514,17 @@ public enum PollResultBuilder {
   /// Registers the group ID unconditionally in `seenGroupIDs`, applies the
   /// fast-path skip for already-cached-and-dimmed groups, fires the hook when
   /// appropriate, and writes the frozen entry into `cache`.
+  ///
+  /// `deps.scopeFromGroup` and `deps.fireFailureHook` are used in place of loose
+  /// closure parameters so this function stays within SwiftLint's
+  /// `function_parameter_count` limit (≤ 6).
   private static func processVanishedGroup(
     groupID: String,
     group: WorkflowActionGroup,
     config: FreezeVanishedConfig,
+    deps: GroupStateDeps,
     into cache: inout [String: WorkflowActionGroup],
-    seenGroupIDs: inout OrderedSet<String>,
-    scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
-    fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void
+    seenGroupIDs: inout OrderedSet<String>
   ) async {
     log(
       "PollResultBuilder › freezeVanishedGroups — vanished groupID=\(group.id) inCache=\(cache[groupID] != nil)",
@@ -552,13 +551,13 @@ public enum PollResultBuilder {
     // cache[groupID] == nil guards against re-fire for groups already written
     // to cache by a previous iteration or by the doneGroups path.
     if isUnseen && cache[groupID] == nil {
-      let scope = scopeFromGroup(group)
+      let scope = deps.scopeFromGroup(group)
       let shouldFire = group.runs.contains { $0.conclusion?.isHookConclusion == true }
       if shouldFire {
         log(
           "PollResultBuilder › freezeVanishedGroups — groupID=\(group.id) unseen+hookConclusion → fireFailureHook scope=\(scope)",
           category: .runner)
-        await fireFailureHook(group, scope)
+        await deps.fireFailureHook(group, scope)
       }
     }
     if group.lastJobCompletedAt == nil {
