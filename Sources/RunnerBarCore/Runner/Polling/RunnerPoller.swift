@@ -340,7 +340,6 @@ public actor RunnerPoller {
         category: .runner)
     } else {
       #if DEBUG
-        // swiftlint:disable:next line_length
         log(
           "RunnerPoller › fetch — localRunners=\(localRunnersSnapshot.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })",
           category: .runner)
@@ -484,6 +483,7 @@ public actor RunnerPoller {
   /// not a public API. Call sites are exclusively within `RunnerBarCore`.
   func fetchActionGroups(scopes: [String], shaKeyedCache: [String: WorkflowActionGroup]) async
     -> [WorkflowActionGroup]
+  // swiftlint:disable:next opening_brace
   {
     guard !scopes.isEmpty else { return [] }
     var allGroups: [WorkflowActionGroup] = []
@@ -540,62 +540,9 @@ public actor RunnerPoller {
       else { continue }
       guard let scope = validRepoScope(for: cached, jobID: cacheID, cache: &cache) else { continue }
       guard let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)") else { continue }
-      if let refreshed = await decodedBackfillJob(data, jobID: cacheID, existingScope: cached.scope)
-      {
+      if let refreshed = await decodedBackfillJob(data, jobID: cacheID, existingScope: cached.scope) {
         cache[cacheID] = refreshed
       }
-    }
-  }
-
-  /// Validates and returns the repo-scoped path for a cached job, evicting entries that
-  /// lack a scope or carry an org-only scope (neither can be backfilled via the API).
-  /// Returns `nil` in both eviction cases so the caller can `continue` immediately.
-  private func validRepoScope(
-    for job: ActiveJob,
-    jobID: Int,
-    cache: inout [Int: ActiveJob]
-  ) -> String? {
-    guard let scope = job.scope else {
-      cache.removeValue(forKey: jobID)
-      log(
-        "RunnerPoller › backfillSteps — evicted jobID=\(jobID): scope is nil (pre-scope-injection entry)",
-        category: .runner)
-      return nil
-    }
-    guard scope.contains("/") else {
-      cache.removeValue(forKey: jobID)
-      // swiftlint:disable:next line_length
-      log(
-        "RunnerPoller › backfillSteps — evicted jobID=\(jobID): org-only scope '\(scope)' has no repo path; org-only jobs cannot be backfilled (no GitHub org/actions/jobs endpoint)",
-        category: .runner)
-      return nil
-    }
-    return scope
-  }
-
-  /// Decodes a raw API response into an `ActiveJob` for replacing a backfill cache entry.
-  /// Restores the original scope (absent from the API payload) and guards against empty-steps
-  /// responses that would clobber valid cached step data. Returns `nil` on failure or 0 steps.
-  private func decodedBackfillJob(
-    _ rawData: Data,
-    jobID: Int,
-    existingScope: String?
-  ) async -> ActiveJob? {
-    do {
-      let payload = try decoder.decode(JobPayload.self, from: rawData)
-      let updated = await ISO8601DateParser.shared.makeJob(from: payload, isDimmed: true)
-      guard !updated.steps.isEmpty else {
-        log(
-          "RunnerPoller › backfillSteps — jobID=\(jobID) API returned 0 steps, keeping existing cache entry",
-          category: .runner)
-        return nil
-      }
-      return updated.copying(scope: existingScope)
-    } catch {
-      log(
-        "RunnerPoller › backfillSteps — ⚠️ decode failed for jobID=\(jobID): \(error)",
-        category: .runner)
-      return nil
     }
   }
 
