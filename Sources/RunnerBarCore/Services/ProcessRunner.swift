@@ -237,12 +237,26 @@ public enum ProcessRunner {
     /// the SwiftLint `function_parameter_count` limit (≤ 6) while preserving the
     /// same explicit ownership and Sendable guarantees as the individual parameters.
     private struct LaunchContext {
+        /// Optional bytes to write to the subprocess's stdin after launch.
+        /// `nil` means no stdin is needed; the input pipe is left unattached.
         let stdin: Data?
+        /// Pipe whose read end is attached to the subprocess's stdout (and stderr
+        /// when `mergeStderr` is true). The drain queue reads from this pipe.
         let outPipe: Pipe
+        /// Pipe whose write end feeds the subprocess's stdin, or `nil` when
+        /// `stdin` is `nil`. Created by `wireStdin(hasStdin:to:)`.
         let inputPipe: Pipe?
+        /// Serial `DispatchQueue` on which stdin bytes are written after `task.run()`.
+        /// `nil` when no stdin data is provided.
         let stdinQueue: DispatchQueue?
+        /// Lock-protected box holding the timeout `Task` handle so that
+        /// `terminationHandler` can cancel it after the process exits.
         let timeoutTaskBox: OSAllocatedUnfairLock<Task<Void, Never>?>
+        /// Continuation that resumes the `runAsync` caller once the subprocess
+        /// exits (or fails to launch).
         let continuation: CheckedContinuation<Result, Never>
+        /// Maximum wall-clock seconds the subprocess is allowed to run before
+        /// the timeout task calls `task.terminate()`.
         let timeout: TimeInterval
     }
 
