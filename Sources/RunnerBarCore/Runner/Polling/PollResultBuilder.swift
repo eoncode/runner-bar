@@ -1,16 +1,16 @@
 // PollResultBuilder.swift
 // RunnerBarCore
-import Collections
+
 import Foundation
 import OrderedCollections
 
 // MARK: - GroupStateDeps
 
-/// Injected dependencies for `PollResultBuilder.buildGroupState`.
+/// Dependency bundle for `PollResultBuilder.buildGroupState`.
 ///
-/// Grouping the four async/sync closures into a single value type keeps
-/// `buildGroupState` within SwiftLint's `function_parameter_count` limit
-/// while preserving full testability via closure injection.
+/// Groups the four injected closures needed by `buildGroupState` within SwiftLint's
+/// `function_parameter_count` limit (≤ 6) while preserving full testability via
+/// closure injection.
 public struct GroupStateDeps: Sendable {
   /// Fetches live groups for every active scope.
   public let fetchGroups: @Sendable ([String: WorkflowActionGroup]) async -> [WorkflowActionGroup]
@@ -44,10 +44,9 @@ public struct GroupStateDeps: Sendable {
 
 // MARK: - FreezeVanishedConfig
 
-/// State parameters for `PollResultBuilder.freezeVanishedGroups`.
+/// Parameter bundle for `PollResultBuilder.freezeVanishedGroups`.
 ///
-/// Bundles the three read-only inputs — the previous-poll snapshot, the
-/// current live-ID set, and the current timestamp — into a single value
+/// Packs the three snapshot/timestamp values needed by `freezeVanishedGroups`
 /// so `freezeVanishedGroups` stays within SwiftLint's
 /// `function_parameter_count` limit (≤ 6).
 public struct FreezeVanishedConfig: Sendable {
@@ -77,7 +76,7 @@ public struct FreezeVanishedConfig: Sendable {
 
 // MARK: - PollResultBuilder
 
-/// Pure state-building logic extracted from RunnerStore.
+/// Pure static helpers for assembling display lists and caches from poll snapshots.
 ///
 /// All methods are static and operate only on data passed as parameters.
 /// Fetch / API side-effects are injected as closures so this type is
@@ -164,12 +163,12 @@ public enum PollResultBuilder {
   /// - Parameters:
   ///   - snapPrevGroups: Live-group snapshot from the previous poll.
   ///   - snapGroupCache: Completed-group cache from the previous poll.
+  ///   - deps: Injected async/sync closures (fetch, scope, hook, enrich).
   ///   - snapSeenGroupIDs: OrderedSet of group IDs that have already triggered the failure
   ///     hook in a previous poll cycle. Contains `WorkflowActionGroup.id` values.
   ///     Survives `trimGroupCache` eviction so the hook cannot re-fire for old groups.
   ///     Insertion order is preserved so `trimSeenGroupIDs` evicts the oldest entries first.
   ///     Defaults to an empty set so callers that omit this argument start with an empty set.
-  ///   - deps: Injected async/sync closures (fetch, scope, hook, enrich).
   ///
   /// - Important: `doneGroups` inserts into `newSeenGroupIDs` **before**
   ///   `freezeVanishedGroups` runs, so a group present in both paths fires the hook
@@ -524,13 +523,23 @@ public enum PollResultBuilder {
 // MARK: - Array fill helper
 
 /// Sequence-filling helpers used by `PollResultBuilder` to top up display arrays.
-private extension Array {
+extension Array {
   /// Appends elements from `source` until `self.count` reaches `limit`.
   ///
   /// Elements are appended in source order. An optional predicate can skip
   /// individual elements (e.g. cached groups that are already live) without
   /// breaking the "fill until full" semantics.
-  mutating func appendUpTo<S>(
+  ///
+  /// - Note: `internal` (not `private`) because Swift does not allow `private`
+  ///   on extensions that are not in the same file as the primary type declaration.
+  ///   `Array` is defined in the standard library, so `private` here would mean
+  ///   file-private — invisible to `PollResultBuilder`'s callers within the same
+  ///   module but also invisible across files. `internal` is the narrowest access
+  ///   level that lets `PollResultBuilder` (and its test targets) call this method
+  ///   without leaking it as `public` API. It is **not** intended for use outside
+  ///   the polling pipeline; treat it as an implementation detail of
+  ///   `buildJobDisplay` and `buildGroupDisplay`.
+  internal mutating func appendUpTo<S>(
     _ limit: Int,
     from source: S,
     where shouldAppend: (S.Element) -> Bool = { _ in true }
