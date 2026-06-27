@@ -40,8 +40,28 @@ extension RunnerPoller {
     ) async -> [Runner] {
         let allScopes = scopes + extraOrgScopes
         log("RunnerPoller › fetchAndEnrichRunners ENTER — scopes=\(scopes) extraOrgScopes=\(extraOrgScopes)", category: .runner)
+        var indexed = await fetchRawRunners(allScopes: allScopes)
+        indexed = await enrichBusyRunners(indexed, installPathMap: installPathMap)
+        let metricsUpdates = indexed.filter { $0.runner.busy && $0.runner.metrics != nil }
+        if !metricsUpdates.isEmpty {
+            for entry in metricsUpdates {
+#if DEBUG
+                // swiftlint:disable:next line_length
+                log("RunnerPoller › fetchAndEnrichRunners — applyMetrics: \(entry.runner.name) id=\(entry.runner.id) busy=\(entry.runner.busy) metrics=\(String(describing: entry.runner.metrics))", category: .runner)
+#endif
+                await applyMetrics(entry.runner.metrics, entry.runner.id, entry.runner.name)
+            }
+        }
+        let result = indexed.map(\.runner)
+        log("RunnerPoller › fetchAndEnrichRunners EXIT — returning \(result.count) runner(s)", category: .runner)
+        return result
+    }
 
-        // MARK: Phase 1 — Fetch raw runners for all scopes concurrently
+    /// Fans out concurrent scope fetches and collects all indexed runners.
+    ///
+    /// Extracted from `fetchAndEnrichRunners` to reduce its cyclomatic complexity (SW-R1002).
+    /// Task completion order is non-deterministic; views sort runners for display independently.
+    private func fetchRawRunners(allScopes: [String]) async -> [IndexedScopedRunner] {
         var indexed: [IndexedScopedRunner] = []
         await withTaskGroup(of: (String, [Runner]).self) { group in
             for scope in allScopes {
@@ -54,57 +74,46 @@ extension RunnerPoller {
                 indexed.append(contentsOf: fetched.map { IndexedScopedRunner(scope: scope, runner: $0) })
             }
         }
+        return indexed
+    }
 
-        // MARK: Phase 2 — Enrich each busy runner with system metrics concurrently
-        // Lookup priority: byApiId ?? byAgentId ?? byFullKey ?? byName
+    /// Concurrently fetches system metrics for all busy runners and applies them.
+    ///
+    /// Extracted from `fetchAndEnrichRunners` to reduce its cyclomatic complexity (SW-R1002).
+    /// Lookup priority: `byApiId ?? byAgentId ?? byFullKey ?? byName`.
+    private func enrichBusyRunners(
+        _ indexed: [IndexedScopedRunner],
+        installPathMap: InstallPathMap
+    ) async -> [IndexedScopedRunner] {
+        var indexed = indexed
         let busyIndices = indexed.indices.filter { indexed[$0].runner.busy }
-        if !busyIndices.isEmpty {
-            let metricsResults: [(Int, RunnerMetrics?)] = await withTaskGroup(
-                of: (Int, RunnerMetrics?).self
-            ) { group in
-                for i in busyIndices {
-                    let runner = indexed[i].runner
-                    let scope = indexed[i].scope
-                    let installPath = installPathMap.byApiId[runner.id]
-                        ?? installPathMap.byAgentId[runner.id]
-                        ?? installPathMap.byFullKey["\(scope)/\(runner.name)"]
-                        ?? installPathMap.byName[runner.name]
-                    guard let path = installPath else {
-                        log("RunnerPoller › fetchAndEnrichRunners — no installPath for \(runner.name) id=\(runner.id) scope=\(scope)", category: .runner)
-                        continue
-                    }
-                    group.addTask {
-                        let metrics = await metricsForRunner(installPath: path)
-                        return (i, metrics)
-                    }
+        guard !busyIndices.isEmpty else { return indexed }
+        let metricsResults: [(Int, RunnerMetrics?)] = await withTaskGroup(
+            of: (Int, RunnerMetrics?).self
+        ) { group in
+            for i in busyIndices {
+                let runner = indexed[i].runner
+                let scope = indexed[i].scope
+                let installPath = installPathMap.byApiId[runner.id]
+                    ?? installPathMap.byAgentId[runner.id]
+                    ?? installPathMap.byFullKey["\(scope)/\(runner.name)"]
+                    ?? installPathMap.byName[runner.name]
+                guard let path = installPath else {
+                    log("RunnerPoller › enrichBusyRunners — no installPath for \(runner.name) id=\(runner.id) scope=\(scope)", category: .runner)
+                    continue
                 }
-                var results: [(Int, RunnerMetrics?)] = []
-                for await pair in group { results.append(pair) }
-                return results
+                group.addTask {
+                    let metrics = await metricsForRunner(installPath: path)
+                    return (i, metrics)
+                }
             }
-            for (i, metrics) in metricsResults {
-                indexed[i].runner = indexed[i].runner.copying(metrics: metrics)
-            }
+            var results: [(Int, RunnerMetrics?)] = []
+            for await pair in group { results.append(pair) }
+            return results
         }
-
-        // Sequential by design: `applyMetrics` is a lightweight actor-local write
-        // (updates a local runner model, no network call). The number of busy runners
-        // with resolved metrics is small in practice (typically < 5). A `withTaskGroup`
-        // wrapper would add task-spawn overhead without measurable benefit. Revisit only
-        // if `applyMetrics` ever becomes slow (e.g. if it starts performing I/O).
-        let metricsUpdates = indexed.filter { $0.runner.busy && $0.runner.metrics != nil }
-        if !metricsUpdates.isEmpty {
-            for entry in metricsUpdates {
-#if DEBUG
-                // swiftlint:disable:next line_length
-                log("RunnerPoller › fetchAndEnrichRunners — applyMetrics: \(entry.runner.name) id=\(entry.runner.id) busy=\(entry.runner.busy) metrics=\(String(describing: entry.runner.metrics))", category: .runner)
-#endif
-                await applyMetrics(entry.runner.metrics, entry.runner.id, entry.runner.name)
-            }
+        for (i, metrics) in metricsResults {
+            indexed[i].runner = indexed[i].runner.copying(metrics: metrics)
         }
-
-        let result = indexed.map(\.runner)
-        log("RunnerPoller › fetchAndEnrichRunners EXIT — returning \(result.count) runner(s)", category: .runner)
-        return result
+        return indexed
     }
 }

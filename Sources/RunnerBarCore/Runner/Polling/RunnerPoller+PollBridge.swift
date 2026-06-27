@@ -171,52 +171,62 @@ extension RunnerPoller {
     ) -> [ActiveJob] {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
-            // cacheHasConclusion: the cache settled a conclusion the live API hasn't returned
-            // yet (common on the first poll after a job finishes — GitHub propagates conclusion
-            // slightly after status flips to "completed").
-            //
-            // cacheHasBetterSteps: the cache has fully-resolved steps while the live payload
-            // still shows in-progress ones (backfill ran after the main fetch).
-            //
-            // The third clause `(job.steps.isEmpty || !cached.steps.contains { .inProgress })`
-            // guards against overwriting fresher live steps with staler cached in-progress ones.
-            // The `job.steps.isEmpty` short-circuit is intentional: when the live payload has
-            // no steps at all, there is no live data to protect — showing partial cached steps
-            // (even if some are still in-progress) is strictly better than showing zero rows
-            // for an entire poll cycle. The settled-cache guard only applies when the live
-            // payload itself has step entries that could be overwritten.
-            //
-            // When only cacheHasConclusion fires (cacheHasBetterSteps is false), the merged
-            // job carries conclusion from the cache and steps from the live job. This is
-            // intentional: the live steps are the freshest available data; showing them
-            // alongside a bridged conclusion is correct. Returning the full stale cached
-            // entry would hide newer step state. The `steps` field in the UI only renders
-            // the step list when the job is expanded, so a brief one-poll transient where
-            // conclusion is set but steps are still completing is acceptable and preferable
-            // to stale data. This is NOT a conclusion/steps inconsistency bug.
-            //
-            // completedAt: prefer cached.completedAt only when cacheHasConclusion is true.
-            // GitHub transiently returns conclusion != nil with completedAt == nil for a
-            // brief window after a job finishes; without the cached fallback the recorded
-            // completion timestamp would be lost for one poll cycle. In the
-            // cacheHasBetterSteps-only path the live job's completedAt is used directly —
-            // the cache entry is for steps only and its completedAt must not overwrite a
-            // fresher live value.
-            let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
-            let cacheHasBetterSteps = !cached.steps.isEmpty
-                && (job.steps.isEmpty || job.steps.contains { $0.status == .inProgress })
-                && (job.steps.isEmpty || !cached.steps.contains { $0.status == .inProgress })
-            guard cacheHasConclusion || cacheHasBetterSteps else { return job }
-            if cacheHasConclusion {
-                return job
-                    .copying(conclusion: cached.conclusion)
-                    .copying(completedAt: cached.completedAt ?? job.completedAt)
-                    .copying(steps: cacheHasBetterSteps ? cached.steps : job.steps)
-            } else {
-                // cacheHasBetterSteps only — keep live conclusion and completedAt.
-                return job
-                    .copying(steps: cached.steps)
-            }
+            let hasConclusion = jobCacheHasConclusion(job: job, cached: cached)
+            let hasBetterSteps = jobCacheHasBetterSteps(job: job, cached: cached)
+            guard hasConclusion || hasBetterSteps else { return job }
+            return mergedJob(job: job, cached: cached, cacheHasConclusion: hasConclusion, cacheHasBetterSteps: hasBetterSteps)
+        }
+    }
+
+    /// Returns `true` when the cache has settled a conclusion the live API hasn’t returned yet.
+    ///
+    /// Common on the first poll after a job finishes — GitHub propagates conclusion
+    /// slightly after status flips to “completed”.
+    ///
+    /// Extracted from `enrichGroupJobs` to reduce its cyclomatic complexity (SW-R1002).
+    nonisolated private func jobCacheHasConclusion(job: ActiveJob, cached: ActiveJob) -> Bool {
+        cached.conclusion != nil && job.conclusion == nil
+    }
+
+    /// Returns `true` when the cache has fully-resolved steps while the live payload still shows
+    /// in-progress ones (backfill ran after the main fetch).
+    ///
+    /// The `job.steps.isEmpty` short-circuit is intentional: when the live payload has no steps
+    /// at all, there is no live data to protect — showing partial cached steps is better than
+    /// zero rows for an entire poll cycle. The settled-cache guard only applies when the live
+    /// payload itself has step entries that could be overwritten.
+    ///
+    /// Extracted from `enrichGroupJobs` to reduce its cyclomatic complexity (SW-R1002).
+    nonisolated private func jobCacheHasBetterSteps(job: ActiveJob, cached: ActiveJob) -> Bool {
+        !cached.steps.isEmpty
+            && (job.steps.isEmpty || job.steps.contains { $0.status == .inProgress })
+            && (job.steps.isEmpty || !cached.steps.contains { $0.status == .inProgress })
+    }
+
+    /// Merges `cached` data into `job` based on which cache advantage flags are set.
+    ///
+    /// When only `cacheHasConclusion`: bridges conclusion and completedAt from cache, uses live
+    /// steps. GitHub transiently returns `conclusion != nil` with `completedAt == nil` for a brief
+    /// window after a job finishes; without the cached fallback the completion timestamp would be
+    /// lost for one poll cycle.
+    ///
+    /// When only `cacheHasBetterSteps`: keeps live conclusion and completedAt, bridges steps.
+    ///
+    /// Extracted from `enrichGroupJobs` to reduce its cyclomatic complexity (SW-R1002).
+    nonisolated private func mergedJob(
+        job: ActiveJob,
+        cached: ActiveJob,
+        cacheHasConclusion: Bool,
+        cacheHasBetterSteps: Bool
+    ) -> ActiveJob {
+        if cacheHasConclusion {
+            return job
+                .copying(conclusion: cached.conclusion)
+                .copying(completedAt: cached.completedAt ?? job.completedAt)
+                .copying(steps: cacheHasBetterSteps ? cached.steps : job.steps)
+        } else {
+            // cacheHasBetterSteps only — keep live conclusion and completedAt.
+            return job.copying(steps: cached.steps)
         }
     }
 }
