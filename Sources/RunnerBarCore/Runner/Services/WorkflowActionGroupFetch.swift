@@ -109,7 +109,8 @@ private struct PRRef: Codable {
 private func prLabel(from run: RunPayload) -> String {
   if let pr = run.pullRequests?.first { return "#\(pr.number)" }
   if let branch = run.headBranch,
-    let range = branch.range(of: prNumberPattern, options: .regularExpression) {
+    let range = branch.range(of: prNumberPattern, options: .regularExpression)
+  {
     let digits = branch[range].filter { $0.isNumber }
     return "#\(digits)"
   }
@@ -169,7 +170,9 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
   ///   to `withTaskGroup` and already run on the task's executor, so they don't
   ///   need the annotation. See also: SE-0420 (``@_unsupportedInheritActorContext``).
   @concurrent
-  public func fetch(for scope: String, cache: [String: WorkflowActionGroup] = [:]) async -> [WorkflowActionGroup] {
+  public func fetch(for scope: String, cache: [String: WorkflowActionGroup] = [:]) async
+    -> [WorkflowActionGroup]
+  {
     guard scope.contains("/") else {
       log("fetchActionGroups -- skipping org scope \(scope)", category: .runner)
       return []
@@ -185,33 +188,7 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
       "repos/\(scope)/actions/runs?status=completed&per_page=\(GitHubConstants.maxPageSize)")
     let (ipData, qData, cData) = await (inProgressData, queuedData, completedData)
 
-    var runPayloads: [RunPayload] = []
-    var seenIDs = Set<Int>()
-
-    for data in [ipData, qData].compactMap({ $0 }) {
-      if let resp = try? decoder.decode(ActionRunsResponse.self, from: data) {
-        for run in resp.workflowRuns {
-          guard seenIDs.insert(run.id).inserted else { continue }
-          runPayloads.append(run)
-        }
-      }
-    }
-
-    var bySha: [String: [RunPayload]] = [:]
-    for run in runPayloads { bySha[run.headSha, default: []].append(run) }
-
-    // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
-    // Fix #1041: completed-only SHAs (groups that finished between polls) are
-    // now included so they can be routed through the normal cache/display pipeline.
-    // De-duplication of old completed groups re-triggering the failure hook is
-    // handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
-    if let data = cData,
-      let resp = try? decoder.decode(ActionRunsResponse.self, from: data) {
-      for run in resp.workflowRuns {
-        guard seenIDs.insert(run.id).inserted else { continue }
-        bySha[run.headSha, default: []].append(run)
-      }
-    }
+    let bySha = collectRunPayloads(active: [ipData, qData], completed: cData)
 
     // Build groups concurrently — index-keyed to preserve insertion order.
     // `buildActionGroup` is extracted to a private async function so each
@@ -228,15 +205,55 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
       for await (i, actionGroup) in group { groups[i] = actionGroup }
     }
 
-    var result = groups.compactMap { $0 }
-    result.sort { lhs, rhs in
+    let result = sortedActionGroups(groups)
+    log("fetchActionGroups -- \(result.count) group(s) for \(scope)", category: .runner)
+    return result
+  }
+
+  /// Decodes active (in-progress/queued) and completed run payloads from raw API responses,
+  /// deduplicates by run ID, and returns them grouped by `headSha`.
+  ///
+  /// Active runs are processed first so that any completed run whose ID already appeared in
+  /// the active set is silently skipped. Fix #1041: completed-only SHAs are still included so
+  /// groups that finish between polls flow through the normal cache/display pipeline.
+  /// De-duplication of completed groups re-triggering the failure hook is handled upstream
+  /// by `PollResultBuilder.buildGroupState` via `seenGroupIDs`.
+  private func collectRunPayloads(
+    active: [Data?],
+    completed: Data?
+  ) -> [String: [RunPayload]] {
+    var seenIDs = Set<Int>()
+    var bySha: [String: [RunPayload]] = [:]
+
+    for data in active.compactMap({ $0 }) {
+      guard let resp = try? decoder.decode(ActionRunsResponse.self, from: data) else { continue }
+      for run in resp.workflowRuns {
+        guard seenIDs.insert(run.id).inserted else { continue }
+        bySha[run.headSha, default: []].append(run)
+      }
+    }
+
+    if let data = completed,
+      let resp = try? decoder.decode(ActionRunsResponse.self, from: data)
+    {
+      for run in resp.workflowRuns {
+        guard seenIDs.insert(run.id).inserted else { continue }
+        bySha[run.headSha, default: []].append(run)
+      }
+    }
+    return bySha
+  }
+
+  /// Compacts and sorts an index-keyed array of optional action groups.
+  ///
+  /// Sort order: status priority ascending, then `createdAt` descending (newest first).
+  private func sortedActionGroups(_ groups: [WorkflowActionGroup?]) -> [WorkflowActionGroup] {
+    groups.compactMap { $0 }.sorted { lhs, rhs in
       if lhs.groupStatus.sortPriority != rhs.groupStatus.sortPriority {
         return lhs.groupStatus.sortPriority < rhs.groupStatus.sortPriority
       }
       return (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
     }
-    log("fetchActionGroups -- \(result.count) group(s) for \(scope)", category: .runner)
-    return result
   }
 
   // MARK: - Private helpers
@@ -327,7 +344,8 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
       // is still marked in-progress (stale step data from a mid-poll snapshot).
       // Serving that cache entry would show a spinning step on an already-finished job.
       cached.jobs.allSatisfy({ $0.conclusion != nil }),
-      !cached.jobs.contains(where: { $0.steps.contains { $0.status == JobStatus.inProgress } }) {
+      !cached.jobs.contains(where: { $0.steps.contains { $0.status == JobStatus.inProgress } })
+    {
       return cached.jobs
     }
 
@@ -413,43 +431,50 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
     var result = initial
     await withTaskGroup(of: (Int, ActiveJob?).self) { group in
       for (idx, job) in needsRefresh {
-        group.addTask {
-          guard
-            let freshData = await self.transport.apiAsync("repos/\(scope)/actions/jobs/\(job.id)"),
-            let fresh = try? self.decoder.decode(JobPayload.self, from: freshData)
-          else { return (idx, nil) }
-          let freshJob = await ISO8601DateParser.shared.makeJob(from: fresh)
-          if fresh.conclusion != nil { return (idx, freshJob) }
-          let betterSteps =
-            !freshJob.steps.isEmpty
-            && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
-          if betterSteps {
-            // Use copying() helpers so any future field added to ActiveJob is
-            // automatically preserved from `job` without a manual update here.
-            // `.copying(createdAt:)` is included explicitly even though copying()
-            // already carries all unlisted fields forward unchanged — the original
-            // bug (commit f8264d3) dropped createdAt in an earlier version of this
-            // function that used the full constructor. The explicit call is
-            // belt-and-suspenders: it documents intent, costs nothing at runtime,
-            // and guards against a future refactor that switches back to a
-            // constructor form accidentally dropping the field again.
-            return (
-              idx,
-              job
-                .copying(runnerName: freshJob.runnerName ?? job.runnerName)
-                .copying(startedAt: freshJob.startedAt ?? job.startedAt)
-                .copying(completedAt: freshJob.completedAt ?? job.completedAt)
-                .copying(createdAt: freshJob.createdAt ?? job.createdAt)
-                .copying(steps: freshJob.steps)
-            )
-          }
-          return (idx, nil)
-        }
+        group.addTask { (idx, await self.refreshedJob(job, scope: scope)) }
       }
       for await (idx, updated) in group {
         if let updated { result[idx] = updated }
       }
     }
     return result
+  }
+
+  /// Fetches a fresh copy of `job` from the API and returns an updated ``ActiveJob`` if the
+  /// response contains meaningful new data, or `nil` if the original should be kept as-is.
+  ///
+  /// A non-`nil` return means either:
+  /// - The job now has a `conclusion` (it finished) — return the fully-fresh job, or
+  /// - The live step list is complete (non-empty, none in-progress) — merge timing fields
+  ///   from the fresh payload onto the original via `copying()` so no other fields are lost.
+  ///
+  /// See commit f8264d3 for the original bug this merge strategy guards against.
+  private func refreshedJob(_ job: ActiveJob, scope: String) async -> ActiveJob? {
+    guard
+      let freshData = await transport.apiAsync("repos/\(scope)/actions/jobs/\(job.id)"),
+      let fresh = try? decoder.decode(JobPayload.self, from: freshData)
+    else { return nil }
+    let freshJob = await ISO8601DateParser.shared.makeJob(from: fresh)
+    if fresh.conclusion != nil { return freshJob }
+    let hasBetterSteps =
+      !freshJob.steps.isEmpty
+      && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
+    guard hasBetterSteps else { return nil }
+    // Use copying() helpers so any future field added to ActiveJob is
+    // automatically preserved from `job` without a manual update here.
+    // `.copying(createdAt:)` is included explicitly even though copying()
+    // already carries all unlisted fields forward unchanged — the original
+    // bug (commit f8264d3) dropped createdAt in an earlier version of this
+    // function that used the full constructor. The explicit call is
+    // belt-and-suspenders: it documents intent, costs nothing at runtime,
+    // and guards against a future refactor that switches back to a
+    // constructor form accidentally dropping the field again.
+    return
+      job
+      .copying(runnerName: freshJob.runnerName ?? job.runnerName)
+      .copying(startedAt: freshJob.startedAt ?? job.startedAt)
+      .copying(completedAt: freshJob.completedAt ?? job.completedAt)
+      .copying(createdAt: freshJob.createdAt ?? job.createdAt)
+      .copying(steps: freshJob.steps)
   }
 }

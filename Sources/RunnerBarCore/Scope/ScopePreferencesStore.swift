@@ -43,336 +43,354 @@ import Foundation
 /// and are never inspected as text, so human-readable formatting is not applicable.
 public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
 
-    // MARK: - Shared instance
+  // MARK: - Shared instance
 
-    /// The shared singleton — use this in production; pass `init(store:)` in tests.
-    public static let shared = ScopePreferencesStore()
+  /// The shared singleton — use this in production; pass `init(store:)` in tests.
+  public static let shared = ScopePreferencesStore()
 
-    // MARK: - Private state
+  // MARK: - Private state
 
-    /// `UserDefaults` instance backing all reads and writes.
-    private let store: UserDefaults
+  /// `UserDefaults` instance backing all reads and writes.
+  private let store: UserDefaults
 
-    /// Reused decoder. Private (not nonisolated) — only called from actor-isolated
-    /// `read(_:)`, so the actor's serial executor prevents concurrent access. (P17)
-    private let decoder = JSONDecoder()
-    /// Reused encoder. Private (not nonisolated) — only called from actor-isolated
-    /// `write(_:for:)`, so the actor's serial executor prevents concurrent access. (P17)
-    private let encoder = JSONEncoder()
+  /// Reused decoder. Private (not nonisolated) — only called from actor-isolated
+  /// `read(_:)`, so the actor's serial executor prevents concurrent access. (P17)
+  private let decoder = JSONDecoder()
+  /// Reused encoder. Private (not nonisolated) — only called from actor-isolated
+  /// `write(_:for:)`, so the actor's serial executor prevents concurrent access. (P17)
+  private let encoder = JSONEncoder()
 
-    // MARK: - Legacy flat-key field list
+  // MARK: - Legacy flat-key field list
 
-    /// The complete set of flat-key suffixes used by the pre-migration scheme.
-    ///
-    /// Kept as a single source of truth so both `migrateIfNeeded` and `cleanUp`
-    /// use the same list. If a new field is ever added here it will automatically
-    /// be cleaned up by both call sites.
-    private static let legacyFields = [
-        "alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
-        "failureHookEnabled", "failureHookCommand", "localRepoPath", "failureHookBranch"
-    ]
+  /// The complete set of flat-key suffixes used by the pre-migration scheme.
+  ///
+  /// Kept as a single source of truth so both `migrateIfNeeded` and `cleanUp`
+  /// use the same list. If a new field is ever added here it will automatically
+  /// be cleaned up by both call sites.
+  private static let legacyFields = [
+    "alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
+    "failureHookEnabled", "failureHookCommand", "localRepoPath", "failureHookBranch",
+  ]
 
-    // MARK: - Init
+  // MARK: - Init
 
-    /// Creates a store backed by `store`.
-    /// - Parameter store: `UserDefaults` instance to read/write. Defaults to `.standard`;
-    ///   pass a suite instance in tests to avoid polluting real defaults. (P7, P3)
-    public init(store: UserDefaults = .standard) {
-        self.store = store
+  /// Creates a store backed by `store`.
+  /// - Parameter store: `UserDefaults` instance to read/write. Defaults to `.standard`;
+  ///   pass a suite instance in tests to avoid polluting real defaults. (P7, P3)
+  public init(store: UserDefaults = .standard) {
+    self.store = store
+  }
+
+  // MARK: - Key helpers
+
+  /// Returns the `UserDefaults` key used to store the JSON blob for `scope`.
+  private func blobKey(for scope: String) -> String {
+    "scope.\(scope).preferences"
+  }
+
+  // MARK: - Internal read/write
+
+  /// Reads the stored `ScopePreferences` for `scope`, returning defaults if absent or undecodable.
+  private func read(scope: String) -> ScopePreferences {
+    guard
+      let data = store.data(forKey: blobKey(for: scope)),
+      let prefs = try? decoder.decode(ScopePreferences.self, from: data)
+    else { return ScopePreferences() }
+    return prefs
+  }
+
+  /// Encodes and writes `prefs` for `scope`.
+  ///
+  /// `JSONEncoder` encoding a flat `Codable` struct of `String?/Bool/Int?` fields
+  /// cannot realistically fail. If it ever does (e.g. OOM), the failure is logged
+  /// and the write is a no-op — the stored blob simply retains its previous value.
+  /// `throws` is intentionally absent: surfacing an error here would require
+  /// changing all `setXxx` protocol signatures to `throws` with no practical benefit.
+  private func write(_ prefs: ScopePreferences, for scope: String) {
+    guard let data = try? encoder.encode(prefs) else {
+      log(
+        "ScopePreferencesStore › encode failed for scope: \(scope) — write skipped",
+        category: .scope)
+      return
     }
+    store.set(data, forKey: blobKey(for: scope))
+    log("ScopePreferencesStore › saved preferences for \(scope)", category: .scope)
+  }
 
-    // MARK: - Key helpers
+  // MARK: - ScopePreferencesStoreProtocol — bulk snapshot / write
 
-    /// Returns the `UserDefaults` key used to store the JSON blob for `scope`.
-    private func blobKey(for scope: String) -> String {
-        "scope.\(scope).preferences"
+  /// Returns the full `ScopePreferences` snapshot for `scope` in a single actor hop.
+  ///
+  /// This is the preferred read path when multiple fields are needed at once
+  /// (e.g. seeding `ScopeEditSheet` draft state). One `await` instead of N.
+  public func preferences(for scope: String) -> ScopePreferences {
+    read(scope: scope)
+  }
+
+  /// Writes a complete `ScopePreferences` snapshot for `scope` in a single actor hop.
+  ///
+  /// This is the preferred write path when multiple fields need to be committed
+  /// atomically (e.g. `ScopeEditSheet.confirmSave()`). One `await` and one
+  /// encode/write instead of N sequential read-modify-write cycles.
+  ///
+  /// - Important: Do not call `preferences(for:)` and then `setPreferences(_:for:)`
+  ///   as two separate `await` calls — that is a TOCTOU pattern (P10). Use
+  ///   `modifyPreferences(for:with:)` instead when you need to read-then-write.
+  public func setPreferences(_ prefs: ScopePreferences, for scope: String) {
+    write(prefs, for: scope)
+  }
+
+  // MARK: - ScopePreferencesStoreProtocol — alias
+
+  /// Returns the alias for `scope`, or `nil` if none is set.
+  ///
+  /// - Note: For single-field updates prefer this setter. For multi-field
+  ///   updates use `modifyPreferences(for:with:)` to avoid redundant
+  ///   encode/decode round-trips. (P10)
+  public func alias(for scope: String) -> String? {
+    read(scope: scope).alias.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Sets the display alias for `scope`, trimming whitespace. Passing `nil` or blank clears the alias.
+  public func setAlias(_ alias: String?, for scope: String) {
+    var prefs = read(scope: scope)
+    let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
+    prefs.alias = (trimmed?.isEmpty == false) ? trimmed : nil
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › alias for \(scope) = \(prefs.alias ?? "nil (cleared)")",
+      category: .scope)
+  }
+
+  /// Returns the alias for `scope` if set, otherwise the raw scope string.
+  public func displayName(for scope: String) -> String {
+    alias(for: scope) ?? scope
+  }
+
+  // MARK: - ScopePreferencesStoreProtocol — polling interval
+
+  /// - Note: For single-field updates prefer this setter. For multi-field
+  ///   updates use `modifyPreferences(for:with:)` to avoid redundant
+  ///   encode/decode round-trips. (P10)
+  public func pollingInterval(for scope: String) -> Int? {
+    read(scope: scope).pollingInterval
+  }
+
+  /// Sets the per-scope polling interval in seconds. Pass `nil` to fall back to the global default.
+  public func setPollingInterval(_ interval: Int?, for scope: String) {
+    var prefs = read(scope: scope)
+    prefs.pollingInterval = interval
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › pollingInterval for \(scope) = \(interval.map(String.init) ?? "nil (use global)")",
+      category: .scope)
+  }
+
+  // MARK: - ScopePreferencesStoreProtocol — notification overrides
+
+  /// - Note: For single-field updates prefer this setter. For multi-field
+  ///   updates use `modifyPreferences(for:with:)` to avoid redundant
+  ///   encode/decode round-trips. (P10)
+  public func notifyOnSuccess(for scope: String) -> Bool? {
+    read(scope: scope).notifyOnSuccess
+  }
+
+  /// Sets the per-scope success-notification override. Pass `nil` to use the global setting.
+  public func setNotifyOnSuccess(_ value: Bool?, for scope: String) {
+    var prefs = read(scope: scope)
+    prefs.notifyOnSuccess = value
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › notifyOnSuccess for \(scope) = \(value.map(String.init) ?? "nil (use global)")",
+      category: .scope)
+  }
+
+  /// - Note: For single-field updates prefer this setter. For multi-field
+  ///   updates use `modifyPreferences(for:with:)` to avoid redundant
+  ///   encode/decode round-trips. (P10)
+  public func notifyOnFailure(for scope: String) -> Bool? {
+    read(scope: scope).notifyOnFailure
+  }
+
+  /// Sets the per-scope failure-notification override. Pass `nil` to use the global setting.
+  public func setNotifyOnFailure(_ value: Bool?, for scope: String) {
+    var prefs = read(scope: scope)
+    prefs.notifyOnFailure = value
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › notifyOnFailure for \(scope) = \(value.map(String.init) ?? "nil (use global)")",
+      category: .scope)
+  }
+
+  // MARK: - ScopePreferencesStoreProtocol — failure hook
+
+  /// - Note: For single-field updates prefer this setter. For multi-field
+  ///   updates use `modifyPreferences(for:with:)` to avoid redundant
+  ///   encode/decode round-trips. (P10)
+  public func failureHookEnabled(for scope: String) -> Bool {
+    read(scope: scope).failureHookEnabled
+  }
+
+  /// Enables or disables the failure hook for `scope`.
+  public func setFailureHookEnabled(_ enabled: Bool, for scope: String) {
+    var prefs = read(scope: scope)
+    prefs.failureHookEnabled = enabled
+    write(prefs, for: scope)
+    log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)", category: .scope)
+  }
+
+  /// Returns the failure hook shell command for `scope`, or `nil` if unset or blank.
+  public func failureHookCommand(for scope: String) -> String? {
+    read(scope: scope).failureHookCommand.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Sets the failure hook shell command for `scope`, trimming whitespace. Passing `nil` or blank clears it.
+  public func setFailureHookCommand(_ command: String?, for scope: String) {
+    var prefs = read(scope: scope)
+    let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
+    prefs.failureHookCommand = (trimmed?.isEmpty == false) ? trimmed : nil
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")",
+      category: .scope)
+  }
+
+  /// Returns the local repository path for `scope`, or `nil` if unset or blank.
+  public func localRepoPath(for scope: String) -> String? {
+    read(scope: scope).localRepoPath.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Sets the local repository path for `scope`, trimming whitespace. Passing `nil` or blank clears it.
+  public func setLocalRepoPath(_ path: String?, for scope: String) {
+    var prefs = read(scope: scope)
+    let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+    prefs.localRepoPath = (trimmed?.isEmpty == false) ? trimmed : nil
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")",
+      category: .scope)
+  }
+
+  /// Returns the failure hook branch filter for `scope`, or `nil` if unset (runs on all branches).
+  public func failureHookBranch(for scope: String) -> String? {
+    read(scope: scope).failureHookBranch.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Sets the failure hook branch filter for `scope`, trimming whitespace.
+  /// Pass `nil` or blank to run on all branches.
+  public func setFailureHookBranch(_ branch: String?, for scope: String) {
+    var prefs = read(scope: scope)
+    let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines)
+    prefs.failureHookBranch = (trimmed?.isEmpty == false) ? trimmed : nil
+    write(prefs, for: scope)
+    log(
+      "ScopePreferencesStore › failureHookBranch for \(scope) = \(prefs.failureHookBranch ?? "nil (all branches)")",
+      category: .scope)
+  }
+
+  // MARK: - ScopePreferencesStoreProtocol — cleanup
+
+  /// Removes all persisted data for `scope`: the blob key and any surviving
+  /// legacy flat keys.
+  ///
+  /// The legacy flat-key removal handles the edge case where a scope existed in the
+  /// old flat-key format but was removed from `ScopeStore` before `migrateIfNeeded`
+  /// ran — those keys would otherwise be orphaned indefinitely in `UserDefaults`.
+  /// For post-migration scopes the flat-key removals are no-ops.
+  ///
+  /// - Important: Always `await cleanUp(scope:)` **before** calling
+  ///   `ScopeStore.remove(id:)`. `ScopeStore.remove` restarts the poll loop
+  ///   immediately; if cleanup has not completed by then, the next poll tick
+  ///   may read a stale preferences blob for the removed scope. (#1538)
+  public func cleanUp(scope: String) {
+    store.removeObject(forKey: blobKey(for: scope))
+    for field in Self.legacyFields {
+      store.removeObject(forKey: "scope.\(scope).\(field)")
     }
+    log("ScopePreferencesStore › cleaned up all keys for scope: \(scope)", category: .scope)
+  }
 
-    // MARK: - Internal read/write
+  // MARK: - Migration
 
-    /// Reads the stored `ScopePreferences` for `scope`, returning defaults if absent or undecodable.
-    private func read(scope: String) -> ScopePreferences {
-        guard
-            let data = store.data(forKey: blobKey(for: scope)),
-            let prefs = try? decoder.decode(ScopePreferences.self, from: data)
-        else { return ScopePreferences() }
-        return prefs
+  /// `UserDefaults` boolean flag written after a successful v2 migration run.
+  private static let migrationKey = "scope.__migrated_v2"
+
+  /// Migrates legacy flat `UserDefaults` keys to the single-blob format.
+  ///
+  /// Reads each legacy `scope.<scope>.<field>` key, assembles a `ScopePreferences`
+  /// value, writes the blob, then removes the flat keys. Guarded by a
+  /// `scope.__migrated_v2` flag so it is safe to call multiple times.
+  ///
+  /// Call this from `AppDelegate.applicationDidFinishLaunching` (via
+  /// `AppDelegate+StoreSetup`) before any other reads occur. (Step 7)
+  ///
+  /// ## Guard-flag write and empty `knownScopes`
+  /// The flag is written only when `knownScopes` is non-empty. On a fresh install
+  /// `knownScopes` is always `[]` (nothing to migrate), so the flag stays unset
+  /// until scopes are actually added and the app is restarted — harmless, because
+  /// `read()` returns a default `ScopePreferences()` for any scope with no blob.
+  /// The guard prevents the following edge case on first post-upgrade launch:
+  /// if `ScopeStore`'s own `UserDefaults` blob fails to decode (e.g. corruption),
+  /// `knownScopes` would arrive as `[]`, the loop would be skipped entirely, and
+  /// writing the flag here would permanently mark migration as done before any
+  /// scope was actually migrated — orphaning all legacy flat keys with no retry.
+  ///
+  /// - Parameter knownScopes: The list of scope strings currently in `ScopeStore`.
+  ///   Only scopes present in this list at call time are migrated. This is
+  ///   intentional: scopes added after the migration flag is set start clean
+  ///   (no legacy flat keys). Scopes that existed in legacy flat-key format
+  ///   but were absent from `ScopeStore` at migration time (e.g. removed before
+  ///   first launch after upgrade) will leave inert orphan keys in `UserDefaults`.
+  ///   This is an accepted low-severity trade-off — the keys are harmless and
+  ///   will be removed if `cleanUp(scope:)` is ever called for them explicitly.
+  public func migrateIfNeeded(knownScopes: [String]) {
+    guard !store.bool(forKey: Self.migrationKey) else {
+      // Migration already ran. Scopes added after this point start clean
+      // (no legacy flat keys) so skipping them here is intentional.
+      return
     }
-
-    /// Encodes and writes `prefs` for `scope`.
-    ///
-    /// `JSONEncoder` encoding a flat `Codable` struct of `String?/Bool/Int?` fields
-    /// cannot realistically fail. If it ever does (e.g. OOM), the failure is logged
-    /// and the write is a no-op — the stored blob simply retains its previous value.
-    /// `throws` is intentionally absent: surfacing an error here would require
-    /// changing all `setXxx` protocol signatures to `throws` with no practical benefit.
-    private func write(_ prefs: ScopePreferences, for scope: String) {
-        guard let data = try? encoder.encode(prefs) else {
-            log("ScopePreferencesStore › encode failed for scope: \(scope) — write skipped", category: .scope)
-            return
-        }
-        store.set(data, forKey: blobKey(for: scope))
-        log("ScopePreferencesStore › saved preferences for \(scope)", category: .scope)
+    // Do not write the flag when knownScopes is empty — see doc comment above.
+    guard !knownScopes.isEmpty else { return }
+    for scope in knownScopes {
+      let prefs = migratedPreferences(for: scope)
+      write(prefs, for: scope)
+      for field in Self.legacyFields {
+        store.removeObject(forKey: "scope.\(scope).\(field)")
+      }
     }
+    store.set(true, forKey: Self.migrationKey)
+    log(
+      "ScopePreferencesStore › migration v2 complete for \(knownScopes.count) scopes",
+      category: .scope)
+  }
 
-    // MARK: - ScopePreferencesStoreProtocol — bulk snapshot / write
-
-    /// Returns the full `ScopePreferences` snapshot for `scope` in a single actor hop.
-    ///
-    /// This is the preferred read path when multiple fields are needed at once
-    /// (e.g. seeding `ScopeEditSheet` draft state). One `await` instead of N.
-    public func preferences(for scope: String) -> ScopePreferences {
-        read(scope: scope)
+  /// Reads all legacy flat keys for a scope and builds the new structured
+  /// `ScopePreferences` object. Extracted to keep `migrateIfNeeded` below
+  /// the SonarCloud cognitive-complexity threshold.
+  private func migratedPreferences(for scope: String) -> ScopePreferences {
+    var prefs = ScopePreferences()
+    if let val = store.string(forKey: "scope.\(scope).alias"), !val.isEmpty {
+      prefs.alias = val
     }
-
-    /// Writes a complete `ScopePreferences` snapshot for `scope` in a single actor hop.
-    ///
-    /// This is the preferred write path when multiple fields need to be committed
-    /// atomically (e.g. `ScopeEditSheet.confirmSave()`). One `await` and one
-    /// encode/write instead of N sequential read-modify-write cycles.
-    ///
-    /// - Important: Do not call `preferences(for:)` and then `setPreferences(_:for:)`
-    ///   as two separate `await` calls — that is a TOCTOU pattern (P10). Use
-    ///   `modifyPreferences(for:with:)` instead when you need to read-then-write.
-    public func setPreferences(_ prefs: ScopePreferences, for scope: String) {
-        write(prefs, for: scope)
+    if let val = store.object(forKey: "scope.\(scope).pollingInterval") as? Int {
+      prefs.pollingInterval = val
     }
-
-    // MARK: - ScopePreferencesStoreProtocol — alias
-
-    /// Returns the alias for `scope`, or `nil` if none is set.
-    ///
-    /// - Note: For single-field updates prefer this setter. For multi-field
-    ///   updates use `modifyPreferences(for:with:)` to avoid redundant
-    ///   encode/decode round-trips. (P10)
-    public func alias(for scope: String) -> String? {
-        read(scope: scope).alias.flatMap { $0.isEmpty ? nil : $0 }
+    if store.object(forKey: "scope.\(scope).notifyOnSuccess") != nil {
+      prefs.notifyOnSuccess = store.bool(forKey: "scope.\(scope).notifyOnSuccess")
     }
-
-    /// Sets the display alias for `scope`, trimming whitespace. Passing `nil` or blank clears the alias.
-    public func setAlias(_ alias: String?, for scope: String) {
-        var prefs = read(scope: scope)
-        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
-        prefs.alias = (trimmed?.isEmpty == false) ? trimmed : nil
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › alias for \(scope) = \(prefs.alias ?? "nil (cleared)")", category: .scope)
+    if store.object(forKey: "scope.\(scope).notifyOnFailure") != nil {
+      prefs.notifyOnFailure = store.bool(forKey: "scope.\(scope).notifyOnFailure")
     }
-
-    /// Returns the alias for `scope` if set, otherwise the raw scope string.
-    public func displayName(for scope: String) -> String {
-        alias(for: scope) ?? scope
+    prefs.failureHookEnabled = store.bool(forKey: "scope.\(scope).failureHookEnabled")
+    if let val = store.string(forKey: "scope.\(scope).failureHookCommand"), !val.isEmpty {
+      prefs.failureHookCommand = val
     }
-
-    // MARK: - ScopePreferencesStoreProtocol — polling interval
-
-    /// - Note: For single-field updates prefer this setter. For multi-field
-    ///   updates use `modifyPreferences(for:with:)` to avoid redundant
-    ///   encode/decode round-trips. (P10)
-    public func pollingInterval(for scope: String) -> Int? {
-        read(scope: scope).pollingInterval
+    if let val = store.string(forKey: "scope.\(scope).localRepoPath"), !val.isEmpty {
+      prefs.localRepoPath = val
     }
-
-    /// Sets the per-scope polling interval in seconds. Pass `nil` to fall back to the global default.
-    public func setPollingInterval(_ interval: Int?, for scope: String) {
-        var prefs = read(scope: scope)
-        prefs.pollingInterval = interval
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › pollingInterval for \(scope) = \(interval.map(String.init) ?? "nil (use global)")", category: .scope)
+    if let val = store.string(forKey: "scope.\(scope).failureHookBranch"), !val.isEmpty {
+      prefs.failureHookBranch = val
     }
-
-    // MARK: - ScopePreferencesStoreProtocol — notification overrides
-
-    /// - Note: For single-field updates prefer this setter. For multi-field
-    ///   updates use `modifyPreferences(for:with:)` to avoid redundant
-    ///   encode/decode round-trips. (P10)
-    public func notifyOnSuccess(for scope: String) -> Bool? {
-        read(scope: scope).notifyOnSuccess
-    }
-
-    /// Sets the per-scope success-notification override. Pass `nil` to use the global setting.
-    public func setNotifyOnSuccess(_ value: Bool?, for scope: String) {
-        var prefs = read(scope: scope)
-        prefs.notifyOnSuccess = value
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › notifyOnSuccess for \(scope) = \(value.map(String.init) ?? "nil (use global)")", category: .scope)
-    }
-
-    /// - Note: For single-field updates prefer this setter. For multi-field
-    ///   updates use `modifyPreferences(for:with:)` to avoid redundant
-    ///   encode/decode round-trips. (P10)
-    public func notifyOnFailure(for scope: String) -> Bool? {
-        read(scope: scope).notifyOnFailure
-    }
-
-    /// Sets the per-scope failure-notification override. Pass `nil` to use the global setting.
-    public func setNotifyOnFailure(_ value: Bool?, for scope: String) {
-        var prefs = read(scope: scope)
-        prefs.notifyOnFailure = value
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › notifyOnFailure for \(scope) = \(value.map(String.init) ?? "nil (use global)")", category: .scope)
-    }
-
-    // MARK: - ScopePreferencesStoreProtocol — failure hook
-
-    /// - Note: For single-field updates prefer this setter. For multi-field
-    ///   updates use `modifyPreferences(for:with:)` to avoid redundant
-    ///   encode/decode round-trips. (P10)
-    public func failureHookEnabled(for scope: String) -> Bool {
-        read(scope: scope).failureHookEnabled
-    }
-
-    /// Enables or disables the failure hook for `scope`.
-    public func setFailureHookEnabled(_ enabled: Bool, for scope: String) {
-        var prefs = read(scope: scope)
-        prefs.failureHookEnabled = enabled
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)", category: .scope)
-    }
-
-    /// Returns the failure hook shell command for `scope`, or `nil` if unset or blank.
-    public func failureHookCommand(for scope: String) -> String? {
-        read(scope: scope).failureHookCommand.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    /// Sets the failure hook shell command for `scope`, trimming whitespace. Passing `nil` or blank clears it.
-    public func setFailureHookCommand(_ command: String?, for scope: String) {
-        var prefs = read(scope: scope)
-        let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
-        prefs.failureHookCommand = (trimmed?.isEmpty == false) ? trimmed : nil
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")", category: .scope)
-    }
-
-    /// Returns the local repository path for `scope`, or `nil` if unset or blank.
-    public func localRepoPath(for scope: String) -> String? {
-        read(scope: scope).localRepoPath.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    /// Sets the local repository path for `scope`, trimming whitespace. Passing `nil` or blank clears it.
-    public func setLocalRepoPath(_ path: String?, for scope: String) {
-        var prefs = read(scope: scope)
-        let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
-        prefs.localRepoPath = (trimmed?.isEmpty == false) ? trimmed : nil
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")", category: .scope)
-    }
-
-    /// Returns the failure hook branch filter for `scope`, or `nil` if unset (runs on all branches).
-    public func failureHookBranch(for scope: String) -> String? {
-        read(scope: scope).failureHookBranch.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    /// Sets the failure hook branch filter for `scope`, trimming whitespace.
-    /// Pass `nil` or blank to run on all branches.
-    public func setFailureHookBranch(_ branch: String?, for scope: String) {
-        var prefs = read(scope: scope)
-        let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines)
-        prefs.failureHookBranch = (trimmed?.isEmpty == false) ? trimmed : nil
-        write(prefs, for: scope)
-        log("ScopePreferencesStore › failureHookBranch for \(scope) = \(prefs.failureHookBranch ?? "nil (all branches)")", category: .scope)
-    }
-
-    // MARK: - ScopePreferencesStoreProtocol — cleanup
-
-    /// Removes all persisted data for `scope`: the blob key and any surviving
-    /// legacy flat keys.
-    ///
-    /// The legacy flat-key removal handles the edge case where a scope existed in the
-    /// old flat-key format but was removed from `ScopeStore` before `migrateIfNeeded`
-    /// ran — those keys would otherwise be orphaned indefinitely in `UserDefaults`.
-    /// For post-migration scopes the flat-key removals are no-ops.
-    ///
-    /// - Important: Always `await cleanUp(scope:)` **before** calling
-    ///   `ScopeStore.remove(id:)`. `ScopeStore.remove` restarts the poll loop
-    ///   immediately; if cleanup has not completed by then, the next poll tick
-    ///   may read a stale preferences blob for the removed scope. (#1538)
-    public func cleanUp(scope: String) {
-        store.removeObject(forKey: blobKey(for: scope))
-        for field in Self.legacyFields {
-            store.removeObject(forKey: "scope.\(scope).\(field)")
-        }
-        log("ScopePreferencesStore › cleaned up all keys for scope: \(scope)", category: .scope)
-    }
-
-    // MARK: - Migration
-
-    /// `UserDefaults` boolean flag written after a successful v2 migration run.
-    private static let migrationKey = "scope.__migrated_v2"
-
-    /// Migrates legacy flat `UserDefaults` keys to the single-blob format.
-    ///
-    /// Reads each legacy `scope.<scope>.<field>` key, assembles a `ScopePreferences`
-    /// value, writes the blob, then removes the flat keys. Guarded by a
-    /// `scope.__migrated_v2` flag so it is safe to call multiple times.
-    ///
-    /// Call this from `AppDelegate.applicationDidFinishLaunching` (via
-    /// `AppDelegate+StoreSetup`) before any other reads occur. (Step 7)
-    ///
-    /// ## Guard-flag write and empty `knownScopes`
-    /// The flag is written only when `knownScopes` is non-empty. On a fresh install
-    /// `knownScopes` is always `[]` (nothing to migrate), so the flag stays unset
-    /// until scopes are actually added and the app is restarted — harmless, because
-    /// `read()` returns a default `ScopePreferences()` for any scope with no blob.
-    /// The guard prevents the following edge case on first post-upgrade launch:
-    /// if `ScopeStore`'s own `UserDefaults` blob fails to decode (e.g. corruption),
-    /// `knownScopes` would arrive as `[]`, the loop would be skipped entirely, and
-    /// writing the flag here would permanently mark migration as done before any
-    /// scope was actually migrated — orphaning all legacy flat keys with no retry.
-    ///
-    /// - Parameter knownScopes: The list of scope strings currently in `ScopeStore`.
-    ///   Only scopes present in this list at call time are migrated. This is
-    ///   intentional: scopes added after the migration flag is set start clean
-    ///   (no legacy flat keys). Scopes that existed in legacy flat-key format
-    ///   but were absent from `ScopeStore` at migration time (e.g. removed before
-    ///   first launch after upgrade) will leave inert orphan keys in `UserDefaults`.
-    ///   This is an accepted low-severity trade-off — the keys are harmless and
-    ///   will be removed if `cleanUp(scope:)` is ever called for them explicitly.
-    public func migrateIfNeeded(knownScopes: [String]) {
-        guard !store.bool(forKey: Self.migrationKey) else {
-            // Migration already ran. Scopes added after this point start clean
-            // (no legacy flat keys) so skipping them here is intentional.
-            return
-        }
-        // Do not write the flag when knownScopes is empty — see doc comment above.
-        guard !knownScopes.isEmpty else { return }
-        for scope in knownScopes {
-            let prefs = migratedPreferences(for: scope)
-            write(prefs, for: scope)
-            for field in Self.legacyFields {
-                store.removeObject(forKey: "scope.\(scope).\(field)")
-            }
-        }
-        store.set(true, forKey: Self.migrationKey)
-        log("ScopePreferencesStore › migration v2 complete for \(knownScopes.count) scopes", category: .scope)
-    }
-
-    /// Reads all legacy flat keys for a scope and builds the new structured
-    /// `ScopePreferences` object. Extracted to keep `migrateIfNeeded` below
-    /// the SonarCloud cognitive-complexity threshold.
-    private func migratedPreferences(for scope: String) -> ScopePreferences {
-        var prefs = ScopePreferences()
-        if let val = store.string(forKey: "scope.\(scope).alias"), !val.isEmpty {
-            prefs.alias = val
-        }
-        if let val = store.object(forKey: "scope.\(scope).pollingInterval") as? Int {
-            prefs.pollingInterval = val
-        }
-        if store.object(forKey: "scope.\(scope).notifyOnSuccess") != nil {
-            prefs.notifyOnSuccess = store.bool(forKey: "scope.\(scope).notifyOnSuccess")
-        }
-        if store.object(forKey: "scope.\(scope).notifyOnFailure") != nil {
-            prefs.notifyOnFailure = store.bool(forKey: "scope.\(scope).notifyOnFailure")
-        }
-        prefs.failureHookEnabled = store.bool(forKey: "scope.\(scope).failureHookEnabled")
-        if let val = store.string(forKey: "scope.\(scope).failureHookCommand"), !val.isEmpty {
-            prefs.failureHookCommand = val
-        }
-        if let val = store.string(forKey: "scope.\(scope).localRepoPath"), !val.isEmpty {
-            prefs.localRepoPath = val
-        }
-        if let val = store.string(forKey: "scope.\(scope).failureHookBranch"), !val.isEmpty {
-            prefs.failureHookBranch = val
-        }
-        return prefs
-    }
+    return prefs
+  }
 }
