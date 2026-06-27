@@ -48,7 +48,6 @@ extension RunnerPoller {
     if !metricsUpdates.isEmpty {
       for entry in metricsUpdates {
         #if DEBUG
-          // swiftlint:disable:next line_length
           log(
             "RunnerPoller › fetchAndEnrichRunners — applyMetrics: \(entry.runner.name) id=\(entry.runner.id) busy=\(entry.runner.busy) metrics=\(String(describing: entry.runner.metrics))",
             category: .runner)

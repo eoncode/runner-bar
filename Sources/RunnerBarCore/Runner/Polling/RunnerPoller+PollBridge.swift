@@ -154,8 +154,7 @@ extension RunnerPoller {
       category: .runner)
     if let firstRun = group.runs.first,
       let url = firstRun.htmlUrl,
-      let scope = scopeFromHtmlUrl(url)
-    {
+      let scope = scopeFromHtmlUrl(url) {
       log(
         "RunnerPoller › scopeFromActionGroup — derived scope '\(scope)' from htmlUrl '\(url)'",
         category: .runner)
