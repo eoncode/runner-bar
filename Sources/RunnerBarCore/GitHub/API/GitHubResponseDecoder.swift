@@ -6,9 +6,9 @@ import Foundation
 // MARK: - Error logging
 
 /// Logs the response body (up to 400 chars) for non-2xx responses.
-func logErrorBody(_  Data?, endpoint: String, status: Int) {
+func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
   guard let data, !data.isEmpty else { return }
-  let body = String( data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
+  let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
   let preview = body.count > 400 ? String(body.prefix(400)) + "…" : body
   log("HTTP \(status) \(endpoint): \(preview)", category: .transport)
 }
@@ -23,38 +23,32 @@ func logErrorBody(_  Data?, endpoint: String, status: Int) {
 /// - HTTP 403 with a `Retry-After` header (secondary / abuse rate limit)
 ///
 /// A plain 403 with none of those signals is a **permission error** (wrong token
-/// scope, revoked PAT, repo access denial) and must **not** arm the actor —
+/// scope, revoked PAT, repo access denial) and must **not** arm the actor—
 /// doing so would lock the app out of the API for up to 60 minutes even though
 /// no rate limit was hit.
 ///
 /// - Returns: `true` when this response was a genuine rate limit **and** the actor
 ///   was armed; `false` when the 403 is a plain permission error and the actor was
 ///   left unchanged. Callers **must** use this return value to classify the result
-///   as `.rateLimited` vs `.permissionDenied` — reading the actor after the call
+///   as `.rateLimited` vs `.permissionDenied`—reading the actor after the call
 ///   is a TOCTOU: a prior concurrent request may have already armed the actor,
 ///   causing a permission-denied 403 to be misclassified as a rate-limit.
-///
-/// - Parameter rateLimiter: The actor to arm on a genuine rate-limit.
-///   **No default is provided intentionally.** This function is internal and
-///   must always be called from `urlSessionExecute`, which threads its own
-///   injected actor through. Providing a default here would silently fall back
-///   to the global `rateLimitActor` if a caller ever bypassed `urlSessionExecute`,
-///   defeating the injection contract and making test spies unreliable.
-///
-/// - Important: Do not call this function directly from outside `urlSessionExecute`.
-///   The injection chain is: call site → `urlSessionAPIPaginated`/`urlSessionAPIAsync`
-///   (default actor) → `urlSessionExecute` (passes actor through) → here.
 ///
 /// - Parameter statusCode: The HTTP status code of the response.
 /// - Parameter  The response body, if any.
 /// - Parameter response: The full `HTTPURLResponse`.
 /// - Parameter endpoint: The endpoint string, used for logging.
 /// - Parameter rateLimiter: The rate-limit actor to arm on a genuine rate-limit response.
+///   **No default is provided intentionally.** This function is internal and
+///   must always be called from `urlSessionExecute`, which threads its own
+///   injected actor through.
+///
+/// - Important: Do not call this function directly from outside `urlSessionExecute`.
 ///
 /// See https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api
 func handleRateLimitResponse(
   statusCode: Int,
-  _  Data?,
+  _ data: Data?,
   response: HTTPURLResponse,
   endpoint: String,
   rateLimiter: some RateLimitActorProtocol
@@ -89,8 +83,8 @@ func handleRateLimitResponse(
 /// Returns `"secondary"` for 429s or responses with a `Retry-After` header;
 /// returns `"primary"` for quota-exhausted 403s (`X-RateLimit-Remaining: 0`).
 ///
-/// Primary = quota exhausted — wait for the reset window.
-/// Secondary = abuse / concurrency throttle — back off from request rate.
+/// Primary = quota exhausted—wait for the reset window.
+/// Secondary = abuse / concurrency throttle—back off from request rate.
 private func rateLimitKind(retryAfter: Double?, statusCode: Int) -> String {
   retryAfter != nil || statusCode == 429 ? "secondary" : "primary"
 }
