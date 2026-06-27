@@ -127,6 +127,9 @@ public enum ProcessRunner {
     ///    already guarantees.
     ///
     /// All parameters and defaults are identical to the removed synchronous `run()` method.
+    ///
+    /// The `withCheckedContinuation` body is delegated to `launchAndAwait` to keep
+    /// `runAsync`'s cyclomatic complexity within the SW-R1002 threshold (see #1697).
     public static func runAsync(
         executableURL: URL,
         arguments: [String],
@@ -197,79 +200,18 @@ public enum ProcessRunner {
                     )
                 }
 
-                // Guard against the already-cancelled case: Swift invokes onCancel
-                // *before* this operation closure when the task is cancelled at the
-                // moment withTaskCancellationHandler is called. onCancel's
-                // `guard task.isRunning` no-ops in that scenario, so we must also
-                // bail here before task.run() to honour cancellation rather than
-                // launching the process normally.
-                if Task.isCancelled {
-                    outPipe.fileHandleForWriting.closeFile()
-                    continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
-                    return
-                }
-
-                do {
-                    try task.run()
-                } catch {
-                    log("ProcessRunner › launch error: \(error) — \(executableURL.lastPathComponent) \(arguments.joined(separator: " "))", category: .services)
-                    // Close both pipe write-ends so that any already-dispatched drain
-                    // block receives EOF and returns cleanly. outPipe must be closed to
-                    // unblock the drainQueue.async readDataToEndOfFile() call above.
-                    // inputPipe is closed explicitly here (mirrors outPipe) even though
-                    // ARC would close it on dealloc — being explicit documents intent
-                    // and avoids leaving a half-open pipe handle until the next ARC cycle.
-                    outPipe.fileHandleForWriting.closeFile()
-                    inputPipe?.fileHandleForWriting.closeFile()
-                    continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
-                    return
-                }
-
-                // Dispatch stdin write after task.run() — the child is now running and
-                // will consume bytes from the read end concurrently. This is safe for
-                // arbitrarily large payloads: the child drains the pipe buffer as we fill
-                // it. closeFile() signals EOF to the child once all bytes are written.
-                //
-                // Explicit [inputPipe] capture: inputPipe is a Pipe reference retained
-                // by this closure until stdinQueue drains. The capture list makes the
-                // lifetime management visible rather than implicit.
-                if let stdinQueue, let inputPipe, let stdinData = stdin {
-                    stdinQueue.async { [inputPipe] in
-                        inputPipe.fileHandleForWriting.write(stdinData)
-                        inputPipe.fileHandleForWriting.closeFile()
-                    }
-                }
-
-                // Create the Task *before* acquiring the lock so it is already
-                // scheduled by the time timeoutTaskBox is written.
-                //
-                // Two benign races exist here:
-                //
-                // 1. Fast-exit: terminationHandler fires before timeoutTaskBox is
-                //    written — it reads nil and skips .cancel(). The timeout task
-                //    then fires later but finds task.isRunning == false and exits
-                //    without calling terminate(). Safe.
-                //
-                // 2. Slow-exit: the process outlives the timeout, terminate() is
-                //    called by the timeout task, then terminationHandler fires and
-                //    reads timeoutTaskBox — but by then the timeout task has already
-                //    finished (it returned after terminate()), so .cancel() is a
-                //    benign no-op on a completed Task. Safe.
-                //
-                // In both cases guard task.isRunning is the invariant that prevents
-                // a double-terminate. This race existed in the pre-refactor Box<T>
-                // code as well (#1152).
-                let timeoutTask = Task.detached {
-                    do {
-                        try await Task.sleep(for: .seconds(timeout))
-                        guard task.isRunning else { return }
-                        log("ProcessRunner › timeout (\(timeout)s) — terminating \(executableURL.lastPathComponent)", category: .services)
-                        task.terminate()
-                    } catch {
-                        // CancellationError from timeoutTask.cancel() — process already done.
-                    }
-                }
-                timeoutTaskBox.withLock { $0 = timeoutTask }
+                launchAndAwait(
+                    task: task,
+                    executableURL: executableURL,
+                    arguments: arguments,
+                    stdin: stdin,
+                    outPipe: outPipe,
+                    inputPipe: inputPipe,
+                    stdinQueue: stdinQueue,
+                    timeoutTaskBox: timeoutTaskBox,
+                    continuation: continuation,
+                    timeout: timeout
+                )
             }
         } onCancel: {
             // Enclosing Task was cancelled (e.g. pollTask replaced by start()).
@@ -368,5 +310,116 @@ public enum ProcessRunner {
             data: outputData.isEmpty ? nil : outputData,
             exitCode: exitCode
         ))
+    }
+
+    /// Executes the core launch sequence inside a `withCheckedContinuation` body.
+    ///
+    /// Extracted from `runAsync` to reduce its cyclomatic complexity (SW-R1002 / #1697).
+    /// All branching that was previously inline in `runAsync`'s continuation body
+    /// now lives here:
+    ///
+    /// - **Already-cancelled guard:** checks `Task.isCancelled` before `task.run()`
+    ///   to honour Swift's contract that `onCancel` may fire *before* the operation
+    ///   closure when the task is cancelled at the `withTaskCancellationHandler` call site.
+    /// - **Launch / error path:** `do { try task.run() } catch` — closes both pipe
+    ///   write-ends on failure so the already-dispatched drain receives EOF cleanly.
+    /// - **Stdin dispatch:** conditionally enqueues the stdin write on `stdinQueue`
+    ///   *after* `task.run()` to avoid the pre-launch pipe-buffer deadlock.
+    /// - **Timeout task:** spawns a `Task.detached` that terminates the process
+    ///   after `timeout` seconds, then writes the task handle into `timeoutTaskBox`
+    ///   so `terminationHandler` can cancel it on process exit.
+    ///
+    /// No behaviour change — all ordering guarantees and concurrency contracts
+    /// documented in `runAsync`'s doc comment are preserved verbatim.
+    ///
+    /// - Important: Must be called synchronously from within the
+    ///   `withCheckedContinuation` closure (i.e. on the same cooperative-thread-pool
+    ///   context as `runAsync`) so that `Task.isCancelled` reflects the enclosing
+    ///   task's cancellation state correctly.
+    private static func launchAndAwait(
+        task: Process,
+        executableURL: URL,
+        arguments: [String],
+        stdin: Data?,
+        outPipe: Pipe,
+        inputPipe: Pipe?,
+        stdinQueue: DispatchQueue?,
+        timeoutTaskBox: OSAllocatedUnfairLock<Task<Void, Never>?>,
+        continuation: CheckedContinuation<Result, Never>,
+        timeout: TimeInterval
+    ) {
+        // Guard against the already-cancelled case: Swift invokes onCancel
+        // *before* this operation closure when the task is cancelled at the
+        // moment withTaskCancellationHandler is called. onCancel's
+        // `guard task.isRunning` no-ops in that scenario, so we must also
+        // bail here before task.run() to honour cancellation rather than
+        // launching the process normally.
+        if Task.isCancelled {
+            outPipe.fileHandleForWriting.closeFile()
+            continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
+            return
+        }
+
+        do {
+            try task.run()
+        } catch {
+            log("ProcessRunner › launch error: \(error) — \(executableURL.lastPathComponent) \(arguments.joined(separator: " "))", category: .services)
+            // Close both pipe write-ends so that any already-dispatched drain
+            // block receives EOF and returns cleanly. outPipe must be closed to
+            // unblock the drainQueue.async readDataToEndOfFile() call above.
+            // inputPipe is closed explicitly here (mirrors outPipe) even though
+            // ARC would close it on dealloc — being explicit documents intent
+            // and avoids leaving a half-open pipe handle until the next ARC cycle.
+            outPipe.fileHandleForWriting.closeFile()
+            inputPipe?.fileHandleForWriting.closeFile()
+            continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
+            return
+        }
+
+        // Dispatch stdin write after task.run() — the child is now running and
+        // will consume bytes from the read end concurrently. This is safe for
+        // arbitrarily large payloads: the child drains the pipe buffer as we fill
+        // it. closeFile() signals EOF to the child once all bytes are written.
+        //
+        // Explicit [inputPipe] capture: inputPipe is a Pipe reference retained
+        // by this closure until stdinQueue drains. The capture list makes the
+        // lifetime management visible rather than implicit.
+        if let stdinQueue, let inputPipe, let stdinData = stdin {
+            stdinQueue.async { [inputPipe] in
+                inputPipe.fileHandleForWriting.write(stdinData)
+                inputPipe.fileHandleForWriting.closeFile()
+            }
+        }
+
+        // Create the Task *before* acquiring the lock so it is already
+        // scheduled by the time timeoutTaskBox is written.
+        //
+        // Two benign races exist here:
+        //
+        // 1. Fast-exit: terminationHandler fires before timeoutTaskBox is
+        //    written — it reads nil and skips .cancel(). The timeout task
+        //    then fires later but finds task.isRunning == false and exits
+        //    without calling terminate(). Safe.
+        //
+        // 2. Slow-exit: the process outlives the timeout, terminate() is
+        //    called by the timeout task, then terminationHandler fires and
+        //    reads timeoutTaskBox — but by then the timeout task has already
+        //    finished (it returned after terminate()), so .cancel() is a
+        //    benign no-op on a completed Task. Safe.
+        //
+        // In both cases guard task.isRunning is the invariant that prevents
+        // a double-terminate. This race existed in the pre-refactor Box<T>
+        // code as well (#1152).
+        let timeoutTask = Task.detached {
+            do {
+                try await Task.sleep(for: .seconds(timeout))
+                guard task.isRunning else { return }
+                log("ProcessRunner › timeout (\(timeout)s) — terminating \(executableURL.lastPathComponent)", category: .services)
+                task.terminate()
+            } catch {
+                // CancellationError from timeoutTask.cancel() — process already done.
+            }
+        }
+        timeoutTaskBox.withLock { $0 = timeoutTask }
     }
 }
