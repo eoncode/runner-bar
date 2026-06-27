@@ -413,43 +413,49 @@ public struct WorkflowActionGroupFetcher: Sendable, WorkflowActionGroupFetcherPr
     var result = initial
     await withTaskGroup(of: (Int, ActiveJob?).self) { group in
       for (idx, job) in needsRefresh {
-        group.addTask {
-          guard
-            let freshData = await self.transport.apiAsync("repos/\(scope)/actions/jobs/\(job.id)"),
-            let fresh = try? self.decoder.decode(JobPayload.self, from: freshData)
-          else { return (idx, nil) }
-          let freshJob = await ISO8601DateParser.shared.makeJob(from: fresh)
-          if fresh.conclusion != nil { return (idx, freshJob) }
-          let betterSteps =
-            !freshJob.steps.isEmpty
-            && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
-          if betterSteps {
-            // Use copying() helpers so any future field added to ActiveJob is
-            // automatically preserved from `job` without a manual update here.
-            // `.copying(createdAt:)` is included explicitly even though copying()
-            // already carries all unlisted fields forward unchanged — the original
-            // bug (commit f8264d3) dropped createdAt in an earlier version of this
-            // function that used the full constructor. The explicit call is
-            // belt-and-suspenders: it documents intent, costs nothing at runtime,
-            // and guards against a future refactor that switches back to a
-            // constructor form accidentally dropping the field again.
-            return (
-              idx,
-              job
-                .copying(runnerName: freshJob.runnerName ?? job.runnerName)
-                .copying(startedAt: freshJob.startedAt ?? job.startedAt)
-                .copying(completedAt: freshJob.completedAt ?? job.completedAt)
-                .copying(createdAt: freshJob.createdAt ?? job.createdAt)
-                .copying(steps: freshJob.steps)
-            )
-          }
-          return (idx, nil)
-        }
+        group.addTask { (idx, await self.refreshedJob(job, scope: scope)) }
       }
       for await (idx, updated) in group {
         if let updated { result[idx] = updated }
       }
     }
     return result
+  }
+
+  /// Fetches a fresh copy of `job` from the API and returns an updated ``ActiveJob`` if the
+  /// response contains meaningful new data, or `nil` if the original should be kept as-is.
+  ///
+  /// A non-`nil` return means either:
+  /// - The job now has a `conclusion` (it finished) — return the fully-fresh job, or
+  /// - The live step list is complete (non-empty, none in-progress) — merge timing fields
+  ///   from the fresh payload onto the original via `copying()` so no other fields are lost.
+  ///
+  /// See commit f8264d3 for the original bug this merge strategy guards against.
+  private func refreshedJob(_ job: ActiveJob, scope: String) async -> ActiveJob? {
+    guard
+      let freshData = await transport.apiAsync("repos/\(scope)/actions/jobs/\(job.id)"),
+      let fresh = try? decoder.decode(JobPayload.self, from: freshData)
+    else { return nil }
+    let freshJob = await ISO8601DateParser.shared.makeJob(from: fresh)
+    if fresh.conclusion != nil { return freshJob }
+    let hasBetterSteps =
+      !freshJob.steps.isEmpty
+      && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
+    guard hasBetterSteps else { return nil }
+    // Use copying() helpers so any future field added to ActiveJob is
+    // automatically preserved from `job` without a manual update here.
+    // `.copying(createdAt:)` is included explicitly even though copying()
+    // already carries all unlisted fields forward unchanged — the original
+    // bug (commit f8264d3) dropped createdAt in an earlier version of this
+    // function that used the full constructor. The explicit call is
+    // belt-and-suspenders: it documents intent, costs nothing at runtime,
+    // and guards against a future refactor that switches back to a
+    // constructor form accidentally dropping the field again.
+    return job
+      .copying(runnerName: freshJob.runnerName ?? job.runnerName)
+      .copying(startedAt: freshJob.startedAt ?? job.startedAt)
+      .copying(completedAt: freshJob.completedAt ?? job.completedAt)
+      .copying(createdAt: freshJob.createdAt ?? job.createdAt)
+      .copying(steps: freshJob.steps)
   }
 }
