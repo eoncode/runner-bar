@@ -290,15 +290,36 @@ public actor RunnerPoller {
       })
   }
 
-  /// Computes the delay before the next poll.
-  private func nextPollInterval() async -> TimeInterval {
+  /// Returns `true` when at least one job or action group is currently active
+  /// (in-progress or queued).
+  ///
+  /// Extracted from `nextPollInterval` to reduce its cyclomatic complexity.
+  private func hasActiveWork() -> Bool {
     let hasActiveJobs = jobs.contains { $0.status == .inProgress || $0.status == .queued }
     let hasActiveActions = actions.contains {
       $0.groupStatus == .inProgress || $0.groupStatus == .queued
     }
-    let hasActive = hasActiveJobs || hasActiveActions
+    return hasActiveJobs || hasActiveActions
+  }
+
+  /// Selects the polling interval given the current active-work and rate-limit state.
+  ///
+  /// - Parameters:
+  ///   - hasActive: Whether any job or action group is currently active.
+  ///   - baseIdle: The user-configured idle interval (already clamped to ≥ 10 s).
+  /// - Returns: 10 s when work is active and not rate-limited; `baseIdle` otherwise.
+  ///
+  /// Extracted from `nextPollInterval` to reduce its cyclomatic complexity.
+  private func resolvedInterval(hasActive: Bool, baseIdle: TimeInterval) -> TimeInterval {
+    if !isRateLimited && hasActive { return 10 }
+    return baseIdle
+  }
+
+  /// Computes the delay before the next poll.
+  private func nextPollInterval() async -> TimeInterval {
+    let hasActive = hasActiveWork()
     let baseIdle = max(10, await MainActor.run { preferencesStore.pollingInterval })
-    let interval: TimeInterval = (isRateLimited || !hasActive) ? TimeInterval(baseIdle) : 10
+    let interval = resolvedInterval(hasActive: hasActive, baseIdle: TimeInterval(baseIdle))
     log(
       "RunnerPoller › nextPollInterval — \(Int(interval))s hasActive=\(hasActive) rateLimited=\(isRateLimited) baseIdle=\(baseIdle)",
       category: .runner)
