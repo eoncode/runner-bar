@@ -291,65 +291,23 @@ public struct FailureHookRunnerUseCase: Sendable {
   }
 
   /// Fetches the failed jobs (and their log tails) for every failure-triggering run in `group`.
+  ///
+  /// Complexity is kept low by delegating per-run decoding to `fetchJobResults(for:scope:)`
+  /// and per-job log fetching to `fetchLogTail(for:scope:)`.
   private static func fetchFailedJobs(
     group: WorkflowActionGroup,
     scope: String
   ) async -> [FailedJobResult] {
     var result: [FailedJobResult] = []
     var seenIDs = Set<Int>()
-    for run in group.runs {
-      guard run.conclusion?.isHookConclusion == true else {
-        log(
-          "FailureHookRunnerUseCase fetchFailedJobs -- run \(run.id) conclusion=\(run.conclusion?.rawValue ?? "nil") -- skipping (not hook-triggering)",
-          category: .failureHook)
-        continue
-      }
+    for run in group.runs where run.conclusion?.isHookConclusion == true {
       log(
         "FailureHookRunnerUseCase fetchFailedJobs -- fetching jobs for failed run=\(run.id) conclusion=\(run.conclusion?.rawValue ?? "nil")",
         category: .failureHook)
-      guard
-        let data = await ghAPI(
-          "repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=\(GitHubConstants.maxPageSize)")
-      else {
-        log(
-          "FailureHookRunnerUseCase fetchFailedJobs -- ghAPI returned nil for run=\(run.id)",
-          category: .failureHook)
-        continue
-      }
-      guard let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else {
-        log(
-          "FailureHookRunnerUseCase fetchFailedJobs -- JSON decode failed for run=\(run.id) dataBytes=\(data.count)",
-          category: .failureHook)
-        continue
-      }
-      log(
-        "FailureHookRunnerUseCase fetchFailedJobs -- run=\(run.id) decoded \(resp.jobs.count) jobs",
-        category: .failureHook)
-      for job in resp.jobs {
+      let jobs = await fetchJobResults(for: run, scope: scope)
+      for job in jobs {
         guard seenIDs.insert(job.id).inserted else { continue }
-        guard let jobConclusion = job.conclusion, jobConclusion.isHookConclusion else {
-          log(
-            "FailureHookRunnerUseCase fetchFailedJobs -- jobID=\(job.id) name=\(job.name) conclusion=\(job.conclusion?.rawValue ?? "nil") -- skipping (not hook-triggering)",
-            category: .failureHook)
-          continue
-        }
-        log(
-          "FailureHookRunnerUseCase fetchFailedJobs -- fetching log for failed jobID=\(job.id) name=\(job.name)",
-          category: .failureHook)
-        let tail: String?
-        if let fullLog = await LogFetcher().fetchJobLog(jobID: job.id, scope: scope) {
-          let lines = fullLog.components(separatedBy: "\n")
-          let kept = lines.suffix(150).joined(separator: "\n")
-          tail = kept
-          log(
-            "FailureHookRunnerUseCase fetchFailedJobs -- jobID=\(job.id) log lines=\(lines.count) kept last 150",
-            category: .failureHook)
-        } else {
-          tail = nil
-          log(
-            "FailureHookRunnerUseCase fetchFailedJobs -- jobID=\(job.id) fetchJobLog returned nil",
-            category: .failureHook)
-        }
+        let tail = await fetchLogTail(for: job, scope: scope)
         result.append(FailedJobResult(job: job, logTail: tail))
       }
     }
@@ -357,6 +315,64 @@ public struct FailureHookRunnerUseCase: Sendable {
       "FailureHookRunnerUseCase fetchFailedJobs -- total \(result.count) unique failed jobs returned",
       category: .failureHook)
     return result
+  }
+
+  /// Fetches and decodes the failed `JobPayload` list for a single run.
+  /// Returns an empty array if the API call or JSON decode fails.
+  private static func fetchJobResults(
+    for run: WorkflowRunRef,
+    scope: String
+  ) async -> [JobPayload] {
+    guard
+      let data = await ghAPI(
+        "repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=\(GitHubConstants.maxPageSize)")
+    else {
+      log(
+        "FailureHookRunnerUseCase fetchJobResults -- ghAPI returned nil for run=\(run.id)",
+        category: .failureHook)
+      return []
+    }
+    guard let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else {
+      log(
+        "FailureHookRunnerUseCase fetchJobResults -- JSON decode failed for run=\(run.id) dataBytes=\(data.count)",
+        category: .failureHook)
+      return []
+    }
+    log(
+      "FailureHookRunnerUseCase fetchJobResults -- run=\(run.id) decoded \(resp.jobs.count) jobs",
+      category: .failureHook)
+    return resp.jobs.filter { job in
+      guard let conclusion = job.conclusion else { return false }
+      if !conclusion.isHookConclusion {
+        log(
+          "FailureHookRunnerUseCase fetchJobResults -- jobID=\(job.id) name=\(job.name) conclusion=\(conclusion.rawValue) -- skipping (not hook-triggering)",
+          category: .failureHook)
+      }
+      return conclusion.isHookConclusion
+    }
+  }
+
+  /// Fetches the last 150 log lines for a single failed job.
+  /// Returns `nil` if the log is unavailable.
+  private static func fetchLogTail(
+    for job: JobPayload,
+    scope: String
+  ) async -> String? {
+    log(
+      "FailureHookRunnerUseCase fetchLogTail -- fetching log for jobID=\(job.id) name=\(job.name)",
+      category: .failureHook)
+    guard let fullLog = await LogFetcher().fetchJobLog(jobID: job.id, scope: scope) else {
+      log(
+        "FailureHookRunnerUseCase fetchLogTail -- jobID=\(job.id) fetchJobLog returned nil",
+        category: .failureHook)
+      return nil
+    }
+    let lines = fullLog.components(separatedBy: "\n")
+    let tail = lines.suffix(150).joined(separator: "\n")
+    log(
+      "FailureHookRunnerUseCase fetchLogTail -- jobID=\(job.id) log lines=\(lines.count) kept last 150",
+      category: .failureHook)
+    return tail
   }
 
   /// Escapes `str` so it is safe to embed between single-quotes in a shell command.
