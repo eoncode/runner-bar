@@ -30,69 +30,72 @@ extension GitHubTransport {
     /// - Returns partial results when pagination stops mid-way due to rate-limit or network error.
     @concurrent
     public func apiPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-        var state = PaginationState(nextURL: resolveURL(endpoint))
-        while let urlString = state.nextURL {
-            let result = await execute(urlString, timeout: timeout, logTag: "apiPaginated")
-            let action = state.apply(result, urlString: urlString, decoder: decoder)
-            applyPaginationLog(action, urlString: urlString, count: state.allItems.count)
-            if case .advance(let linkHeader) = action {
-                state.nextURL = extractNextURL(from: linkHeader)
-            } else {
-                break
-            }
-        }
-        return encodePaginationResult(&state)
-    }
+        var nextURL: String? = resolveURL(endpoint)
+        var allItems: [AnyJSON] = []
+        var didFailAuth = false
+        var didRateLimit = false
+        var hadAtLeastOneSuccessfulPage = false
 
-    /// Logs the outcome of a single pagination step.
-    private func applyPaginationLog(_ action: PaginationAction, urlString: String, count: Int) {
-        switch action {
-        case .advance:
-            break
-        case .stop(let reason):
-            switch reason {
-            case .nonArrayBody:
-                log("apiPaginated › unexpected non-array response at \(urlString) — stopping pagination", category: .transport)
-            case .unauthorized:
+        pagination: while let urlString = nextURL {
+            let result = await execute(
+                urlString, timeout: timeout, logTag: "apiPaginated"
+            )
+            switch result {
+            case .success(let data, _, let linkHeader):
+                if let page = try? decoder.decode([AnyJSON].self, from: data) {
+                    hadAtLeastOneSuccessfulPage = true
+                    allItems.append(contentsOf: page)
+                    nextURL = extractNextURL(from: linkHeader)
+                } else {
+                    log("apiPaginated › unexpected non-array response at \(urlString) — stopping pagination", category: .transport)
+                    break pagination
+                }
+            case .noToken:
+                didFailAuth = true
+                break pagination
+            case .httpError(401):
                 log("apiPaginated › 401 Unauthorized — token may have been revoked, stopping pagination", category: .transport)
+                didFailAuth = true
+                break pagination
             case .httpError:
                 log("apiPaginated › non-2xx error at \(urlString) — stopping pagination", category: .transport)
+                break pagination
             case .rateLimited:
-                log("apiPaginated › rate limited — \(count) items collected so far", category: .transport)
+                log("apiPaginated › rate limited — \(allItems.count) items collected so far", category: .transport)
+                didRateLimit = true
+                break pagination
             case .permissionDenied:
-                log("apiPaginated › permission denied at \(urlString) — stopping pagination and discarding \(count) collected items", category: .transport)
+                log("apiPaginated › permission denied at \(urlString) — stopping pagination and discarding \(allItems.count) collected items", category: .transport)
+                didFailAuth = true
+                break pagination
             case .networkError:
                 log("apiPaginated › network error at \(urlString) — stopping pagination", category: .transport)
-            case .noToken:
-                break
+                break pagination
             }
         }
-    }
 
-    /// Finalises and encodes the accumulated pagination result.
-    private func encodePaginationResult(_ state: inout PaginationState) -> Data? {
-        if state.didFailAuth {
-            if state.allItems.isEmpty {
+        if didFailAuth {
+            if allItems.isEmpty {
                 log("apiPaginated › auth/permission failure on first page — returning nil", category: .transport)
             } else {
-                log("apiPaginated › auth/permission failure mid-pagination — discarding \(state.allItems.count) collected items", category: .transport)
+                log("apiPaginated › auth/permission failure mid-pagination — discarding \(allItems.count) collected items", category: .transport)
             }
             return nil
         }
-        if state.didRateLimit {
-            if state.allItems.isEmpty {
+        if didRateLimit {
+            if allItems.isEmpty {
                 log("apiPaginated › rate limited on first page — no items collected, returning nil", category: .transport)
                 return nil
             }
-            log("apiPaginated › pagination stopped by rate limit — returning \(state.allItems.count) partial items", category: .transport)
+            log("apiPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items", category: .transport)
         }
-        guard state.hadAtLeastOneSuccessfulPage else {
+        guard hadAtLeastOneSuccessfulPage else {
             log("apiPaginated › loop ended without any successful page — returning nil", category: .transport)
             return nil
         }
         do {
-            let encoded = try encoder.encode(state.allItems)
-            log("apiPaginated › returning \(state.allItems.count) items (\(encoded.count)b)", category: .transport)
+            let encoded = try encoder.encode(allItems)
+            log("apiPaginated › returning \(allItems.count) items (\(encoded.count)b)", category: .transport)
             return encoded
         } catch {
             log("apiPaginated › encode failed: \(error) — returning nil", category: .transport)
@@ -327,88 +330,5 @@ extension GitHubTransport {
             return nil
         }
         return resp.token
-    }
-}
-
-// MARK: - PaginationAction
-
-/// The outcome of processing a single page result in ``PaginationState/apply(_:urlString:decoder:)``.
-private enum PaginationAction {
-    /// Fetch succeeded — advance to the given link header (caller resolves next URL).
-    case advance(next: String?)
-    /// Pagination should stop for the given reason.
-    case stop(StopReason)
-
-    /// The reason pagination was halted.
-    enum StopReason {
-        /// Response body was not a JSON array.
-        case nonArrayBody
-        /// No GitHub token available.
-        case noToken
-        /// HTTP 401 — token revoked or expired.
-        case unauthorized
-        /// Any other non-2xx HTTP status.
-        case httpError
-        /// GitHub rate limit hit.
-        case rateLimited
-        /// HTTP 403 permission denied.
-        case permissionDenied
-        /// URLSession / network failure.
-        case networkError
-    }
-}
-
-// MARK: - PaginationState
-
-/// Accumulates per-page results and stop-conditions for ``GitHubTransport/apiPaginated(_:timeout:)``.
-///
-/// Extracted from `apiPaginated` to reduce its cyclomatic complexity (SW-R1002).
-/// All mutation happens through ``apply(_:urlString:decoder:)``.
-private struct PaginationState {
-    /// The URL to fetch on the next iteration, or `nil` when pagination is complete.
-    var nextURL: String?
-    /// All decoded items accumulated across successful pages.
-    var allItems: [AnyJSON] = []
-    /// Set to `true` when any auth or permission failure stops pagination.
-    var didFailAuth = false
-    /// Set to `true` when a rate-limit response stops pagination.
-    var didRateLimit = false
-    /// Set to `true` after the first page decodes successfully.
-    var hadAtLeastOneSuccessfulPage = false
-
-    /// Applies a single `ExecuteResult` to the state and returns the action to take.
-    ///
-    /// Side-effects: updates `allItems`, `didFailAuth`, `didRateLimit`,
-    /// `hadAtLeastOneSuccessfulPage`, and `nextURL` on success.
-    mutating func apply(
-        _ result: ExecuteResult,
-        urlString: String,
-        decoder: JSONDecoder
-    ) -> PaginationAction {
-        switch result {
-        case .success(let data, _, let linkHeader):
-            guard let page = try? decoder.decode([AnyJSON].self, from: data) else {
-                return .stop(.nonArrayBody)
-            }
-            hadAtLeastOneSuccessfulPage = true
-            allItems.append(contentsOf: page)
-            return .advance(next: linkHeader)
-        case .noToken:
-            didFailAuth = true
-            return .stop(.noToken)
-        case .httpError(401):
-            didFailAuth = true
-            return .stop(.unauthorized)
-        case .httpError:
-            return .stop(.httpError)
-        case .rateLimited:
-            didRateLimit = true
-            return .stop(.rateLimited)
-        case .permissionDenied:
-            didFailAuth = true
-            return .stop(.permissionDenied)
-        case .networkError:
-            return .stop(.networkError)
-        }
     }
 }
