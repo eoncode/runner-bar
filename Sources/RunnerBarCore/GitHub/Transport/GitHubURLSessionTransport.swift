@@ -77,7 +77,7 @@ public struct GitHubTransport: GitHubTransportProtocol {
     self.tokenProvider = tokenProvider ?? { githubTokenCore() }
   }
 
-    // MARK: - Core execution
+  // MARK: - Core execution
 
   /// Core execution pipeline shared by all `GitHubTransportProtocol` methods.
   ///
