@@ -25,6 +25,10 @@ extension RunnerPoller: RunnerPollerProtocol {}
 
 // MARK: - MockPoller
 
+// Placed in RunnerBarCore (not the test target) so SwiftUI previews — which run
+// in the app process and cannot use @testable imports — can access MockPoller.
+// If you no longer need it in previews, move it to TestDoubles.swift instead.
+
 /// No-op actor that satisfies `RunnerPollerProtocol` for SwiftUI previews and
 /// snapshot tests that must not trigger any network activity.
 ///
