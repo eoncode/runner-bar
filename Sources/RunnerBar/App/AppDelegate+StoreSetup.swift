@@ -17,23 +17,19 @@ extension AppDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Entry point after launch. Configures the GitHub API clients, migrates
-    /// per-scope preferences from the legacy flat-key format to the single-blob
-    /// actor, then builds the status-bar item and NSPopover panel. (#1538)
+    /// Entry point after launch. Configures the GitHub API clients, then builds
+    /// the status-bar item and NSPopover panel.
     ///
     /// ## Startup ordering
-    /// Migration MUST complete before `setupPanel()` so that `RunnerPoller`
-    /// observers spawned inside `setupPanel → setupSubscriptions` never read
-    /// `ScopePreferencesStore` before the v2 blobs exist. The sequence is:
+    /// The sequence is:
     ///
     /// 1. Configure transports (synchronous, no actor reads).
     /// 2. Configure `LocalRunnerStore` — must happen before any await so that
     ///    no lazy observation or indirect `.shared` access can fire against an
-    ///    unconfigured store during steps 3–4. (#1741)
-    /// 3. Await `migrateIfNeeded` — writes v2 blobs, removes legacy flat keys.
-    /// 4. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
-    /// 5. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
-    ///    observers start only after migration is complete.
+    ///    unconfigured store. (#1741)
+    /// 3. Await `refreshDisplayNames` — hydrates `ScopeEntry.displayName` cache.
+    /// 4. `setupStatusItem` / `setupPanel` / `setupSignOutSubscription` — UI and
+    ///    observers start only after display names are hydrated.
     ///
     /// ## statusIconLoop ordering
     /// `statusIconLoop` (Step 13) is assigned in this outer `Task {}` block,
