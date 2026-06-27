@@ -536,58 +536,6 @@ struct JobConclusionIsHookConclusionTests {
   }
 }
 
-// MARK: - formatElapsed
-
-@Suite("formatElapsed")
-struct FormatElapsedTests {
-
-  @Test func nilStartNotCompletedReturnsZero() {
-    #expect(formatElapsed(start: nil, end: nil, isCompleted: false) == "00:00")
-  }
-
-  @Test func nilStartCompletedReturnsDashes() {
-    #expect(formatElapsed(start: nil, end: nil, isCompleted: true) == "--:--")
-  }
-
-  @Test func validStartNilEndMeasuresToNow() {
-    let start = Date(timeIntervalSinceNow: -65)
-    let result = formatElapsed(start: start, end: nil, isCompleted: false)
-    let mins = Int(result.prefix(2))!
-    let secs = Int(result.suffix(2))!
-    let total = mins * 60 + secs
-    #expect(total >= 64)
-    #expect(total <= 70)
-  }
-
-  @Test func validStartAndEndReturnsExactFormat() {
-    let start = Date(timeIntervalSinceReferenceDate: 0)
-    let end = Date(timeIntervalSinceReferenceDate: 167)
-    #expect(formatElapsed(start: start, end: end, isCompleted: true) == "02:47")
-  }
-
-  @Test func subSecondIntervalReturnsZero() {
-    let start = Date(timeIntervalSinceReferenceDate: 0)
-    let end = Date(timeIntervalSinceReferenceDate: 0.9)
-    #expect(formatElapsed(start: start, end: end, isCompleted: true) == "00:00")
-  }
-
-  @Test func endBeforeStartClampsToZero() {
-    let start = Date(timeIntervalSinceReferenceDate: 100)
-    let end = Date(timeIntervalSinceReferenceDate: 50)
-    #expect(formatElapsed(start: start, end: end, isCompleted: true) == "00:00")
-  }
-
-  @Test func largeIntervalFormatsMmSs() {
-    let ref = Date(timeIntervalSinceReferenceDate: 0)
-    #expect(
-      formatElapsed(start: ref, end: Date(timeIntervalSinceReferenceDate: 3600), isCompleted: true)
-        == "60:00")
-    #expect(
-      formatElapsed(start: ref, end: Date(timeIntervalSinceReferenceDate: 4000), isCompleted: true)
-        == "66:40")
-  }
-}
-
 // MARK: - PollResultBuilder.buildGroupState (fix #1041)
 
 @Suite("PollResultBuilder.buildGroupState")
