@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "RunnerBar",
+    name: "RunBot",
     platforms: [.macOS(.v26)],
     products: [
         .library(
-            name: "RunnerBarCore",
-            targets: ["RunnerBarCore"]
+            name: "RunBotCore",
+            targets: ["RunBotCore"]
         )
     ],
     dependencies: [
@@ -15,30 +15,30 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "RunnerBarCore",
+            name: "RunBotCore",
             dependencies: [
                 .product(name: "Collections", package: "swift-collections")
             ],
-            path: "Sources/RunnerBarCore",
+            path: "Sources/RunBotCore",
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
         ),
         .executableTarget(
-            name: "RunnerBar",
-            dependencies: ["RunnerBarCore"],
-            path: "Sources/RunnerBar",
+            name: "RunBot",
+            dependencies: ["RunBotCore"],
+            path: "Sources/RunBot",
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
         ),
         .testTarget(
-            name: "RunnerBarCoreTests",
+            name: "RunBotCoreTests",
             dependencies: [
-                "RunnerBarCore",
+                "RunBotCore",
                 .product(name: "Collections", package: "swift-collections")
             ],
-            path: "Tests/RunnerBarCoreTests",
+            path: "Tests/RunBotCoreTests",
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
