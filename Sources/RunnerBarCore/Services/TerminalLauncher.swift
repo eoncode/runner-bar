@@ -1,5 +1,5 @@
 // TerminalLauncher.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 /// Opens a Terminal.app window and runs a shell command via AppleScript (`do script`).
@@ -8,7 +8,7 @@ import Foundation
 /// Backslashes, double quotes, and newlines in the command are escaped before
 /// embedding in the AppleScript string. Tracked in #546.
 ///
-/// Moved from `RunnerBar` to `RunnerBarCore` in #1623.
+/// Moved from `RunBot` to `RunBotCore` in #1623.
 public enum TerminalLauncher {
     /// Opens Terminal.app and runs `command` in a new window.
     /// Must be called on the main thread — `NSAppleScript` is not thread-safe.

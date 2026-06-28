@@ -1,5 +1,5 @@
 // RunnerMetrics.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.

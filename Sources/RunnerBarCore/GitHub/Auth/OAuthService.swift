@@ -1,5 +1,5 @@
 // OAuthService.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - OAuthService
@@ -15,14 +15,14 @@ import Foundation
 //    the GitHub authorization URL. The caller is responsible for opening it
 //    (e.g. NSWorkspace.shared.open(url) in SettingsView / AppDelegate).
 // 2. The user clicks "Authorize" on GitHub's consent screen.
-// 3. GitHub redirects to runnerbar://oauth/callback?code=...&state=...
+// 3. GitHub redirects to runbot://oauth/callback?code=...&state=...
 // 4. AppDelegate.application(_:open:) catches the URL and calls handleCallback(_:).
 // 5. handleCallback verifies the state param matches pendingState (CSRF guard),
 //    then exchanges the code for an access token via POST to GitHub.
 // 6. Token is saved to Keychain. fireSignIn(_:) yields the result to all
 //    registered makeSignInStream() consumers.
 
-/// Manages OAuth state and behaviour. Lives in RunnerBarCore — no AppKit dependency.
+/// Manages OAuth state and behaviour. Lives in RunBotCore — no AppKit dependency.
 @MainActor
 public final class OAuthService: OAuthServiceProtocol {
     /// Shared `JSONDecoder` — reused across token-exchange decode calls.

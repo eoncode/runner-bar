@@ -1,5 +1,5 @@
 // ObservationLoopTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 //
 // Unit tests for ObservationLoop.
 //
@@ -12,7 +12,7 @@ import Foundation
 import Observation
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 @MainActor
 @Observable

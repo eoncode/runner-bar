@@ -1,5 +1,5 @@
 // APICallCounter.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Tracks GitHub REST call timestamps in a rolling 60-minute window.
 // Mirrors the RateLimitActor pattern (P16 — Actor-Per-Concern Isolation).
@@ -78,7 +78,7 @@ public actor APICallCounter: APICallCounterProtocol {
     ///
     /// Declared `internal` (not `private`) so that the test-target seam
     /// `APICallCounter+TestSeam.swift` can inject pre-built timestamps
-    /// via `@testable import RunnerBarCore` without needing a public API.
+    /// via `@testable import RunBotCore` without needing a public API.
     var timestamps: [ContinuousClock.Instant] = []
 
     /// Creates a new `APICallCounter` instance.

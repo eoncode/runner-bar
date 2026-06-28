@@ -1,5 +1,5 @@
 // Keychain.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import Security
 
@@ -29,7 +29,7 @@ import Security
 // no correctness benefit. The current design satisfies P16.
 //
 // Visibility note:
-// Keychain is public because OAuthService and SettingsView in the RunnerBar
+// Keychain is public because OAuthService and SettingsView in the RunBot
 // app target call Keychain.save(), .delete(), and .token directly. A future
 // refactor should route those call-sites through a dedicated public function
 // boundary (e.g. keychainSave/keychainDelete in GitHubTokenCache.swift) so
@@ -44,8 +44,8 @@ import Security
 /// is called after every mutation to keep it consistent. No actor wrapper is
 /// required — see the file-level comment for the full P16 rationale.
 public enum Keychain {
-    /// Keychain service name used for RunnerBar credentials.
-    private static let service = "runner-bar"
+    /// Keychain service name used for RunBot credentials.
+    private static let service = "run-bot"
     /// Keychain account name used for the stored OAuth token.
     private static let account = "github-oauth-token"
 

@@ -1,5 +1,5 @@
 // RunnerModel.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Locally-discovered GitHub Actions self-hosted runner, found by scanning
 // LaunchAgent plists in ~/Library/LaunchAgents. Enriched with GitHub API

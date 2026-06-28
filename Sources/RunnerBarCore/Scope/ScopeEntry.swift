@@ -1,5 +1,5 @@
 // ScopeEntry.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - ScopeEntry

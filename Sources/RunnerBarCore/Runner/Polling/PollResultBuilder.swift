@@ -1,5 +1,5 @@
 // PollResultBuilder.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 import OrderedCollections
@@ -338,7 +338,7 @@ public enum PollResultBuilder {
   ///   (`cache[groupID] == nil`) is a separate concern and must not gate the registration.
   ///
   /// - Note: This function is `public` for testability only. It has no intended
-  ///   external consumers outside the `RunnerBarCore` module — the `inout OrderedSet`
+  ///   external consumers outside the `RunBotCore` module — the `inout OrderedSet`
   ///   signature is an internal implementation detail and is not considered part of
   ///   the library's public API surface.
   ///

@@ -1,5 +1,5 @@
 // GitHubURLHelpersTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 //
 // Covers the canonical scope-derivation helpers introduced in F-52:
 //   scopeFromUrl(_ url: URL) -> String?
@@ -23,7 +23,7 @@
 import Foundation
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 // MARK: - scopeFromUrl
 

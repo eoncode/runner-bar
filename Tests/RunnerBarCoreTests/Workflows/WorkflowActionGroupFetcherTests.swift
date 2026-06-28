@@ -1,11 +1,11 @@
 // WorkflowActionGroupFetcherTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 
 import Foundation
 import Testing
 import os
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 // MARK: - StubTransport
 

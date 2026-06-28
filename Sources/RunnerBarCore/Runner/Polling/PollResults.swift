@@ -1,5 +1,5 @@
 // PollResults.swift
-// RunnerBarCore
+// RunBotCore
 import Collections
 import Foundation
 

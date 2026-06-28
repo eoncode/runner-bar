@@ -1,5 +1,5 @@
 // RunnerPoller+FetchAndEnrich.swift
-// RunnerBarCore
+// RunBotCore
 
 // swiftlint:disable:next missing_docs
 extension RunnerPoller {

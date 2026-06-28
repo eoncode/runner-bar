@@ -1,11 +1,11 @@
 // GitHubHelpers.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import os
 
 // MARK: - URL helpers
 
-// `scopeFromHtmlUrl` is defined in RunnerBarCore/Utilities/GitHubURLHelpers.swift
+// `scopeFromHtmlUrl` is defined in RunBotCore/Utilities/GitHubURLHelpers.swift
 // in the same module. Use `scopeFromHtmlUrl(_:)` directly.
 
 // MARK: - User orgs and repos

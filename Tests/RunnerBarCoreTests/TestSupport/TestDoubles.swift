@@ -1,8 +1,8 @@
 // TestDoubles.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 // Shared test doubles — extracted per #1447.
 import Foundation
-import RunnerBarCore
+import RunBotCore
 
 // MARK: - SpyLabelsService
 

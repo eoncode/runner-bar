@@ -1,5 +1,5 @@
 // IndexedScopedRunner.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - IndexedScopedRunner
 

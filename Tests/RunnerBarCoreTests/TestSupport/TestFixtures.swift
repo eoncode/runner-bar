@@ -1,8 +1,8 @@
 // TestFixtures.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 // Shared test fixtures — extracted per #1446.
 import Foundation
-import RunnerBarCore
+import RunBotCore
 
 // MARK: - Constants
 

@@ -1,5 +1,5 @@
 // PanelVisibilityState.swift
-// RunnerBarCore
+// RunBotCore
 import CoreGraphics
 import Observation
 

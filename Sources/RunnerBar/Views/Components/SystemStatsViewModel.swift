@@ -1,9 +1,9 @@
 // SystemStatsViewModel.swift
-// RunnerBar
+// RunBot
 @preconcurrency import Darwin
 import Foundation
 import Observation
-import RunnerBarCore
+import RunBotCore
 
 // MARK: - SystemStatsViewModel
 /// Observable view-model that periodically samples CPU, memory, and disk metrics.

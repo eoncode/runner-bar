@@ -1,8 +1,8 @@
 // AppDelegate.swift
-// RunnerBar
+// RunBot
 
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - NSPopover architecture note
@@ -37,7 +37,7 @@ import SwiftUI
 // ARROW VISIBILITY (#1184):
 // The NSPopover anchor arrow visibility is controlled by the `shouldHideAnchor`
 // private KVC key, applied immediately before each `popover.show()` call.
-// This is NOT App Store safe but RunnerBar is not App Store distributed.
+// This is NOT App Store safe but RunBot is not App Store distributed.
 // The preference is stored in AppPreferencesStore.showPopoverArrow (default: true).
 // ⚠️ The arrow state is baked in at show() time — changing the pref takes
 // effect on the NEXT open. Never call show() mid-session to apply it.

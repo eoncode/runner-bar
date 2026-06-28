@@ -1,5 +1,5 @@
 // FailureHookRunner.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - FailureHookRunner
@@ -18,7 +18,7 @@ import Foundation
 /// Thinned to a production shim as part of #1363 (P7/P8 audit); all business logic
 /// now lives in `FailureHookRunnerUseCase`.
 ///
-/// Moved from `RunnerBar` to `RunnerBarCore` in #1623.
+/// Moved from `RunBot` to `RunBotCore` in #1623.
 public enum FailureHookRunner {
 
     /// Default command used when no command has been explicitly saved for the scope.

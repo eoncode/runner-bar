@@ -1,8 +1,8 @@
 // AddRunnerSheet+FormFields.swift
-// RunnerBar
+// RunBot
 
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 /// Form field subviews and pre-existing folder actions for `AddRunnerSheet`.
@@ -196,7 +196,7 @@ extension AddRunnerSheet {
             // Duplicate warning
             if isDuplicate {
                 Label(
-                    "This runner is already tracked by RunnerBar.",
+                    "This runner is already tracked by RunBot.",
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.caption)

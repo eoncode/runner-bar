@@ -1,6 +1,6 @@
 // AddScopeSheet.swift
-// RunnerBar
-import RunnerBarCore
+// RunBot
+import RunBotCore
 import SwiftUI
 
 // ScopeType is defined in ScopeType.swift (F-45 / #1644).

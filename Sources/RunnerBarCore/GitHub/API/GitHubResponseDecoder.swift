@@ -1,5 +1,5 @@
 // GitHubResponseDecoder.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

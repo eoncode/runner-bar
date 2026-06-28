@@ -1,5 +1,5 @@
 // FailureHookRunnerAdapters.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Production adapters that bridge dependencies to the protocols expected by
 // `FailureHookRunnerUseCase`.
@@ -13,7 +13,7 @@ import Foundation
 /// `@MainActor` is required because `NSAppleScript` (used inside
 /// `TerminalLauncher.open`) must run on the main thread. (#1538)
 ///
-/// Moved from `RunnerBar` to `RunnerBarCore` in #1623.
+/// Moved from `RunBot` to `RunBotCore` in #1623.
 public struct DefaultTerminalLauncher: TerminalLauncherProtocol {
     /// Creates a new `DefaultTerminalLauncher` instance.
     public init() {}

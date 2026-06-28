@@ -1,5 +1,5 @@
 // WindowGrabber.swift
-// RunnerBar
+// RunBot
 //
 // Captures the NSWindow that hosts a SwiftUI view the moment the view is
 // inserted into the window hierarchy. Used to obtain a reliable NSWindow
@@ -12,7 +12,7 @@
 // #1195 — required for NSOpenPanel.beginSheetModal inside NSPopover.
 
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - NSWindowGrabber (NSView subclass)

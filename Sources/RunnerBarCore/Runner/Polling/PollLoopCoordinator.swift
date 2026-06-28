@@ -1,5 +1,5 @@
 // PollLoopCoordinator.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - PollLoopCoordinator

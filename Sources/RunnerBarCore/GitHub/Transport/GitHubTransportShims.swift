@@ -1,5 +1,5 @@
 // GitHubTransportShims.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

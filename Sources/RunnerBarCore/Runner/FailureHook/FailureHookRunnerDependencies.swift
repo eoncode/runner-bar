@@ -1,5 +1,5 @@
 // FailureHookRunnerDependencies.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - ScopePreferencesStoreProtocol

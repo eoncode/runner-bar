@@ -1,5 +1,5 @@
 // FormatElapsed.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 /// Returns a human-readable `mm:ss` elapsed duration string.

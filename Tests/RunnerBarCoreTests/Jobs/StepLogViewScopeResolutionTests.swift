@@ -1,5 +1,5 @@
 // StepLogViewScopeResolutionTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 // Tests for the scope-resolution logic used by StepLogView.loadLog() — refs #1517.
 import Foundation
 import Testing
@@ -29,8 +29,8 @@ struct StepLogViewScopeResolutionTests {
   /// Verifies that a full GitHub Actions job URL correctly yields `"owner/repo"` as the scope string.
   @Test("extracts owner/repo from a well-formed GitHub job URL")
   func extractsOwnerRepoFromWellFormedURL() {
-    let url = "https://github.com/eoncode/runner-bar/actions/runs/12345/job/67890"
-    #expect(repoScopeForFetch(htmlUrl: url) == "eoncode/runner-bar")
+    let url = "https://github.com/eoncode/run-bot/actions/runs/12345/job/67890"
+    #expect(repoScopeForFetch(htmlUrl: url) == "eoncode/run-bot")
   }
 
   /// Verifies that a minimal URL containing only scheme, host, owner, and repo (no trailing path) still resolves correctly.
@@ -72,7 +72,7 @@ struct StepLogViewScopeResolutionTests {
   @Test("returns empty string when owner component is empty")
   func returnsEmptyWhenOwnerIsEmpty() {
     // malformed: double slash produces an empty owner component
-    let url = "https://github.com//runner-bar/actions"
+    let url = "https://github.com//run-bot/actions"
     #expect(repoScopeForFetch(htmlUrl: url) == "")
   }
 

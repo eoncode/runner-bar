@@ -1,5 +1,5 @@
 // ScopePreferences.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - ScopePreferences

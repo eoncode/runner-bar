@@ -1,7 +1,7 @@
 // RunnerRowViews.swift
-// RunnerBar
+// RunBot
 
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - RunnerTypeIcon

@@ -1,7 +1,7 @@
 // AppDelegate+PanelSetup.swift
-// RunnerBar
+// RunBot
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - AppDelegate + Panel Setup
@@ -215,7 +215,7 @@ extension AppDelegate: NSPopoverDelegate {
         log("AppDelegate › setupSubscriptions — LocalRunnerStore.configure(viewModel: runnerState) called")
 
         // NOTE: The old `RunnerStore.didUpdate` Combine sink has been removed.
-        // `RunnerPoller` is a Swift actor in RunnerBarCore that pushes state directly
+        // `RunnerPoller` is a Swift actor in RunBotCore that pushes state directly
         // to `AppDelegate.runnerState` (a stored property) via `await MainActor.run { }`
         // at the end of every fetch cycle.
         //

@@ -1,8 +1,8 @@
 // ActiveJobRBStatusTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 // MARK: - ActiveJob.rbStatus
 

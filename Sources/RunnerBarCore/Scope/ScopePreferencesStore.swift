@@ -1,5 +1,5 @@
 // ScopePreferencesStore.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - ScopePreferencesStore
@@ -32,7 +32,7 @@ import Foundation
 ///
 /// ## P21 note
 /// `JSONEncoder.outputFormatting` is intentionally NOT set to `.prettyPrinted`/`.sortedKeys`
-/// here. P21 applies to agent-managed config files that are diffed in git between RunnerBar
+/// here. P21 applies to agent-managed config files that are diffed in git between RunBot
 /// and the GitHub Actions runner agent. `UserDefaults` blobs are opaque binary plist data
 /// and are never inspected as text, so human-readable formatting is not applicable.
 public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {

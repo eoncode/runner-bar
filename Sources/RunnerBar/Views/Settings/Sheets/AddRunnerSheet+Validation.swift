@@ -1,8 +1,8 @@
 // AddRunnerSheet+Validation.swift
-// RunnerBar
+// RunBot
 
 import Foundation
-import RunnerBarCore
+import RunBotCore
 
 /// Computed validation helpers and state-check predicates for `AddRunnerSheet`.
 extension AddRunnerSheet {

@@ -1,7 +1,7 @@
 // WorkflowContextMenuModifier.swift
-// RunnerBar
+// RunBot
 
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - Pasteboard helper

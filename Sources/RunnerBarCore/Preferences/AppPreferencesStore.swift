@@ -1,5 +1,5 @@
 // AppPreferencesStore.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import Observation
 
@@ -42,7 +42,7 @@ public final class AppPreferencesStore {
 
     // MARK: - Preferences
 
-    /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
+    /// How often (in seconds) RunBot polls GitHub. Clamped to 10–300 s.
     ///
     /// Setting this property out-of-range triggers a second `didSet` call with
     /// the clamped value — this re-entrancy is intentional and safe because
@@ -117,7 +117,7 @@ public final class AppPreferencesStore {
 ///
 /// Scoped `fileprivate` — there is a single call site (`pollingInterval` clamping
 /// in `AppPreferencesStore`). `fileprivate` confines the extension to this file and
-/// avoids injecting `.clamped(to:)` on every `Comparable` type across `RunnerBarCore`
+/// avoids injecting `.clamped(to:)` on every `Comparable` type across `RunBotCore`
 /// (principle P7 — no pollution of global namespaces). If a second call site ever
 /// appears in another file, promote to `internal` at that point.
 private extension Comparable {

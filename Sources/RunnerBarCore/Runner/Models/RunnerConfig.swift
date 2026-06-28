@@ -1,5 +1,5 @@
 // RunnerConfig.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - RunnerConfig
 

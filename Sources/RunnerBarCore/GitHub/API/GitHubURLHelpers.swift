@@ -1,5 +1,5 @@
 // GitHubURLHelpers.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - GitHub URL utilities
@@ -10,7 +10,7 @@ import Foundation
 /// - For org-scoped URLs (`https://github.com/myorg`) returns `"myorg"`.
 /// - Returns `nil` if `urlString` is nil, not a valid URL, or has no path components.
 ///
-/// This is the canonical implementation shared across `RunnerBarCore`. Call sites that
+/// This is the canonical implementation shared across `RunBotCore`. Call sites that
 /// already hold a typed `URL` value should prefer the `URL`-typed overload `scopeFromUrl(_:)`
 /// to avoid a redundant `absoluteString` → `URL` round-trip.
 ///

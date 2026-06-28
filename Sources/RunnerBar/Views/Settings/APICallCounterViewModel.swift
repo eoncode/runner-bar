@@ -1,11 +1,11 @@
 // APICallCounterViewModel.swift
-// RunnerBar
+// RunBot
 //
 // @Observable view-model exposing live GitHub API call-counter state
 // for the Settings panel (P2 — Async/Await and @Observable for Data Flow).
 import Foundation
 import Observation
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - TaskBox

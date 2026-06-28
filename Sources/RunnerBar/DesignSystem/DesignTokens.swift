@@ -1,7 +1,7 @@
 // DesignTokens.swift
-// RunnerBar
+// RunBot
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - Adaptive Color Helper
@@ -28,7 +28,7 @@ extension Color {
 
 // MARK: - Color Tokens
 
-/// Semantic color tokens used throughout RunnerBar for status, surface, and text styling.
+/// Semantic color tokens used throughout RunBot for status, surface, and text styling.
 extension Color {
     /// Primary blue accent — adaptive light/dark pair for in-progress status indicators.
     static let rbBlue = Color.adaptive(
@@ -136,7 +136,7 @@ extension Color {
 // MARK: - Status helpers
 
 /// UI-layer color extension for `RBStatus`.
-/// `RBStatus` cases are defined in `RunnerBarCore/RBStatus.swift`.
+/// `RBStatus` cases are defined in `RunBotCore/RBStatus.swift`.
 extension RBStatus {
     /// The primary foreground color associated with this status.
     var color: Color {

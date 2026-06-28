@@ -1,6 +1,6 @@
 // SettingsView+Sections.swift
-// RunnerBar
-import RunnerBarCore
+// RunBot
+import RunBotCore
 import SwiftUI
 
 // MARK: - SettingsView sections extension
@@ -58,14 +58,14 @@ internal extension SettingsView {
                             Text("Sign in with GitHub").font(.caption2)
                         }
                         .buttonStyle(.bordered)
-                        .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
+                        .help("Authorize RunBot via GitHub OAuth and store token in Keychain")
                     }
                 } else {
                     Button(action: signInWithGitHub) {
                         Text("Sign in with GitHub").font(.caption2)
                     }
                     .buttonStyle(.bordered)
-                    .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
+                    .help("Authorize RunBot via GitHub OAuth and store token in Keychain")
                 }
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
@@ -149,7 +149,7 @@ internal extension SettingsView {
                 Stepper("", value: bindableSettings.pollingInterval, in: 10...300).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
-            Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
+            Text("How often RunBot checks GitHub for runner and workflow status. Lower values use more API quota.")
                 .font(.caption).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
             Divider().padding(.leading, RBSpacing.md)

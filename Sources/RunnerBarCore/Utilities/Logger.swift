@@ -1,5 +1,5 @@
 // Logger.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import os
 
@@ -15,7 +15,7 @@ import os
 /// Logical subsystem categories for `os.Logger` filtering in Console.app
 /// and `log stream --predicate`.
 ///
-/// **Access level:** `public` because the app target (`Sources/RunnerBar/**`)
+/// **Access level:** `public` because the app target (`Sources/RunBot/**`)
 /// calls `log()` directly from `AppDelegate`, views, and sheets.
 /// `internal` would cause a compile error in the app target.
 ///
@@ -41,7 +41,7 @@ public enum LogCategory: String, CaseIterable {
 // MARK: - Logger instances
 
 /// The OSLog subsystem identifier for the app, shared across all log categories.
-private let subsystem = "com.eoncode.runner-bar"
+private let subsystem = "com.eoncode.run-bot"
 
 /// One `os.Logger` per `LogCategory`, created once at launch.
 ///
@@ -118,19 +118,19 @@ private func resolvedLogger(for category: LogCategory) -> Logger {
 
 /// Writes a debug-level message to the unified logging system.
 ///
-/// **Access level:** `public` — consumed by the app target (`Sources/RunnerBar/**`)
-/// in addition to `RunnerBarCore`. Do not narrow to `internal`.
+/// **Access level:** `public` — consumed by the app target (`Sources/RunBot/**`)
+/// in addition to `RunBotCore`. Do not narrow to `internal`.
 ///
 /// Messages are visible in:
-///   - Console.app (filter by subsystem: com.eoncode.runner-bar, then by category)
-///   - `log stream --level debug --predicate 'subsystem == "com.eoncode.runner-bar"'`
+///   - Console.app (filter by subsystem: com.eoncode.run-bot, then by category)
+///   - `log stream --level debug --predicate 'subsystem == "com.eoncode.run-bot"'`
 ///   - Xcode debug console when running from Xcode
 ///
 /// In release builds the OS elides .debug calls at zero cost.
 ///
 /// **`privacy: .public` policy**
 /// All three interpolated fields (filename, line, message) are marked `.public`.
-/// This is a deliberate, app-wide policy: RunnerBar is a developer tool whose
+/// This is a deliberate, app-wide policy: RunBot is a developer tool whose
 /// operator controls the machine and reads their own logs. The OS default
 /// (`.private`) would redact every dynamic string in Console.app and `log stream`,
 /// making diagnostic output useless in the field. `.public` opts the entire

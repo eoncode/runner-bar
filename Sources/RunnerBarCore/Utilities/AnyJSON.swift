@@ -1,5 +1,5 @@
 // AnyJSON.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - AnyJSON

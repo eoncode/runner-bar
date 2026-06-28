@@ -1,8 +1,8 @@
 // AddRunnerSheet+TokenSection.swift
-// RunnerBar
+// RunBot
 
 import Foundation
-import RunnerBarCore
+import RunBotCore
 
 // MARK: - Runner download URL
 

@@ -1,5 +1,5 @@
 // RunnerStatusEnricher.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Enriches a list of RunnerModel values with GitHub API data (status, busy, labels, group).
 //

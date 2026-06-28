@@ -1,15 +1,15 @@
 // AppDelegate+OAuthCallback.swift
-// RunnerBar
+// RunBot
 
 import AppKit
-import RunnerBarCore
+import RunBotCore
 
 /// AppDelegate extension handling the OAuth callback URL delivered by the OS.
 extension AppDelegate {
 
     // MARK: - OAuth URL callback
 
-    /// Handles the OAuth callback URL (`runnerbar://oauth/…`) delivered by the OS
+    /// Handles the OAuth callback URL (`runbot://oauth/…`) delivered by the OS
     /// after the user authorises the GitHub OAuth flow in the browser.
     /// - Parameters:
     ///   - _: The NSApplication instance (unused).

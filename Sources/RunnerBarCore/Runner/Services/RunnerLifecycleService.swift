@@ -1,5 +1,5 @@
 // RunnerLifecycleService.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - RunnerLifecycleService

@@ -1,5 +1,5 @@
 // LogFetcher.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import os
 

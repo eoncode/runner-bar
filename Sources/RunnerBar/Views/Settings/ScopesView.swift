@@ -1,6 +1,6 @@
 // ScopesView.swift
-// RunnerBar
-import RunnerBarCore
+// RunBot
+import RunBotCore
 import SwiftUI
 
 // MARK: - ScopesView

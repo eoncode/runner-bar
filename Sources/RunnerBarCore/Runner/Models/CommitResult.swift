@@ -1,6 +1,6 @@
 // CommitResult.swift
-// RunnerBarCore
-// Moved from RunnerBar app target to RunnerBarCore in Phase 5 (#1300).
+// RunBotCore
+// Moved from RunBot app target to RunBotCore in Phase 5 (#1300).
 import Foundation
 
 // MARK: - CommitResult

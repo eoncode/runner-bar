@@ -1,5 +1,5 @@
 // GitHubTransportProtocol.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

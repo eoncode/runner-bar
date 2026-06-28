@@ -1,10 +1,10 @@
 // LogFetcherTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 
 import Foundation
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 // MARK: - LogFetcherTests
 

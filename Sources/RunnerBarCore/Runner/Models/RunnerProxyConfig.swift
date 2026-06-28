@@ -1,6 +1,6 @@
 // RunnerProxyConfig.swift
-// RunnerBarCore
-// Moved from RunnerBar app target to RunnerBarCore in Phase 5 (#1300)
+// RunBotCore
+// Moved from RunBot app target to RunBotCore in Phase 5 (#1300)
 // so that test targets and the use case protocol can reference it.
 import Foundation
 

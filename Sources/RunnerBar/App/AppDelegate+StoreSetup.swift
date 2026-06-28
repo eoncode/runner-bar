@@ -1,8 +1,8 @@
 // AppDelegate+StoreSetup.swift
-// RunnerBar
+// RunBot
 
 import AppKit
-import RunnerBarCore
+import RunBotCore
 
 /// AppDelegate extension wiring app-lifecycle callbacks to store and service setup.
 extension AppDelegate {

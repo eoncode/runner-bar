@@ -1,10 +1,10 @@
 // ISO8601DateParser.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - ISO8601DateParser
 
-/// Shared actor-isolated ISO-8601 date parser for the RunnerBarCore module.
+/// Shared actor-isolated ISO-8601 date parser for the RunBotCore module.
 ///
 /// `ISO8601DateFormatter` is expensive to allocate (it loads ICU calendars on
 /// init) and is not `Sendable`. Wrapping a single instance in an actor gives

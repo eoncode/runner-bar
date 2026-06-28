@@ -1,8 +1,8 @@
 // APICallCounterRow.swift
-// RunnerBar
+// RunBot
 //
 // SwiftUI Settings row displaying the live GitHub REST API call counter.
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - CounterPollingModifier
@@ -26,7 +26,7 @@ extension View {
     /// Binds the `APICallCounterViewModel` polling lifecycle to this view's
     /// appearance. Polling starts on `onAppear` and stops on `onDisappear`.
     ///
-    /// Marked `public` so that app-layer views outside `RunnerBar` can wire
+    /// Marked `public` so that app-layer views outside `RunBot` can wire
     /// the lifecycle when `APICallCounterRow` is embedded in a custom parent.
     public func counterPolling(_ vm: APICallCounterViewModel) -> some View {
         modifier(CounterPollingModifier(vm: vm))

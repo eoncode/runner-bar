@@ -1,5 +1,5 @@
 // FailureHookRunnerUseCase.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - FailureHookRunnerUseCase

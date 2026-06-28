@@ -1,5 +1,5 @@
 // NavState.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - NavState
 //
@@ -10,7 +10,7 @@
 // directly from SettingsView, not a nav drill-down.
 // #1001: Removed .runnerDetail — runner editing is now a popover in SettingsView.
 
-/// Represents the currently visible navigation screen inside the RunnerBar panel.
+/// Represents the currently visible navigation screen inside the RunBot panel.
 ///
 /// Extracted from AppDelegate.swift (#602) — was a private enum co-located with
 /// AppDelegate. Moved here so navigation cases can be extended without opening

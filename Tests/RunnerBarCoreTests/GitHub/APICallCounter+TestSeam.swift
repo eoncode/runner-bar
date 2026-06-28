@@ -1,11 +1,11 @@
 // APICallCounter+TestSeam.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 //
 // Test-only extensions on APICallCounter for seeding and resetting state
 // without real time travel. Compiled only in the test target.
 import Foundation
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 extension APICallCounter {
   /// Seeds the rolling buffer with pre-built `ContinuousClock.Instant` values.

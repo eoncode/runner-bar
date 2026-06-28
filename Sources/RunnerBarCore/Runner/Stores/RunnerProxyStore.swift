@@ -1,5 +1,5 @@
 // RunnerProxyStore.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - RunnerProxyStore
@@ -19,7 +19,7 @@ import Foundation
 /// - `.proxy`            — raw proxy URL followed by `"\n"`.
 /// - `.proxycredentials` — `user + "\n" + password + "\n"`.
 ///
-/// Moved from `RunnerBar` to `RunnerBarCore` in #1612.
+/// Moved from `RunBot` to `RunBotCore` in #1612.
 /// `RunnerProxyStoreProtocol`, `RunnerProxyConfig`, and `RunnerProxyStoreError`
 /// were already in Core — this completes the proxy subsystem.
 ///

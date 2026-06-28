@@ -1,9 +1,9 @@
 // LocalRunnerIndexTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 import Foundation
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 // MARK: - LocalRunnerIndexTests
 
@@ -24,7 +24,7 @@ struct LocalRunnerIndexTests {
   /// Returns a fresh, UUID-namespaced `UserDefaults` suite and its suite name.
   /// Callers are responsible for cleanup via `UserDefaults.standard.removePersistentDomain(forName:)`.
   private static func makeSuite() -> (UserDefaults, String) {
-    let suiteName = "com.runnerbar.tests.LocalRunnerIndex.\(UUID().uuidString)"
+    let suiteName = "com.runbot.tests.LocalRunnerIndex.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
     return (defaults, suiteName)
   }

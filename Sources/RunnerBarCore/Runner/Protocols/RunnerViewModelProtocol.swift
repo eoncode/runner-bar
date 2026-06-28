@@ -1,5 +1,5 @@
 // RunnerViewModelProtocol.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - RunnerViewModelProtocol
@@ -11,9 +11,9 @@ import Foundation
 /// `rateLimitResetDate`) moved to `RunnerState` in Step 3 and are no longer
 /// part of this protocol (removed in Step 15).
 ///
-/// Declaring the protocol in `RunnerBarCore` (rather than the app target) achieves two goals:
+/// Declaring the protocol in `RunBotCore` (rather than the app target) achieves two goals:
 /// 1. `RunnerPoller` and `LocalRunnerStore` can reference it without importing AppKit or SwiftUI.
-/// 2. Test doubles (`MockRunnerViewModel`) can be defined inside `RunnerBarCoreTests` and
+/// 2. Test doubles (`MockRunnerViewModel`) can be defined inside `RunBotCoreTests` and
 ///    passed into the actors without any app-target dependency.
 ///
 /// **Direction of data flow:** stores *push* into the receiver; the receiver never pulls.
@@ -31,8 +31,8 @@ import Foundation
 /// does not satisfy a `public` protocol’s `{ get set }` requirement at the module
 /// interface — the compiler rejects it with
 /// “setter for ‘localRunners’ must be declared public”.
-/// Encapsulation is preserved by convention: only `LocalRunnerStore` (in `RunnerBarCore`)
-/// writes these properties; external callers in `RunnerBar` read them via `@Observable`.
+/// Encapsulation is preserved by convention: only `LocalRunnerStore` (in `RunBotCore`)
+/// writes these properties; external callers in `RunBot` read them via `@Observable`.
 @MainActor
 public protocol RunnerViewModelProtocol: AnyObject, Sendable {
     // MARK: Pushed by LocalRunnerStore

@@ -1,5 +1,5 @@
 // PopoverLifecycleCoordinator.swift
-// RunnerBar
+// RunBot
 //
 // Extracted from AppDelegate as part of #1374.
 // Owns the four lifecycle concerns that AppDelegate previously stored directly:
@@ -15,7 +15,7 @@
 // ⚠️ All methods must be called on the main actor.
 
 import AppKit
-import RunnerBarCore
+import RunBotCore
 
 /// Owns the four popover lifecycle concerns extracted from `AppDelegate`:
 /// panel-open flag, preserved-sheet-window flag, outside-click monitor, and
@@ -135,7 +135,7 @@ final class PopoverLifecycleCoordinator {
         // App-switch observer.
         //
         // IMPORTANT — self-activation guard below is intentional:
-        // Prevents the popover from self-dismissing when RunnerBar regains focus
+        // Prevents the popover from self-dismissing when RunBot regains focus
         // after an NSOpenPanel picker closes (the picker re-activates its parent
         // app, which would otherwise trigger onHide on the way back in).
         // ❌ Do NOT remove the `activatedApp != NSRunningApplication.current` guard.
@@ -164,7 +164,7 @@ final class PopoverLifecycleCoordinator {
             let appName = activatedApp.localizedName ?? "unknown"
             log("PopoverLifecycleCoordinator › workspaceObserver — FIRED activated=\(appName)")
             guard activatedApp != NSRunningApplication.current else {
-                log("PopoverLifecycleCoordinator › workspaceObserver — guard exit: RunnerBar self-activated, skipping hidePanel")
+                log("PopoverLifecycleCoordinator › workspaceObserver — guard exit: RunBot self-activated, skipping hidePanel")
                 return
             }
             // Already on main queue (queue: .main above) — access actor state directly.

@@ -1,8 +1,8 @@
-// RunnerBarCoreTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests.swift
+// RunBotCoreTests
 import Collections
 import Foundation
-import RunnerBarCore
+import RunBotCore
 import Testing
 
 // MARK: - ActiveJob.elapsed

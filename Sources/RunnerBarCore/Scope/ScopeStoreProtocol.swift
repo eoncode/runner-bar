@@ -1,5 +1,5 @@
 // ScopeStoreProtocol.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

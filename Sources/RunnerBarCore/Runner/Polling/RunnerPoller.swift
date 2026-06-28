@@ -1,10 +1,10 @@
 // RunnerPoller.swift
-// RunnerBar
+// RunBot
 //
-// Step 10: RunnerStore renamed to RunnerPoller and moved into RunnerBarCore.
+// Step 10: RunnerStore renamed to RunnerPoller and moved into RunBotCore.
 // Step 14: applyFetchResult writes only to RunnerState (no viewModel.* writes remain).
 // App-layer dependencies replaced with protocol-typed injections and closures
-// so Core has no import of the RunnerBar app target.
+// so Core has no import of the RunBot app target.
 // F-35: startObservingPreferences and startObservingScopes updated to use
 //       ObservationRelay's trailing-closure init (read closure) instead of store: parameter.
 
@@ -469,7 +469,7 @@ public actor RunnerPoller {
   /// scope-ordering of the returned array.
   ///
   /// `internal` — required for cross-file extension access from `RunnerPoller+PollBridge.swift`;
-  /// not a public API. Call sites are exclusively within `RunnerBarCore`.
+  /// not a public API. Call sites are exclusively within `RunBotCore`.
   func fetchAllJobs(scopes: [String]) async -> [ActiveJob] {
     guard !scopes.isEmpty else { return [] }
     let dec = decoder
@@ -501,7 +501,7 @@ public actor RunnerPoller {
   /// scope-ordering of the returned array.
   ///
   /// `internal` — required for cross-file extension access from `RunnerPoller+PollBridge.swift`;
-  /// not a public API. Call sites are exclusively within `RunnerBarCore`.
+  /// not a public API. Call sites are exclusively within `RunBotCore`.
   func fetchActionGroups(scopes: [String], shaKeyedCache: [String: WorkflowActionGroup]) async
     -> [WorkflowActionGroup] {
     guard !scopes.isEmpty else { return [] }

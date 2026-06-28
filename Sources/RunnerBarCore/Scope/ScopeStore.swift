@@ -1,5 +1,5 @@
 // ScopeStore.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - ScopeStore

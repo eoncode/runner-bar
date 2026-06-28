@@ -1,5 +1,5 @@
 // AggregateStatus.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - AggregateStatus
 

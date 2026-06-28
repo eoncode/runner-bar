@@ -1,5 +1,5 @@
 // GitHubConstants.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - Shared GitHub URI constants
@@ -17,13 +17,13 @@ public enum GitHubConstants {
 
     // MARK: - OAuth URI constants
 
-    /// The custom-scheme redirect URI registered for the RunnerBar OAuth app.
+    /// The custom-scheme redirect URI registered for the RunBot OAuth app.
     /// GitHub redirects to this URI after the user authorises (or denies) sign-in.
     /// Must match the value registered in the GitHub OAuth app settings exactly.
-    public static let oauthRedirectURI = "runnerbar://oauth/callback" // NOSONAR — intentional centralisation of hardcoded URI
+    public static let oauthRedirectURI = "runbot://oauth/callback" // NOSONAR — intentional centralisation of hardcoded URI
     /// The URL scheme component of `oauthRedirectURI`.
     /// Used by `AppDelegate.application(_:open:)` to filter incoming URLs.
-    public static let oauthScheme = "runnerbar" // NOSONAR — intentional centralisation of hardcoded URI
+    public static let oauthScheme = "runbot" // NOSONAR — intentional centralisation of hardcoded URI
     /// The host component of `oauthRedirectURI`.
     /// Used by `AppDelegate.application(_:open:)` alongside `oauthScheme`.
     public static let oauthHost = "oauth" // NOSONAR — intentional centralisation of hardcoded URI

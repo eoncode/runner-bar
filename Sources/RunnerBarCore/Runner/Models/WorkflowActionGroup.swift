@@ -1,5 +1,5 @@
 // WorkflowActionGroup.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - GroupStatus
@@ -115,7 +115,7 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
 
     /// Set to `true` when frozen into `actionGroupCache` after completion.
     ///
-    /// - Note: `WorkflowActionGroup+Progress.swift` (RunnerBar target) declares a computed
+    /// - Note: `WorkflowActionGroup+Progress.swift` (RunBot target) declares a computed
     ///   `var isDimmed` that derives visual-dimming from `conclusion`. The two serve different
     ///   purposes: this stored property is the freeze-cache flag; the computed one is the
     ///   view-layer opacity signal. They live in separate targets and do not shadow each other,

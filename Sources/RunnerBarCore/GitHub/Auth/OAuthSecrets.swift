@@ -1,5 +1,5 @@
 // OAuthSecrets.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - OAuth App Credentials
 //

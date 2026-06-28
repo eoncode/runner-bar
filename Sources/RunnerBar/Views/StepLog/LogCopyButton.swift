@@ -1,7 +1,7 @@
 // LogCopyButton.swift
-// RunnerBar
+// RunBot
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.

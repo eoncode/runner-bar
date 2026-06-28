@@ -1,8 +1,8 @@
 // ScopeEditSheetTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 // Tests for the atomic-save contract introduced by the ScopeEditSheet DI rewrite — refs #1540.
 import Foundation
-import RunnerBarCore
+import RunBotCore
 import Testing
 
 // MARK: - Fake store
@@ -172,8 +172,8 @@ struct ScopeEditSheetTests {
   func confirmSaveTargetsCorrectScope() async {
     let fake = FakeScopePreferencesStore()
     let prefs = ScopePreferences(alias: "My Repo")
-    await confirmSave(scope: "eoncode/runner-bar", updated: prefs, into: fake)
-    #expect(await fake.writeLog.first?.scope == "eoncode/runner-bar")
+    await confirmSave(scope: "eoncode/run-bot", updated: prefs, into: fake)
+    #expect(await fake.writeLog.first?.scope == "eoncode/run-bot")
   }
 
   /// Verifies that a single `confirmSave` call persists every field of `ScopePreferences` atomically in one write.

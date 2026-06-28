@@ -1,5 +1,5 @@
 // NotificationPreferences.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import Observation
 

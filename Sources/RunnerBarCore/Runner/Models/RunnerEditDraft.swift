@@ -1,8 +1,8 @@
 // RunnerEditDraft.swift
-// RunnerBarCore
-// Moved from RunnerBar app target to RunnerBarCore in Phase 5 (#1300)
+// RunBotCore
+// Moved from RunBot app target to RunBotCore in Phase 5 (#1300)
 // so that SaveRunnerEditsUseCase and tests can reference it without
-// depending on the RunnerBar executable target.
+// depending on the RunBot executable target.
 import Foundation
 
 // MARK: - RunnerEditDraft

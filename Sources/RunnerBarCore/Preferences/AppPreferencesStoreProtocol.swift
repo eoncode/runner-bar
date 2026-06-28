@@ -1,5 +1,5 @@
 // AppPreferencesStoreProtocol.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

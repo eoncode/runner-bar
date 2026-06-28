@@ -1,13 +1,13 @@
 // GitHubTransportShim.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Provides module-level `ghAPI`, `ghAPIPaginated` symbols
-// for RunnerBarCore consumers (WorkflowActionGroupFetch, RunnerStatusEnricher,
+// for RunBotCore consumers (WorkflowActionGroupFetch, RunnerStatusEnricher,
 // LogFetcher).
 //
 // These are thin forwarding stubs backed by configurable transport closures so
 // that:
-//   • RunnerBarCore stays independent of the RunnerBar app target.
+//   • RunBotCore stays independent of the RunBot app target.
 //   • Tests can inject a mock transport without touching URLSession.
 //   • The app target wires the real GitHubURLSessionTransport at launch.
 //

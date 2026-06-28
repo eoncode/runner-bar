@@ -1,8 +1,8 @@
 // WorkflowActionGroup+Progress.swift
-// RunnerBar
+// RunBot
 // Extracted from PanelProgressViews.swift during dead-code cleanup (removed PieProgressDot).
 import Foundation
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - RelativeTimeFormatter
@@ -99,7 +99,7 @@ extension WorkflowActionGroup {
         return first.runnerName?.lowercased().contains("self-hosted") == true
     }
 
-    /// The short repo name (without owner prefix), e.g. `"runner-bar"` from `"eoncode/runner-bar"`.
+    /// The short repo name (without owner prefix), e.g. `"run-bot"` from `"eoncode/run-bot"`.
     /// Falls back to the full `repo` string when no slash is present.
     var repoShortName: String {
         repo.components(separatedBy: "/").last ?? repo

@@ -1,7 +1,7 @@
 // AddRunnerSheet.swift
-// RunnerBar
+// RunBot
 import AppKit
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - URI Constants
@@ -37,7 +37,7 @@ enum GitHubURIs {
 ///
 /// - **Add new**: downloads, configures and registers a brand-new runner with GitHub.
 /// - **Add pre-existing**: imports a runner folder that was already configured outside
-///   of RunnerBar (e.g. via terminal). Only writes the LaunchAgent plist so
+///   of RunBot (e.g. via terminal). Only writes the LaunchAgent plist so
 ///   the runner can be managed — no token or download needed.
 ///
 /// After successful registration/import the app writes a minimal LaunchAgent plist to
@@ -69,7 +69,7 @@ struct AddRunnerSheet: View {
     enum AddMode: String, CaseIterable, Identifiable {
         /// Onboards a fresh runner via download + registration token.
         case addNew = "Add new"
-        /// Imports a runner folder that was configured outside of RunnerBar.
+        /// Imports a runner folder that was configured outside of RunBot.
         case addExisting = "Add pre-existing"
         /// Stable identity backed by `rawValue`.
         var id: String { rawValue }
@@ -220,9 +220,9 @@ struct AddRunnerSheet: View {
     /// atomically. Used by both the "Add new" and "Add pre-existing" flows.
     ///
     /// - Note: `ProgramArguments` is intentionally omitted. The runner is started by
-    ///   `launchctl` invoking `./run.sh` from the `WorkingDirectory`; RunnerBar only
+    ///   `launchctl` invoking `./run.sh` from the `WorkingDirectory`; RunBot only
     ///   needs `Label` + `WorkingDirectory` to identify and manage the agent. A full
-    ///   `ProgramArguments` array would be added if RunnerBar ever needs to bootstrap
+    ///   `ProgramArguments` array would be added if RunBot ever needs to bootstrap
     ///   the runner itself rather than relying on the existing `run.sh` mechanism.
     nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser

@@ -1,12 +1,12 @@
 // RunnerPollerProtocol.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - RunnerPollerProtocol
 
 /// Minimal interface for the GitHub poll-loop actor.
 ///
 /// Typed as `any RunnerPollerProtocol` in `AppDelegate` so tests and SwiftUI
-/// previews can substitute a `MockPoller` without importing the RunnerBar app target.
+/// previews can substitute a `MockPoller` without importing the RunBot app target.
 public protocol RunnerPollerProtocol: AnyObject {
     /// Starts the poll loop, observers, and initial fetch.
     func start() async
@@ -25,7 +25,7 @@ extension RunnerPoller: RunnerPollerProtocol {}
 
 // MARK: - MockPoller
 
-// Placed in RunnerBarCore (not the test target) so SwiftUI previews — which run
+// Placed in RunBotCore (not the test target) so SwiftUI previews — which run
 // in the app process and cannot use @testable imports — can access MockPoller.
 // If you no longer need it in previews, move it to TestDoubles.swift instead.
 

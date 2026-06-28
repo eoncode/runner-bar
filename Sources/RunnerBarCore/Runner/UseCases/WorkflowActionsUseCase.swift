@@ -1,5 +1,5 @@
 // WorkflowActionsUseCase.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - WorkflowActionsUseCase

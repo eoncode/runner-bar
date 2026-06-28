@@ -1,5 +1,5 @@
 // GitHubTokenCacheTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 //
 // ⚠️ ISOLATION REQUIREMENT
 // tokenCache is a process-global Mutex(nil) at module scope. Every test body
@@ -22,7 +22,7 @@
 import Foundation
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 // MARK: - Helpers
 

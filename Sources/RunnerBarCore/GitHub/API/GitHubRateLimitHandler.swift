@@ -1,5 +1,5 @@
 // GitHubRateLimitHandler.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

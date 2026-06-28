@@ -1,6 +1,6 @@
 // Color+RunnerModel.swift
-// RunnerBar
-import RunnerBarCore
+// RunBot
+import RunBotCore
 import SwiftUI
 
 // MARK: - Color extension for RunnerModel.StatusColor

@@ -1,5 +1,5 @@
 // RunnerState.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import Observation
 
@@ -16,7 +16,7 @@ import Observation
 /// Two additional properties (`localRunners`, `isLocalScanning`) are `public var`
 /// because Swift requires the setter to match the accessibility of a `public` protocol
 /// `{ get set }` requirement — see `RunnerViewModelProtocol` for the rationale.
-/// Only `LocalRunnerStore` (in `RunnerBarCore`) writes them in practice.
+/// Only `LocalRunnerStore` (in `RunBotCore`) writes them in practice.
 /// Views and app-layer code are read-only consumers of all properties.
 @Observable
 @MainActor
@@ -52,8 +52,8 @@ public final class RunnerState {
     /// Declared `public var` (not `public internal(set) var`) because Swift requires the
     /// setter to be at least as accessible as the protocol requirement when conforming to a
     /// public protocol with a `{ get set }` requirement. `public internal(set)` would restrict
-    /// the setter to `RunnerBarCore` and fail to satisfy the requirement at the module interface.
-    /// In practice, only `LocalRunnerStore` (inside `RunnerBarCore`) ever writes this property;
+    /// the setter to `RunBotCore` and fail to satisfy the requirement at the module interface.
+    /// In practice, only `LocalRunnerStore` (inside `RunBotCore`) ever writes this property;
     /// the `public` setter is a type-system necessity, not an invitation for external mutation.
     public var localRunners: [RunnerModel] = []
 

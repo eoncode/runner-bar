@@ -1,5 +1,5 @@
 // LifecycleResult.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - LifecycleResult

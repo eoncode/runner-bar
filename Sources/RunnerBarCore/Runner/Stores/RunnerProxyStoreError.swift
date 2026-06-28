@@ -1,5 +1,5 @@
 // RunnerProxyStoreError.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - RunnerProxyStoreError

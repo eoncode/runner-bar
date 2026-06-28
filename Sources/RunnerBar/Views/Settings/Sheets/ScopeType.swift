@@ -1,5 +1,5 @@
 // ScopeType.swift
-// RunnerBar
+// RunBot
 
 // MARK: - ScopeType
 

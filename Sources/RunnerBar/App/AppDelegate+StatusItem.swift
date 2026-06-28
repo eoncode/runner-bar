@@ -1,7 +1,7 @@
 // AppDelegate+StatusItem.swift
-// RunnerBar
+// RunBot
 import AppKit
-import RunnerBarCore
+import RunBotCore
 
 // MARK: - AppDelegate + Status Item
 //

@@ -1,5 +1,5 @@
 // GitHubTransport+Conformance.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

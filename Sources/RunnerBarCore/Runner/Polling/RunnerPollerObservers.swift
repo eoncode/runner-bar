@@ -1,7 +1,7 @@
 // RunnerPollerObservers.swift
-// RunnerBar
+// RunBot
 //
-// Step 10: Moved from RunnerBar app target to RunnerBarCore.
+// Step 10: Moved from RunBot app target to RunBotCore.
 // F-35: PreferencesObserver and ScopesObserver replaced by ObservationRelay<Element>.
 // F-26: log calls use category: parameter (per-subsystem logger).
 

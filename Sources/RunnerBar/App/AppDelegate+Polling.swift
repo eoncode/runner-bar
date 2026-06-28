@@ -1,8 +1,8 @@
 // AppDelegate+Polling.swift
-// RunnerBar
+// RunBot
 
 import Foundation
-import RunnerBarCore
+import RunBotCore
 
 /// AppDelegate extension managing the OAuth sign-out subscription and poll-loop coordination.
 extension AppDelegate {

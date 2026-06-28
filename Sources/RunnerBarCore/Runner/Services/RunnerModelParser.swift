@@ -1,5 +1,5 @@
 // RunnerModelParser.swift
-// RunnerBarCore
+// RunBotCore
 
 import Foundation
 

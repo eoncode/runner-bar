@@ -1,10 +1,10 @@
 // LoginItem.swift
-// RunnerBarCore
+// RunBotCore
 import ServiceManagement
 
 /// Manages the app's launch-at-login registration via `SMAppService`.
 ///
-/// Moved from `RunnerBar` to `RunnerBarCore` in #1623.
+/// Moved from `RunBot` to `RunBotCore` in #1623.
 public enum LoginItem {
     /// `true` when the app is registered to launch at login.
     /// Checks the live `SMAppService` status — reflects changes made
@@ -26,7 +26,7 @@ public enum LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            log("[RunnerBar] LoginItem.setEnabled(\(enabled)) failed: \(error)", category: .services)
+            log("[RunBot] LoginItem.setEnabled(\(enabled)) failed: \(error)", category: .services)
         }
     }
 }

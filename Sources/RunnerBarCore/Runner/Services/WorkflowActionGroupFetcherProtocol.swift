@@ -1,5 +1,5 @@
 // WorkflowActionGroupFetcherProtocol.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Protocol allowing RunnerStore to store an existential instead of a concrete
 // WorkflowActionGroupFetcher, making future RunnerStore integration tests easier

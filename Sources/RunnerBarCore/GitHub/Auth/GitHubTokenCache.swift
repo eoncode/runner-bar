@@ -1,5 +1,5 @@
 // GitHubTokenCache.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 import Synchronization
 
@@ -30,7 +30,7 @@ private let tokenCache = Mutex<String?>(nil)
 /// rather than members of a namespace type. They are called as unqualified
 /// symbols from `Keychain.swift`, `OAuthService`, and SwiftUI views. Moving them
 /// into a `KeychainTokenCache` enum would require updating ~6 call-sites across
-/// 4 files for no correctness benefit. The module boundary (`RunnerBarCore`)
+/// 4 files for no correctness benefit. The module boundary (`RunBotCore`)
 /// already provides the necessary scoping.
 public func invalidateTokenCache() {
     tokenCache.withLock { $0 = nil }

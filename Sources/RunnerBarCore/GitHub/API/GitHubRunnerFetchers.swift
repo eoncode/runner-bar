@@ -1,8 +1,8 @@
 // GitHubRunnerFetchers.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Step 10: Free functions that fetch runners and active jobs from the GitHub API.
-// Moved from RunnerBar/GitHub/GitHubHelpers.swift so RunnerPoller (now in Core)
+// Moved from RunBot/GitHub/GitHubHelpers.swift so RunnerPoller (now in Core)
 // can call them without an app-layer dependency.
 import Foundation
 import os

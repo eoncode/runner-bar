@@ -1,5 +1,5 @@
 // RunnerConfigStore.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - RunnerConfigStoreError

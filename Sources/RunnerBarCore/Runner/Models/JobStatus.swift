@@ -1,5 +1,5 @@
 // JobStatus.swift
-// RunnerBarCore
+// RunBotCore
 //
 // Typed enums for the GitHub Actions job/workflow status and conclusion fields.
 // Both use an unknown(String) fallback for forward-compatibility with new API values.

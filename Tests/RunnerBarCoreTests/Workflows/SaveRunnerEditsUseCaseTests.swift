@@ -1,8 +1,8 @@
 // SaveRunnerEditsUseCaseTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 // Unit tests for SaveRunnerEditsUseCase — Phase 5 (#1300).
 import Foundation
-import RunnerBarCore
+import RunBotCore
 import Testing
 
 // MARK: - Helpers

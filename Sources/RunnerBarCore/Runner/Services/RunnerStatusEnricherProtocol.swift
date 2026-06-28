@@ -1,5 +1,5 @@
 // RunnerStatusEnricherProtocol.swift
-// RunnerBarCore
+// RunBotCore
 // Phase 6b of the Swift 6.2 data model modernisation (#1287, #1326).
 import Foundation
 

@@ -1,5 +1,5 @@
 // RunnerPoller+InstallPathMap.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - InstallPathMap
@@ -8,7 +8,7 @@ import Foundation
 ///
 /// `public` so the app target can reference the type (e.g. in tests and in
 /// `AppDelegate+StoreSetup` for DI wiring). `buildInstallPathMap` is `internal`
-/// — it is only called from within `RunnerBarCore`.
+/// — it is only called from within `RunBotCore`.
 public struct InstallPathMap {
     /// Maps "scope/runnerName" to installPath (exact scope-prefixed match).
     public let byFullKey: [String: String]
@@ -48,7 +48,7 @@ public struct InstallPathMap {
 
 /// Builds four lookup maps from the local runner list.
 ///
-/// `internal` — called only by `RunnerPoller.fetch()` inside `RunnerBarCore`.
+/// `internal` — called only by `RunnerPoller.fetch()` inside `RunBotCore`.
 /// Kept as a top-level free function (rather than `extension RunnerPoller`) so
 /// it can be tested without an actor instance.
 func buildInstallPathMap(

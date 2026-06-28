@@ -1,5 +1,5 @@
 // LocalRunnerStore.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - LocalRunnerStore

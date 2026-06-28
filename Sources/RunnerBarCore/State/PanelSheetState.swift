@@ -1,5 +1,5 @@
 // PanelSheetState.swift
-// RunnerBarCore
+// RunBotCore
 import Observation
 
 // MARK: - PanelSheetState
@@ -21,7 +21,7 @@ public final class PanelSheetState {
     private var runnerSheetSnapshot: RunnerModel?
 
     /// Public no-arg initialiser — required because Swift only synthesises an
-    /// internal init for classes; callers in RunnerBar need public access.
+    /// internal init for classes; callers in RunBot need public access.
     public init() {}
 
     /// Captures the current runner sheet before hiding the popover.

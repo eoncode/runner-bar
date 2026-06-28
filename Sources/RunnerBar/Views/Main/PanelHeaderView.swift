@@ -1,7 +1,7 @@
 // PanelHeaderView.swift
-// RunnerBar
+// RunBot
 
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - PanelHeaderView
@@ -54,8 +54,8 @@ struct PanelHeaderView: View {
                 .frame(width: 28, height: 28)
         }
         .buttonStyle(.plain)
-        .help("Quit RunnerBar")
-        .accessibilityLabel("Quit RunnerBar")
+        .help("Quit RunBot")
+        .accessibilityLabel("Quit RunBot")
     }
 }
 

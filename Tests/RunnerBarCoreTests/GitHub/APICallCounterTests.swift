@@ -1,5 +1,5 @@
 // APICallCounterTests.swift
-// RunnerBarCoreTests
+// RunBotCoreTests
 //
 // Unit tests for APICallCounter and APICallCounterSnapshot.
 //
@@ -17,7 +17,7 @@
 import Foundation
 import Testing
 
-@testable import RunnerBarCore
+@testable import RunBotCore
 
 /// Stable endpoint string used by transport tests.
 /// Extracted to avoid SonarCloud S1075 (hardcoded URI) on test call sites.

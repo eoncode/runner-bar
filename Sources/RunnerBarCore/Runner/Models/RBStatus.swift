@@ -1,13 +1,13 @@
 // RBStatus.swift
-// RunnerBarCore
+// RunBotCore
 
 // MARK: - RBStatus
 
-/// Semantic display-status values shared across RunnerBarCore and the UI layer.
+/// Semantic display-status values shared across RunBotCore and the UI layer.
 ///
-/// Cases are defined here in `RunnerBarCore` so that `ActiveJob.rbStatus` can be
+/// Cases are defined here in `RunBotCore` so that `ActiveJob.rbStatus` can be
 /// computed without importing SwiftUI or AppKit.
-/// The `color` property is added via a `RunnerBar`-layer extension in `DesignTokens.swift`.
+/// The `color` property is added via a `RunBot`-layer extension in `DesignTokens.swift`.
 public enum RBStatus: Sendable {
     /// A job or workflow step that is currently executing.
     case inProgress

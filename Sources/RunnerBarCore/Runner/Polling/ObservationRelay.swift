@@ -1,5 +1,5 @@
 // ObservationRelay.swift
-// RunnerBar
+// RunBot
 //
 // F-35: Generic replacement for PreferencesObserver and ScopesObserver.
 
@@ -18,8 +18,8 @@ import Observation
 /// inside `start()` is implicitly `@MainActor` — no `@Sendable` annotation is
 /// required and no value crosses an isolation boundary.
 ///
-/// **Visibility:** `internal` — cross-file within `RunnerBarCore` only.
-/// `@testable import RunnerBarCore` exposes it to the test target.
+/// **Visibility:** `internal` — cross-file within `RunBotCore` only.
+/// `@testable import RunBotCore` exposes it to the test target.
 ///
 /// **Single-registration contract:** `start()` must be called exactly once per
 /// relay instance. The recursive re-registration in `onChange` is the only

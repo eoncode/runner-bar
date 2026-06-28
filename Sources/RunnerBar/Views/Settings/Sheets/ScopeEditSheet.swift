@@ -1,6 +1,6 @@
 // ScopeEditSheet.swift
-// RunnerBar
-import RunnerBarCore
+// RunBot
+import RunBotCore
 import SwiftUI
 
 // MARK: - ScopeEditSheet
@@ -265,7 +265,7 @@ extension ScopeEditSheet {
                         Text("Monitor this scope")
                             .font(.system(size: 12, weight: .medium))
                         Text(isEnabled
-                                ? "RunnerBar actively polls this scope for runner status."
+                                ? "RunBot actively polls this scope for runner status."
                                 : "Polling is paused. No runner data will be fetched for this scope.")
                             .font(.caption2)
                             .foregroundColor(Color.rbTextSecondary)

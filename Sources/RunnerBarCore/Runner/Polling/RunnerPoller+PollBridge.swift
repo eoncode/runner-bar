@@ -1,10 +1,10 @@
 // RunnerPoller+PollBridge.swift
-// RunnerBarCore
+// RunBotCore
 //
-// Step 10: Moved to RunnerBarCore as `extension RunnerPoller`.
+// Step 10: Moved to RunBotCore as `extension RunnerPoller`.
 // `FailureHookRunner` is decoupled — the injected `fireFailureHook` closure
 // stored on `RunnerPoller` is the sole integration point, keeping
-// `FailureHookRunner` in the app target and out of `RunnerBarCore`.
+// `FailureHookRunner` in the app target and out of `RunBotCore`.
 import Collections
 import Foundation
 import os
@@ -25,7 +25,7 @@ import os
 ///
 /// `FailureHookRunner` is intentionally **not** referenced here — the
 /// injected `fireFailureHook` closure on `RunnerPoller` is the sole integration
-/// point, keeping `FailureHookRunner` in the app target and out of `RunnerBarCore`.
+/// point, keeping `FailureHookRunner` in the app target and out of `RunBotCore`.
 extension RunnerPoller {
 
   // MARK: - [weak self] in GroupStateDeps closures
@@ -139,7 +139,7 @@ extension RunnerPoller {
   /// so the `@MainActor` hop at every call site in `buildGroupState` is unnecessary.
   ///
   /// `internal` (not `public`): called only via the `scopeFromGroup` closure passed to
-  /// `PollResultBuilder` — no external callers exist outside `RunnerBarCore`.
+  /// `PollResultBuilder` — no external callers exist outside `RunBotCore`.
   nonisolated func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
     log(
       "RunnerPoller › scopeFromActionGroup — group.repo='\(group.repo)' groupID=\(group.id)",
@@ -175,7 +175,7 @@ extension RunnerPoller {
   /// the main actor, negating the intended parallelism (#1153).
   ///
   /// `internal` (not `public`): called only via the `enrichJobs` closure passed to
-  /// `PollResultBuilder` — no external callers exist outside `RunnerBarCore`.
+  /// `PollResultBuilder` — no external callers exist outside `RunBotCore`.
   nonisolated func enrichGroupJobs(
     _ jobs: [ActiveJob],
     jobCache: [Int: ActiveJob]

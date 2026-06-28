@@ -1,7 +1,7 @@
-// RunnerBarUITests.swift
-// RunnerBarUITests
+// RunBotUITests.swift
+// RunBotUITests
 //
-// UI tests for RunnerBar using real mouse interaction.
+// UI tests for RunBot using real mouse interaction.
 // Runs on the self-hosted runner via xcodebuild.
 //
 // Design:
@@ -33,7 +33,7 @@
 //    Always probe both and use whichever exists.
 //    ❌ NEVER hard-code only one identifier.
 //
-// ⚠️ A stale RunnerBar process (launched without UI_TESTING=1) will block
+// ⚠️ A stale RunBot process (launched without UI_TESTING=1) will block
 //    app.launch() from re-launching the app fresh, causing setUp to time-out
 //    waiting for .runningForeground. Always terminate any existing instance
 //    before calling app.launch().
@@ -49,7 +49,7 @@
 
 import XCTest
 
-final class RunnerBarUITests: XCTestCase {
+final class RunBotUITests: XCTestCase {
 
     var app: XCUIApplication!
 
@@ -57,19 +57,19 @@ final class RunnerBarUITests: XCTestCase {
         super.setUp()
         continueAfterFailure = false
 
-        // Kill any stale RunnerBar process that may be running without
+        // Kill any stale RunBot process that may be running without
         // UI_TESTING=1. If we don’t do this, app.launch() re-activates the
         // existing instance (which lacks the env var) and the app never
         // reaches .runningForeground from XCTest’s perspective.
-        let stale = XCUIApplication(bundleIdentifier: "dev.eonist.runnerbar")
+        let stale = XCUIApplication(bundleIdentifier: "dev.eonist.runbot")
         if stale.state != .notRunning {
-            print("[UITest] setUp: terminating stale RunnerBar (state=\(stale.state.rawValue))")
+            print("[UITest] setUp: terminating stale RunBot (state=\(stale.state.rawValue))")
             stale.terminate()
             // Brief pause to let the process fully exit before re-launching.
             Thread.sleep(forTimeInterval: 0.5)
         }
 
-        app = XCUIApplication(bundleIdentifier: "dev.eonist.runnerbar")
+        app = XCUIApplication(bundleIdentifier: "dev.eonist.runbot")
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
         let launched = app.wait(for: .runningForeground, timeout: 10)
@@ -78,7 +78,7 @@ final class RunnerBarUITests: XCTestCase {
             print("[UITest] setUp: AX hierarchy dump:")
             print(app.debugDescription)
         }
-        XCTAssertTrue(launched, "RunnerBar must reach runningForeground within 10s")
+        XCTAssertTrue(launched, "RunBot must reach runningForeground within 10s")
     }
 
     override func tearDown() {

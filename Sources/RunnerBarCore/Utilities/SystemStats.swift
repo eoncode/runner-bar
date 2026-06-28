@@ -1,5 +1,5 @@
 // SystemStats.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 /// Snapshot of CPU and memory metrics sampled at a point in time.

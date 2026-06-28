@@ -1,17 +1,17 @@
 // DefaultRunnerLabelsService.swift
-// RunnerBarCore
+// RunBotCore
 import Foundation
 
 // MARK: - DefaultRunnerLabelsService
 
 /// Live conformance of `RunnerLabelsService` that delegates to `patchRunnerLabels`.
 ///
-/// Moved from `RunnerBar` to `RunnerBarCore` in #1610 once the original blocker
+/// Moved from `RunBot` to `RunBotCore` in #1610 once the original blocker
 /// (`patchRunnerLabels` depending on an app-layer transport) was resolved:
 /// `GitHubURLSessionTransport` and the `patchRunnerLabels` free function both
-/// live in `RunnerBarCore/GitHub/`.
+/// live in `RunBotCore/GitHub/`.
 ///
-/// Moved from `RunnerBarCore/Services/` to `RunnerBarCore/Runner/Services/` because
+/// Moved from `RunBotCore/Services/` to `RunBotCore/Runner/Services/` because
 /// it delegates directly to `patchRunnerLabels` — a runner domain operation — and
 /// has no business being alongside Keychain, LogFetcher, and LoginItem.
 ///

@@ -1,5 +1,5 @@
 // Runner.swift
-// RunnerBarCore
+// RunBotCore
 //
 // API-decoded snapshot of a single GitHub Actions self-hosted runner.
 // Populated by the GitHub REST API; enriched locally with RunnerMetrics after fetch.

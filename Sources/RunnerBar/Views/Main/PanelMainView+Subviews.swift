@@ -1,12 +1,12 @@
 // PanelMainView+Subviews.swift
-// RunnerBar
+// RunBot
 
 // Retains only shared glue after extracting focused view files:
 //   - PanelHeaderView.swift  (PanelHeaderView, SectionHeaderLabel)
 //   - RunnerRowViews.swift   (PanelLocalRunnerRow, RunnerMetricsBadge, RunnerTypeIcon)
 //   - ActionRowView.swift    (ActionRowView, RowTapModifier)
 
-import RunnerBarCore
+import RunBotCore
 import SwiftUI
 
 // MARK: - String+nilIfEmpty
