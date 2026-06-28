@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>RunnerBar</string>
+    <string>RunBot</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.eonist.runnerbar</string>
+    <string>dev.eonist.runbot</string>
     <key>CFBundleName</key>
-    <string>RunnerBar</string>
+    <string>RunBot</string>
     <key>CFBundleVersion</key>
     <string>10</string>
     <key>CFBundleShortVersionString</key>
@@ -23,10 +23,10 @@
         <dict>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>runnerbar</string>
+                <string>runbot</string>
             </array>
             <key>CFBundleURLName</key>
-            <string>dev.eonist.runnerbar.oauth</string>
+            <string>dev.eonist.runbot.oauth</string>
         </dict>
     </array>
 </dict>
