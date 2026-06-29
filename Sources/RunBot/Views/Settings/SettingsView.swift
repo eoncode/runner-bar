@@ -54,7 +54,8 @@ struct SettingsView: View {
     /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
     let notifications: NotificationPreferences
     /// Observable runner state — read to display the update available banner.
-    /// Defaults to `RunnerState.shared` so existing call sites compile unchanged.
+    /// Injected explicitly from `AppDelegate`; no default because `RunnerState` has no
+    /// singleton — the single instance lives on `AppDelegate.runnerState`.
     let runnerState: RunnerState
 
     // MARK: - Local UI state
@@ -78,8 +79,9 @@ struct SettingsView: View {
     // MARK: - Init
     /// Creates the view with injected dependencies.
     ///
-    /// Production call sites can omit all service parameters — the defaults wire
-    /// up the shared live instances automatically.
+    /// - Parameters:
+    ///   - runnerState: The single `RunnerState` instance owned by `AppDelegate`.
+    ///     Must be supplied explicitly — `RunnerState` has no singleton.
     init(
         onBack: @escaping () -> Void,
         localRunnerStore: LocalRunnerStore = .shared,
@@ -87,7 +89,7 @@ struct SettingsView: View {
         settings: AppPreferencesStore = .shared,
         notifications: NotificationPreferences = .shared,
         lifecycleService: any RunnerLifecycleServiceProtocol,
-        runnerState: RunnerState = .shared
+        runnerState: RunnerState
     ) {
         self.onBack = onBack
         self.localRunnerStore = localRunnerStore

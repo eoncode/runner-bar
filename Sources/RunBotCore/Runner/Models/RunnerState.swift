@@ -17,6 +17,9 @@ import Observation
 /// because Swift requires the setter to match the accessibility of a `public` protocol
 /// `{ get set }` requirement — see `RunnerViewModelProtocol` for the rationale.
 /// Only `LocalRunnerStore` (in `RunBotCore`) writes them in practice.
+/// `availableUpdate` is likewise `public var`: it is written once on launch by
+/// `AppDelegate+PanelSetup` (app layer, different module) — `internal(set)` would
+/// block that assignment. In practice only the startup Task writes it.
 /// Views and app-layer code are read-only consumers of all properties.
 @Observable
 @MainActor
@@ -64,9 +67,10 @@ public final class RunnerState {
     public var isLocalScanning: Bool = false
 
     /// The latest available version string if a newer version exists, or `nil` if
-    /// up to date. Set once on launch by the startup Task in AppDelegate+PanelSetup.
-    /// `internal(set)` — only the startup Task writes this; views read it.
-    public internal(set) var availableUpdate: String? = nil
+    /// up to date. Set once on launch by the startup Task in `AppDelegate+PanelSetup`
+    /// (app layer — different module from `RunBotCore`), which requires a `public` setter.
+    /// In practice only that one call site writes this; views are read-only consumers.
+    public var availableUpdate: String?
 
     /// The overall connectivity state of the runner fleet, derived from `runners`.
     /// Observed by `AppDelegate`'s `statusIconLoop` via `ObservationLoop`.
