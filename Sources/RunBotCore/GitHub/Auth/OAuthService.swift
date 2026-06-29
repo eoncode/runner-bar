@@ -305,7 +305,7 @@ private struct OAuthTokenResponse: Decodable {
     /// Maps Swift property names to the snake_case JSON keys returned by the GitHub OAuth endpoint.
     private enum CodingKeys: String, CodingKey {
         /// JSON key: `access_token`.
-        case accessToken = "access_token"
+        case accessToken = "access_token" // skipcq: SCT-A000
         /// JSON key: `error`.
         case error
         /// JSON key: `error_description`.
@@ -315,7 +315,7 @@ private struct OAuthTokenResponse: Decodable {
     /// Returns the names of modelled fields that are non-nil, for safe diagnostic logging.
     var debugKeys: [String] {
         var keys: [String] = []
-        if accessToken != nil { keys.append("access_token") }
+        if accessToken != nil { keys.append("access_token") } // skipcq: SCT-A000
         if error != nil { keys.append("error") }
         if errorDescription != nil { keys.append("error_description") }
         return keys
@@ -337,9 +337,9 @@ private struct OAuthTokenRequest: Encodable {
     /// Maps Swift property names to the snake_case JSON keys expected by the GitHub OAuth endpoint.
     private enum CodingKeys: String, CodingKey {
         /// JSON key: `client_id`.
-        case clientID = "client_id"
+        case clientID = "client_id" // # skipcq: SCT-A000
         /// JSON key: `client_secret`.
-        case clientSecret = "client_secret"
+        case clientSecret = "client_secret" // skipcq: SCT-A000
         /// JSON key: `code`.
         case code
     }
