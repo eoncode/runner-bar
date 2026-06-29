@@ -15,12 +15,40 @@ public struct UpdateChecker {
 
     /// A minimal Codable model for a GitHub Release API response object.
     private struct Release: Decodable {
+        /// The git tag name for this release (e.g. `"v0.7.1"`).
         let tagName: String
+        /// `true` when this release was published with `--prerelease`.
         let prerelease: Bool
 
+        /// Maps snake_case JSON keys to Swift property names.
         enum CodingKeys: String, CodingKey {
-            case tagName  = "tag_name"
+            case tagName = "tag_name"
             case prerelease
+        }
+    }
+
+    /// Parsed semver components extracted from a version string.
+    private struct ParsedVersion {
+        /// Major version component.
+        let major: Int
+        /// Minor version component.
+        let minor: Int
+        /// Patch version component.
+        let patch: Int
+        /// `true` when the version string contains a pre-release suffix (e.g. `-beta.2`).
+        let isPrerelease: Bool
+
+        /// Parses a version string of the form `"X.Y.Z"` or `"X.Y.Z-suffix"`.
+        ///
+        /// Components that cannot be parsed default to `0`.
+        init(_ version: String) {
+            let parts = version.split(separator: "-", maxSplits: 1)
+            let core = String(parts[0])
+            isPrerelease = parts.count > 1
+            let nums = core.split(separator: ".").compactMap { Int($0) }
+            major = nums.count > 0 ? nums[0] : 0
+            minor = nums.count > 1 ? nums[1] : 0
+            patch = nums.count > 2 ? nums[2] : 0
         }
     }
 
@@ -52,7 +80,7 @@ public struct UpdateChecker {
             guard let latest = releases.first(where: { betaChannel ? true : !$0.prerelease })
             else { return nil }
 
-            let latestVersion  = latest.tagName.trimmingCharacters(in: .init(charactersIn: "v"))
+            let latestVersion = latest.tagName.trimmingCharacters(in: .init(charactersIn: "v"))
             let currentVersion = current.trimmingCharacters(in: .whitespaces)
 
             // NOTE: Component-wise semver comparison.
@@ -76,28 +104,14 @@ public struct UpdateChecker {
     /// Handles pre-release suffixes: `"0.7.1"` is newer than `"0.7.1-beta.2"`
     /// because a stable release supersedes any beta of the same base version.
     internal static func isNewer(_ candidate: String, than current: String) -> Bool {
-        // Split off any pre-release suffix (everything after the first "-").
-        func parse(_ v: String) -> (major: Int, minor: Int, patch: Int, isPrerelease: Bool) {
-            let parts        = v.split(separator: "-", maxSplits: 1)
-            let core         = String(parts[0])
-            let isPrerelease = parts.count > 1
-            let nums         = core.split(separator: ".").compactMap { Int($0) }
-            return (
-                major:        nums.count > 0 ? nums[0] : 0,
-                minor:        nums.count > 1 ? nums[1] : 0,
-                patch:        nums.count > 2 ? nums[2] : 0,
-                isPrerelease: isPrerelease
-            )
-        }
+        let candidateParsed = ParsedVersion(candidate)
+        let runningParsed = ParsedVersion(current)
 
-        let c = parse(candidate)
-        let r = parse(current)
-
-        if c.major != r.major { return c.major > r.major }
-        if c.minor != r.minor { return c.minor > r.minor }
-        if c.patch != r.patch { return c.patch > r.patch }
+        if candidateParsed.major != runningParsed.major { return candidateParsed.major > runningParsed.major }
+        if candidateParsed.minor != runningParsed.minor { return candidateParsed.minor > runningParsed.minor }
+        if candidateParsed.patch != runningParsed.patch { return candidateParsed.patch > runningParsed.patch }
         // Same base version: stable (isPrerelease=false) beats a beta (isPrerelease=true)
-        if c.isPrerelease != r.isPrerelease { return !c.isPrerelease }
+        if candidateParsed.isPrerelease != runningParsed.isPrerelease { return !candidateParsed.isPrerelease }
         return false
     }
 }
