@@ -15,13 +15,13 @@ import Foundation
 /// `WorkflowDateParserActor`, `GitHubDateParserActor`) lived in separate files.
 /// They are consolidated here so callers share one allocated formatter.
 public actor ISO8601DateParser {
-    /// The single formatter instance, allocated once for the lifetime of the actor.
+    // swiftlint:disable:next missing_docs
     private let iso = ISO8601DateFormatter()
 
     /// The module-wide shared instance. Use this from all call sites.
     public static let shared = ISO8601DateParser()
 
-    /// Initialises the actor and allocates the underlying `ISO8601DateFormatter`.
+    // swiftlint:disable:next missing_docs
     private init() {}
 
     /// Parses an ISO-8601 date string. Returns `nil` on failure.
@@ -30,9 +30,6 @@ public actor ISO8601DateParser {
     }
 
     /// Builds an `ActiveJob` from a decoded `JobPayload` using the actor-owned formatter.
-    ///
-    /// Centralising job construction here keeps `makeActiveJob(from:iso:isDimmed:)`
-    /// as the single source of truth while hiding the formatter from callers.
     public func makeJob(from payload: JobPayload, isDimmed: Bool = false) -> ActiveJob {
         makeActiveJob(from: payload, iso: iso, isDimmed: isDimmed)
     }

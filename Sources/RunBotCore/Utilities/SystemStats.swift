@@ -3,7 +3,7 @@
 import Foundation
 
 /// Snapshot of CPU and memory metrics sampled at a point in time.
-public struct SystemStats: Sendable {
+public struct SystemStats: Sendable, Equatable {
     /// CPU usage percentage (0–100).
     public let cpuPct: Double
     /// Used memory in gigabytes.
@@ -15,7 +15,7 @@ public struct SystemStats: Sendable {
     /// Total disk space in gigabytes.
     public let diskTotalGB: Double
 
-    /// Creates a new instance.
+    /// Creates a new `SystemStats` snapshot with the given metric values.
     public init(
         cpuPct: Double,
         memUsedGB: Double,
@@ -52,13 +52,4 @@ public struct SystemStats: Sendable {
     public static let zero = SystemStats(
         cpuPct: 0, memUsedGB: 0, memTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0
     )
-
-    /// Returns `true` when two snapshots contain identical metric values.
-    public static func == (lhs: SystemStats, rhs: SystemStats) -> Bool {
-        lhs.cpuPct == rhs.cpuPct
-            && lhs.memUsedGB == rhs.memUsedGB
-            && lhs.memTotalGB == rhs.memTotalGB
-            && lhs.diskUsedGB == rhs.diskUsedGB
-            && lhs.diskTotalGB == rhs.diskTotalGB
-    }
 }

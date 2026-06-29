@@ -35,18 +35,9 @@ public enum AnyJSON: Codable, Equatable {
 
     /// Decodes a single JSON value into the appropriate `AnyJSON` case.
     ///
-    /// Decode order is intentional and must not be changed without care:
-    /// - `object` and `array` are tried first because a `singleValueContainer` for a plain
-    ///   string or number will simply fail to decode as `[String: AnyJSON]` or `[AnyJSON]`,
-    ///   keeping the fast-path correct; placing them first makes the intent explicit.
-    ///   This relies on `JSONDecoder`'s current behaviour and the `try?` fallthrough below.
-    /// - `Bool` is tried before `Int`, `Double`, and `String` — on Apple platforms
-    ///   `JSONDecoder` decodes `true`/`false` as `Bool`, but trying numeric or string types
-    ///   first could silently succeed on some JSON tokens and misclassify booleans.
-    ///   This matches the ordering used by every canonical `AnyCodable` implementation.
-    /// - `Int` is tried before `Double` so that integer-valued fields (e.g. `agentId`) are
-    ///   stored losslessly as `.int` rather than being coerced to a `Double` mantissa.
-    /// - `String` is tried last among scalar types so it cannot shadow earlier cases.
+    /// Decode order: `object`/`array` → `Bool` → `Int` → `Double` → `String` → `null`.
+    /// `Bool` before numeric types prevents misclassification of `true`/`false`.
+    /// `Int` before `Double` preserves precision for large integer fields (e.g. `agentId`).
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let val = try? container.decode([String: AnyJSON].self) { self = .object(val); return }
@@ -70,20 +61,6 @@ public enum AnyJSON: Codable, Equatable {
         case .int(let val): try container.encode(val)
         case .bool(let val): try container.encode(val)
         case .null: try container.encodeNil()
-        }
-    }
-
-    /// Returns `true` when two `AnyJSON` values are equal.
-    public static func == (lhs: AnyJSON, rhs: AnyJSON) -> Bool {
-        switch (lhs, rhs) {
-        case (.object(let l), .object(let r)): return l == r
-        case (.array(let l), .array(let r)): return l == r
-        case (.string(let l), .string(let r)): return l == r
-        case (.number(let l), .number(let r)): return l == r
-        case (.int(let l), .int(let r)): return l == r
-        case (.bool(let l), .bool(let r)): return l == r
-        case (.null, .null): return true
-        default: return false
         }
     }
 }
