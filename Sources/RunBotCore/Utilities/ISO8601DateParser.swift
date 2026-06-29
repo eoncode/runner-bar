@@ -15,13 +15,13 @@ import Foundation
 /// `WorkflowDateParserActor`, `GitHubDateParserActor`) lived in separate files.
 /// They are consolidated here so callers share one allocated formatter.
 public actor ISO8601DateParser {
-    // swiftlint:disable:next missing_docs
+    /// The underlying ISO-8601 formatter; actor isolation provides thread safety.
     private let iso = ISO8601DateFormatter()
 
     /// The module-wide shared instance. Use this from all call sites.
     public static let shared = ISO8601DateParser()
 
-    // swiftlint:disable:next missing_docs
+    /// Private initialiser — callers must use `shared`.
     private init() {}
 
     /// Parses an ISO-8601 date string. Returns `nil` on failure.
