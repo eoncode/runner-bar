@@ -2,7 +2,7 @@
 
 **Category:** macOS developer tooling · GitHub Actions / self-hosted runners · AI-augmented dev workflow
 **Date:** 2026-06-02
-**Subject repo:** [eoncode/runner-bar](https://github.com/eoncode/run-bot) — "GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar." (Swift 6.2, macOS 26+, Liquid Glass)
+**Subject repo:** [eoncode/run-bot](https://github.com/eoncode/run-bot) — "GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar." (Swift 6.2, macOS 26+, Liquid Glass)
 **Focus areas:** Brand identity · Visual design
 
 ---
@@ -264,7 +264,7 @@ RunBot's existing signals from the [README](https://github.com/eoncode/run-bot):
 
 ## Sources
 
-- [eoncode/runner-bar](https://github.com/eoncode/run-bot) — RunBot repository and README (via GitHub CLI)
+- [eoncode/run-bot](https://github.com/eoncode/run-bot) — RunBot repository and README (via GitHub CLI)
 - [Raycast](https://www.raycast.com)
 - [Warp](https://www.warp.dev)
 - [Linear](https://linear.app)

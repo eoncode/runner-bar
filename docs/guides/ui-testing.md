@@ -74,7 +74,7 @@ sudo ./svc.sh uninstall
 rm -rf .derived # clear stale app binary
 
 xcodebuild build \
--project RunBot.xcodeproj
+-project RunBot.xcodeproj \
 -scheme RunBot \
 -destination 'platform=macOS'
 -derivedDataPath .derived

@@ -5,7 +5,7 @@
 RunBot is distributed as a pre-built `.app` bundle, zipped and hosted on GitHub Pages. End users install with a single `curl` command — no Gatekeeper dialog, no Apple Developer account, no Xcode.
 
 ```bash
-curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
+curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash
 ```
 
 > **Architecture:** RunBot requires Apple Silicon (arm64). The build pipeline produces an arm64-only binary. Intel Macs are not supported.
@@ -17,7 +17,7 @@ curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 This repo uses the `gh-pages` branch as the GitHub Pages source, served at:
 
 ```
-https://eonist.github.io/runner-bar/
+https://eoncode.github.io/run-bot/
 ```
 
 To enable:
@@ -107,7 +107,7 @@ git push origin gh-pages
 cd ..
 git worktree remove _pages
 
-echo "✓ Deployed to https://eonist.github.io/runner-bar/"
+echo "✓ Deployed to https://eoncode.github.io/run-bot/"
 ```
 
 ---
@@ -120,7 +120,7 @@ This file lives at the root of `gh-pages` and is the single URL users run:
 #!/usr/bin/env bash
 set -e
 
-BASE="https://eonist.github.io/runner-bar"
+BASE="https://eoncode.github.io/run-bot"
 TMP=$(mktemp -d)
 
 echo "→ Downloading RunBot..."
@@ -147,9 +147,9 @@ echo "✓ RunBot installed"
 
 | URL | Contents |
 |-----|----------|
-| `https://eonist.github.io/runner-bar/install.sh` | Installer script |
-| `https://eonist.github.io/runner-bar/RunBot.zip` | arm64 `.app` bundle |
-| `https://eonist.github.io/runner-bar/version.txt` | Current version string |
+| `https://eoncode.github.io/run-bot/install.sh` | Installer script |
+| `https://eoncode.github.io/run-bot/RunBot.zip` | arm64 `.app` bundle |
+| `https://eoncode.github.io/run-bot/version.txt` | Current version string |
 
 ---
 
@@ -163,7 +163,7 @@ echo "✓ RunBot installed"
 ## Quick deploy
 
 ```bash
-git pull && git fetch && bash build.sh && pkill RunBot; sleep 1 && open dist/RunBot.app 2>&1
+git pull && git fetch && bash build.sh && (pkill RunBot || true) && sleep 1 && open dist/RunBot.app 2>&1
 bash build.sh && bash deploy.sh
 curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash
 ```

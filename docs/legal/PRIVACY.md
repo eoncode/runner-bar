@@ -22,12 +22,12 @@ RunBot uses the **GitHub OAuth Authorization Code flow** to authenticate. You si
 
 | Key | Value |
 |---|---|
-| `kSecAttrService` | `runner-bar` |
+| `kSecAttrService` | `run-bot` |
 | `kSecAttrAccount` | `github-oauth-token` |
 | `kSecAttrAccessible` | `kSecAttrAccessibleAfterFirstUnlock` |
 | Storage | macOS Data Protection Keychain |
 
-To remove the token at any time: **Settings → Sign Out**, or `security delete-generic-password -s runner-bar` in Terminal.
+To remove the token at any time: **Settings → Sign Out**, or `security delete-generic-password -s run-bot` in Terminal.
 
 ---
 
@@ -90,10 +90,10 @@ You can inspect or delete these values at any time:
 
 ```bash
 # List all RunBot defaults
-defaults read dev.eonist.runnerbar
+defaults read dev.eonist.runbot
 
 # Delete all RunBot defaults
-defaults delete dev.eonist.runnerbar
+defaults delete dev.eonist.runbot
 ```
 
 ---

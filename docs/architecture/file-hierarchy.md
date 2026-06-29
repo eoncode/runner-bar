@@ -5,7 +5,7 @@ A short description of every source file in the project.
 ---
 
 ```
-runner-bar/
+run-bot/
 ├── Package.swift                            — SPM manifest; defines RunBot + RunBotCore targets and their dependencies
 ├── project.yml                              — XcodeGen project definition
 ├── build.sh                                 — local build helper script
@@ -32,7 +32,7 @@ runner-bar/
 │   │   ├── brand-inspiration.md             — brand/design inspiration notes
 │   │   ├── dark-light-mode-support.md       — notes on dark/light mode adaptive design
 │   │   ├── liquid-glass.md                  — iOS 26 Liquid Glass Swift/SwiftUI reference and visual exploration
-│   │   ├── runnerbar-light-glass.html       — HTML prototype of the light glass UI
+│   │   ├── runbot-light-glass.html       — HTML prototype of the light glass UI
 │   │   └── zap.svg                          — zap icon asset used in design explorations
 │   ├── guides/
 │   │   ├── development.md                   — local development setup and workflow

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-BASE="https://eonist.github.io/run-bot"
+BASE="https://eoncode.github.io/run-bot"
 TMP=$(mktemp -d)
 
 echo "→ Downloading RunBot..."
