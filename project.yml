@@ -1,27 +1,27 @@
-name: RunnerBar
+name: RunBot
 options:
   bundleIdPrefix: dev.eonist
   createIntermediateGroups: true
 
 packages:
-  RunnerBar:
+  RunBot:
     path: .
 
 targets:
-  RunnerBar:
+  RunBot:
     type: application
     platform: macOS
     deploymentTarget: "26.0"
     sources:
-      - Sources/RunnerBar
+      - Sources/RunBot
     resources:
       - Resources
     dependencies:
-      - package: RunnerBar
-        product: RunnerBarCore
+      - package: RunBot
+        product: RunBotCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.eonist.runnerbar
+        PRODUCT_BUNDLE_IDENTIFIER: dev.eonist.runbot
         MACH_O_TYPE: mh_execute
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
@@ -31,20 +31,20 @@ targets:
         EXCLUDED_ARCHS: x86_64
         # LSUIElement makes the app a menu bar agent (no Dock icon) in production.
         # It lives here as a build setting rather than in Info.plist so that it
-        # is only applied to the RunnerBar app target. The RunnerBarUITests target
+        # is only applied to the RunBot app target. The RunBotUITests target
         # has its own generated plist and never inherits this key, meaning the app
         # launches as a normal foreground process during UI tests and app.windows
         # is fully visible to XCTest.
         # ❌ NEVER move this back into Resources/Info.plist.
         INFOPLIST_KEY_LSUIElement: YES
 
-  RunnerBarUITests:
+  RunBotUITests:
     type: bundle.ui-testing
     platform: macOS
     deploymentTarget: "26.0"
     sources:
-      - Tests/RunnerBarUITests
-    # CRITICAL: NO dependencies on RunnerBar here.
+      - Tests/RunBotUITests
+    # CRITICAL: NO dependencies on RunBot here.
     # On Xcode 26, any target-level dependency from a bundle.ui-testing target
     # to an app target causes xcodebuild to auto-inject XCTTargetAppPath with
     # the .app extension stripped -> "bundle ID couldn't be read" fatal error.
@@ -53,7 +53,7 @@ targets:
     # to locate the already-built .app at runtime.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.eonist.runnerbar.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.eonist.runbot.uitests
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
         AD_HOC_CODE_SIGNING_ALLOWED: YES
@@ -62,25 +62,25 @@ targets:
         EXCLUDED_ARCHS: x86_64
 
 schemes:
-  RunnerBar:
+  RunBot:
     build:
       targets:
-        RunnerBar: all
+        RunBot: all
     run:
       config: Debug
 
   # Dedicated UI test scheme.
-  # CRITICAL: no testTargetApp key and RunnerBarUITests has no target dependency
-  # on RunnerBar. Both together prevent Xcode 26 from auto-injecting
+  # CRITICAL: no testTargetApp key and RunBotUITests has no target dependency
+  # on RunBot. Both together prevent Xcode 26 from auto-injecting
   # XCTTargetAppPath (which strips .app and breaks bundle ID lookup).
-  # The RunnerBar app is built via a separate xcodebuild build step first.
-  RunnerBarUITests:
+  # The RunBot app is built via a separate xcodebuild build step first.
+  RunBotUITests:
     build:
       targets:
-        RunnerBarUITests: [build, testing]
+        RunBotUITests: [build, testing]
     test:
       targets:
-        - name: RunnerBarUITests
+        - name: RunBotUITests
           parallelizable: false
       environmentVariables:
         UI_TESTING: "1"

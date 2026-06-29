@@ -74,16 +74,16 @@ sudo ./svc.sh uninstall
 rm -rf .derived # clear stale app binary
 
 xcodebuild build \
--project RunnerBar.xcodeproj
--scheme RunnerBar \
+-project RunBot.xcodeproj \
+-scheme RunBot \
 -destination 'platform=macOS'
 -derivedDataPath .derived
 
 xcodebuild test \
--project RunnerBar.xcodeproj \
--scheme RunnerBarUITests \
+-project RunBot.xcodeproj \
+-scheme RunBotUITests \
 -destination 'platform=macOS' \
 -derivedDataPath .derived
--only-testing:RunnerBarUITests
+-only-testing:RunBotUITests
 2>&1 | tee uitest.log
 ```

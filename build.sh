@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-APP_NAME="RunnerBar"
+APP_NAME="RunBot"
 VERSION="0.7.0"
 OUT_DIR="dist"
 
@@ -31,24 +31,24 @@ codesign --force --deep --sign - "$OUT_DIR/$APP_NAME.app"
 echo "→ Zipping..."
 ditto -c -k --keepParent \
     "$OUT_DIR/$APP_NAME.app" \
-    "$OUT_DIR/RunnerBar.zip"
+    "$OUT_DIR/RunBot.zip"
 
 echo "$VERSION" > "$OUT_DIR/version.txt"
 
-echo "✓ Done — dist/RunnerBar.zip is ready"
+echo "✓ Done — dist/RunBot.zip is ready"
 
 # ── Launch via `open` (not direct binary) ───────────────────────────────────
-# IMPORTANT: The OAuth callback URL scheme (runnerbar://) is registered with
+# IMPORTANT: The OAuth callback URL scheme (runbot://) is registered with
 # macOS Launch Services only when the .app bundle is launched via `open` or
-# Finder. Running the binary directly (./dist/RunnerBar.app/Contents/MacOS/RunnerBar)
-# skips LS registration, so Safari cannot route runnerbar://oauth/callback
+# Finder. Running the binary directly (./dist/RunBot.app/Contents/MacOS/RunBot)
+# skips LS registration, so Safari cannot route runbot://oauth/callback
 # back to the app and shows "address is invalid" instead.
 #
-# Always use `open dist/RunnerBar.app` for development — this script does it
+# Always use `open dist/RunBot.app` for development — this script does it
 # automatically. The pkill ensures a clean restart without a stale process.
 # ────────────────────────────────────────────────────────────────────────────
-echo "→ Restarting app via open (registers runnerbar:// URL scheme)..."
-pkill -x RunnerBar 2>/dev/null || true
+echo "→ Restarting app via open (registers runbot:// URL scheme)..."
+pkill -x RunBot 2>/dev/null || true
 sleep 0.5
 open "$OUT_DIR/$APP_NAME.app"
-echo "✓ RunnerBar launched"
+echo "✓ RunBot launched"

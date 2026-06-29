@@ -1,0 +1,263 @@
+// TestDoubles.swift
+// RunBotCoreTests
+// Shared test doubles — extracted per #1447.
+import Foundation
+import RunBotCore
+
+// MARK: - SpyLabelsService
+
+/// Spy conformance for `RunnerLabelsService`.
+///
+/// Implemented as an `actor` so Swift's compiler enforces isolation without
+/// requiring `@unchecked Sendable`. The `result` and recorded-call properties
+/// are accessed from the test body before/after `execute(...)` — never concurrently.
+actor SpyLabelsService: RunnerLabelsService {
+    // MARK: Stub return values
+    // Note: defaults to [] (empty array), not nil — tests that don't call setUp will
+    // silently receive an empty label list rather than a failure. Configure via setUp(result:).
+    private var result: [String]? = []
+
+    // MARK: Observation (assert on after execute)
+    private(set) var callCount = 0
+    private(set) var lastScope: String?
+    private(set) var lastRunnerID: Int?
+    private(set) var lastLabels: [String]?
+
+    /// Configures the value returned by `patch(...)`. Call from the test body before `execute`.
+    func setUp(result: [String]?) { self.result = result }
+
+    func patch(scope: String, runnerID: Int, labels: [String]) async -> [String]? {
+        callCount += 1
+        lastScope = scope
+        lastRunnerID = runnerID
+        lastLabels = labels
+        return result
+    }
+}
+
+// MARK: - SpyConfigStore
+
+/// Spy conformance for `RunnerConfigStoreProtocol`.
+///
+/// Implemented as an `actor` — see `SpyLabelsService` for rationale.
+actor SpyConfigStore: RunnerConfigStoreProtocol {
+    // MARK: Stub return values
+    /// Mutable by design — set from the test body to control what `load(at:)` returns.
+    var loadResult: RunnerConfig = RunnerConfig(workFolder: "_work", disableUpdate: false)
+
+    // MARK: Throw-control flags (configure via setUp)
+    private var shouldThrowOnSave                = false
+    private var shouldThrowOnLoad                = false
+    private var shouldThrowOnDecode              = false
+    private var shouldThrowMalformedOnSave       = false
+    private var shouldThrowIOReadFailedOnSave    = false
+
+    // MARK: Observation (assert on after execute)
+    private(set) var saveCalled = false
+    private(set) var savedConfig: RunnerConfig?
+
+    /// Configures throw behaviour for all operations in a single call, resetting any
+    /// previously set flags. Omitted parameters default to `false` (no throw).
+    func setUp(
+        shouldThrowOnSave: Bool               = false,
+        shouldThrowOnLoad: Bool               = false,
+        shouldThrowOnDecode: Bool             = false,
+        shouldThrowMalformedOnSave: Bool      = false,
+        shouldThrowIOReadFailedOnSave: Bool   = false
+    ) {
+        self.shouldThrowOnSave              = shouldThrowOnSave
+        self.shouldThrowOnLoad              = shouldThrowOnLoad
+        self.shouldThrowOnDecode            = shouldThrowOnDecode
+        self.shouldThrowMalformedOnSave     = shouldThrowMalformedOnSave
+        self.shouldThrowIOReadFailedOnSave  = shouldThrowIOReadFailedOnSave
+    }
+
+    func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
+        if shouldThrowOnLoad   { throw RunnerConfigStoreError.readFailed(installPath, TestError.saveFailed) }
+        if shouldThrowOnDecode { throw RunnerConfigStoreError.decodeFailed(installPath) }
+        return loadResult
+    }
+    func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
+        // Copy the borrowed value before storing — a `borrowing` parameter cannot be consumed.
+        let config = copy config
+        // Flag priority: shouldThrowOnSave (.writeFailed) fires first, then
+        // shouldThrowMalformedOnSave, then shouldThrowIOReadFailedOnSave.
+        // Setting more than one simultaneously is not meaningful — configure
+        // exactly one throw flag per test to avoid ambiguity.
+        if shouldThrowOnSave             { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
+        if shouldThrowMalformedOnSave    { throw RunnerConfigStoreError.malformedExistingFile(installPath) }
+        if shouldThrowIOReadFailedOnSave { throw RunnerConfigStoreError.ioReadFailedDuringSave(installPath, TestError.saveFailed) }
+        saveCalled = true
+        savedConfig = config
+    }
+}
+
+// MARK: - SpyProxyStore
+
+/// Spy conformance for `RunnerProxyStoreProtocol`.
+///
+/// Implemented as an `actor` — see `SpyLabelsService` for rationale.
+actor SpyProxyStore: RunnerProxyStoreProtocol {
+    // MARK: Throw-control flags (configure via setUp)
+    private var shouldThrowOnSave = false
+
+    // MARK: Observation (assert on after execute)
+    private(set) var saveCalled = false
+    private(set) var savedConfig: RunnerProxyConfig?
+
+    /// Configures throw behaviour for all operations in a single call, resetting any
+    /// previously set flags. Omitted parameters default to `false` (no throw).
+    func setUp(shouldThrowOnSave: Bool = false) { self.shouldThrowOnSave = shouldThrowOnSave }
+
+    func load(at _: String) async -> RunnerProxyConfig { RunnerProxyConfig() }
+    func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
+        if shouldThrowOnSave { throw RunnerProxyStoreError.writeFailed(["spy: save not allowed"]) }
+        saveCalled = true
+        savedConfig = config
+    }
+}
+
+// MARK: - HookCounter
+
+/// Actor-isolated counter for tracking fireFailureHook call counts in async tests.
+actor HookCounter {
+    private(set) var value = 0
+    func increment() { value += 1 }
+}
+
+// MARK: - SpyRateLimitActor
+
+/// Test double conforming to `RateLimitActorProtocol`.
+/// Injects controllable rate-limit state into transport functions under test.
+actor SpyRateLimitActor: RateLimitActorProtocol {
+    /// Seed this to simulate a pre-armed rate-limit state.
+    /// Must be called via `await` from outside the actor.
+    /// Read-only access from tests is through `snapshot().isLimited`.
+    var isLimited = false
+    /// The reset date set by the most recent `set(resetAt:)` call, or `nil` if never set.
+    ///
+    /// - Note: `resetDate` is not part of `RateLimitActorProtocol` by design — the
+    ///   protocol exposes reset-time only through `snapshot()`. Read this via
+    ///   `await spy.snapshot().resetDate` in tests that need to assert on the value.
+    private(set) var resetDate: Date?
+    /// Whether `set(resetAt:)` was ever called on this instance.
+    ///
+    /// - Note: `setCalled` is sticky — it records whether `set()` was ever called,
+    ///   not whether the actor is *currently* limited. If `set()` is called and then
+    ///   `clear()` is called, `setCalled == true` but `isLimited == false`. Do not
+    ///   use `setCalled` as a proxy for the current rate-limit state; read `isLimited`
+    ///   or `snapshot().isLimited` for that.
+    private(set) var setCalled = false
+    private(set) var clearCalled = false
+
+    func setUp(isLimited: Bool) {
+        self.isLimited = isLimited
+    }
+
+    func set(resetAt: TimeInterval?) {
+        setCalled = true
+        isLimited = true
+        resetDate = resetAt.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    func clear() {
+        clearCalled = true
+        isLimited = false
+        resetDate = nil
+    }
+
+    /// Clears the rate-limit flag only when not currently limited.
+    ///
+    /// Mirrors `RateLimitActor.clearIfNotLimited()` semantics exactly:
+    /// - When `isLimited == false`: calls `clear()`, so `clearCalled` becomes `true`.
+    /// - When `isLimited == true`: no-op; `clearCalled` remains unchanged.
+    ///
+    /// This means tests that seed `spy.isLimited = true` before the call under test
+    /// will correctly see `clearCalled == false` after a 2xx response, confirming
+    /// that the pre-armed rate-limit window was not disturbed.
+    func clearIfNotLimited() {
+        guard !isLimited else { return }
+        clear()
+    }
+
+    func snapshot() -> RateLimitSnapshot {
+        RateLimitSnapshot(isLimited: isLimited, resetDate: resetDate)
+    }
+
+    /// Resets all spy observation and stub state to their default configurations.
+    func reset() {
+        isLimited = false
+        resetDate = nil
+        setCalled = false
+        clearCalled = false
+    }
+}
+
+// MARK: - MockScopePreferencesStore
+
+/// Stub conformance for `ScopePreferencesStoreProtocol` (Actor-constrained).
+///
+/// Implemented as an `actor` to satisfy the protocol constraint.
+/// All stored properties are set at init time and accessed synchronously within
+/// the actor — no concurrent mutation occurs inside a single test method.
+actor MockScopePreferencesStore: ScopePreferencesStoreProtocol {
+    var hookEnabled: Bool    = false
+    var command:     String? = nil
+    var branch:      String? = nil
+    var localRepoPath:   String? = nil
+
+    func setProperties(hookEnabled: Bool, command: String?, branch: String?, localRepoPath: String?) {
+        self.hookEnabled = hookEnabled
+        self.command = command
+        self.branch = branch
+        self.localRepoPath = localRepoPath
+    }
+
+    // Scoped to failure-hook only — unused properties return defaults.
+    func preferences(for _: String) -> ScopePreferences { ScopePreferences() }
+    func setPreferences(_: ScopePreferences, for _: String) {}
+    func alias(for _: String) -> String? { nil }
+    func setAlias(_: String?, for _: String) {}
+    func displayName(for scope: String) -> String { scope }
+    func pollingInterval(for _: String) -> Int? { nil }
+    func setPollingInterval(_: Int?, for _: String) {}
+    func notifyOnSuccess(for _: String) -> Bool? { nil }
+    func setNotifyOnSuccess(_: Bool?, for _: String) {}
+    func notifyOnFailure(for _: String) -> Bool? { nil }
+    func setNotifyOnFailure(_: Bool?, for _: String) {}
+    func setFailureHookEnabled(_: Bool, for _: String) {}
+    func setFailureHookCommand(_: String?, for _: String) {}
+    func setLocalRepoPath(_: String?, for _: String) {}
+    func setFailureHookBranch(_: String?, for _: String) {}
+    func cleanUp(scope _: String) {}
+    func modifyPreferences(for _: String, with mutation: @Sendable (inout ScopePreferences) -> Void) {
+        var prefs = ScopePreferences()
+        mutation(&prefs)
+    }
+
+    func failureHookEnabled(for _: String) -> Bool    { hookEnabled }
+    func failureHookCommand(for _: String) -> String? { command }
+    func failureHookBranch(for _:  String) -> String? { branch }
+    func localRepoPath(for _:      String) -> String? { localRepoPath }
+}
+
+// MARK: - SpyTerminalLauncher
+
+/// Spy conformance for `TerminalLauncherProtocol`.
+///
+/// `final class` + `@unchecked Sendable`: `open(command:)` is `@MainActor` so
+/// all mutations of `openCallCount` and `lastCommand` occur exclusively on the
+/// main actor — `@unchecked` is safe here.
+final class SpyTerminalLauncher: TerminalLauncherProtocol, @unchecked Sendable {
+    private(set) var openCallCount = 0
+    private(set) var lastCommand: String?
+
+    @MainActor func open(_ command: String) {
+        openCallCount += 1
+        lastCommand = command
+    }
+}
+
+// MARK: - TestError
+
+enum TestError: Error { case saveFailed }

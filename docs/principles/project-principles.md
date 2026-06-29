@@ -1,6 +1,6 @@
 # Project Principles
 
-This document captures the engineering and design principles that govern the RunnerBar codebase. It is intended as a living reference for contributors and reviewers.
+This document captures the engineering and design principles that govern the RunBot codebase. It is intended as a living reference for contributors and reviewers.
 
 ---
 
@@ -32,7 +32,7 @@ This document captures the engineering and design principles that govern the Run
 
 ## 1. Swift 6.2 + SwiftUI with Actor-Based Architecture
 
-RunnerBar is built entirely in Swift 6.2 using SwiftUI, with a modern actor-based architecture that keeps all UI state on the `MainActor` and background work fully isolated in dedicated actors. This makes the concurrency model explicit, auditable, and enforced at compile time — not a convention that relies on developer discipline at runtime.
+RunBot is built entirely in Swift 6.2 using SwiftUI, with a modern actor-based architecture that keeps all UI state on the `MainActor` and background work fully isolated in dedicated actors. This makes the concurrency model explicit, auditable, and enforced at compile time — not a convention that relies on developer discipline at runtime.
 
 ---
 
@@ -56,7 +56,7 @@ The compiler enforces all concurrency boundaries throughout the codebase. There 
 
 ## 5. macOS 26 Tahoe Liquid Glass Aesthetic
 
-The visual design embraces the macOS 26 Tahoe Liquid Glass aesthetic, so RunnerBar feels like a natural extension of the OS. UI components are built to match the translucency, material hierarchy, and motion vocabulary introduced in macOS 26, rather than layering a custom design language on top.
+The visual design embraces the macOS 26 Tahoe Liquid Glass aesthetic, so RunBot feels like a natural extension of the OS. UI components are built to match the translucency, material hierarchy, and motion vocabulary introduced in macOS 26, rather than layering a custom design language on top.
 
 ---
 
@@ -104,7 +104,7 @@ Paginated GitHub API endpoints are consumed by following `Link: <url>; rel="next
 
 ## 13. Multi-Target Swift Package with Testable Core
 
-The project is structured as a pure Swift Package Manager project (`swift-tools-version: 6.2`) with a `RunnerBarCore` library target fully decoupled from the `RunnerBar` executable target, plus a dedicated `RunnerBarCoreTests` test target. The entire domain and networking layer can be unit-tested without instantiating any UI or app infrastructure, and the library/executable boundary is enforced by the package manifest — not just by convention.
+The project is structured as a pure Swift Package Manager project (`swift-tools-version: 6.2`) with a `RunBotCore` library target fully decoupled from the `RunBot` executable target, plus a dedicated `RunBotCoreTests` test target. The entire domain and networking layer can be unit-tested without instantiating any UI or app infrastructure, and the library/executable boundary is enforced by the package manifest — not just by convention.
 
 ---
 
@@ -154,7 +154,7 @@ This is the preferred pattern for new I/O helpers in this codebase, replacing th
 
 ## 19. AnyJSON Type-Erased Codec
 
-A custom `AnyJSON` enum in `Utilities/AnyJSON.swift` is used for read-modify-write operations on agent-managed config files (e.g. `.runner` JSON files that contain keys like `jitConfig` whose shape is controlled by GitHub, not by RunnerBar). `AnyJSON` allows the app to decode, mutate specific known keys, and re-encode the full file without losing unknown fields — and without resorting to `[String: Any]` or `JSONSerialization`. Everything remains `Codable` and type-safe end-to-end; unknown keys are preserved faithfully across round-trips.
+A custom `AnyJSON` enum in `Utilities/AnyJSON.swift` is used for read-modify-write operations on agent-managed config files (e.g. `.runner` JSON files that contain keys like `jitConfig` whose shape is controlled by GitHub, not by RunBot). `AnyJSON` allows the app to decode, mutate specific known keys, and re-encode the full file without losing unknown fields — and without resorting to `[String: Any]` or `JSONSerialization`. Everything remains `Codable` and type-safe end-to-end; unknown keys are preserved faithfully across round-trips.
 
 ---
 
@@ -166,4 +166,4 @@ Mutation and fetch functions avoid throwing in favour of a private `ExecuteResul
 
 ## 21. Human-Readable Config Writes
 
-When writing `.runner` config files back to disk, `JSONEncoder` is configured with `.prettyPrinted` and `.sortedKeys`. This ensures that agent-managed configuration files remain human-readable and produce stable, minimal diffs in git — a key property when the files are shared between RunnerBar and the GitHub Actions runner agent. A config change that touches one field produces a one-line diff, not a reformatted blob.
+When writing `.runner` config files back to disk, `JSONEncoder` is configured with `.prettyPrinted` and `.sortedKeys`. This ensures that agent-managed configuration files remain human-readable and produce stable, minimal diffs in git — a key property when the files are shared between RunBot and the GitHub Actions runner agent. A config change that touches one field produces a one-line diff, not a reformatted blob.

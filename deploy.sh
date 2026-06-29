@@ -9,7 +9,7 @@ if [[ ! -d "_pages" ]]; then
     git worktree add _pages gh-pages
 fi
 
-cp dist/RunnerBar.zip _pages/
+cp dist/RunBot.zip _pages/
 cp dist/version.txt _pages/
 cp install.sh _pages/
 
@@ -21,4 +21,4 @@ cd ..
 
 git worktree remove _pages --force
 
-echo "✓ Deployed — https://eonist.github.io/runner-bar/"
+echo "✓ Deployed — https://eonist.github.io/run-bot/"

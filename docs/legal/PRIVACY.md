@@ -1,18 +1,18 @@
 # Privacy & Data Storage
 
-RunnerBar is a macOS status-bar app that monitors GitHub Actions on your own repositories. This document explains exactly what data the app stores, where, and how — verified directly from the source code.
+RunBot is a macOS status-bar app that monitors GitHub Actions on your own repositories. This document explains exactly what data the app stores, where, and how — verified directly from the source code.
 
 ---
 
 ## Authentication & Credentials
 
-RunnerBar uses the **GitHub OAuth Authorization Code flow** to authenticate. You sign in once inside the app; no external CLI tool is required.
+RunBot uses the **GitHub OAuth Authorization Code flow** to authenticate. You sign in once inside the app; no external CLI tool is required.
 
 ### How it works
 
 1. Clicking **Sign In** calls `OAuthService.makeSignInURL()` to build the GitHub authorization URL, then opens it in your default browser via `NSWorkspace.shared.open(url)`.
-2. After you click **Authorize**, GitHub redirects back to `runnerbar://oauth/callback` with a short-lived code.
-3. RunnerBar exchanges the code for an access token via a server-side POST to `github.com/login/oauth/access_token`.
+2. After you click **Authorize**, GitHub redirects back to `runbot://oauth/callback` with a short-lived code.
+3. RunBot exchanges the code for an access token via a server-side POST to `github.com/login/oauth/access_token`.
 4. The token is stored **exclusively in the macOS Keychain** using `Security.framework` with `kSecUseDataProtectionKeychain: true` and `kSecAttrAccessibleAfterFirstUnlock` — the same modern Data Protection Keychain used by Safari and iCloud.
 5. The token is never written to `UserDefaults`, files, logs, or any other location.
 
@@ -22,18 +22,18 @@ RunnerBar uses the **GitHub OAuth Authorization Code flow** to authenticate. You
 
 | Key | Value |
 |---|---|
-| `kSecAttrService` | `runner-bar` |
+| `kSecAttrService` | `run-bot` |
 | `kSecAttrAccount` | `github-oauth-token` |
 | `kSecAttrAccessible` | `kSecAttrAccessibleAfterFirstUnlock` |
 | Storage | macOS Data Protection Keychain |
 
-To remove the token at any time: **Settings → Sign Out**, or `security delete-generic-password -s runner-bar` in Terminal.
+To remove the token at any time: **Settings → Sign Out**, or `security delete-generic-password -s run-bot` in Terminal.
 
 ---
 
 ## GitHub OAuth Scopes
 
-RunnerBar requests the following scopes at sign-in (from `OAuthService.swift`):
+RunBot requests the following scopes at sign-in (from `OAuthService.swift`):
 
 | Scope | Why it is needed |
 |---|---|
@@ -45,9 +45,9 @@ RunnerBar requests the following scopes at sign-in (from `OAuthService.swift`):
 
 ### Why not a fine-grained PAT?
 
-Fine-grained tokens do not yet support all Actions and runner management endpoints RunnerBar depends on. Classic OAuth is currently the only option that covers the full feature set.
+Fine-grained tokens do not yet support all Actions and runner management endpoints RunBot depends on. Classic OAuth is currently the only option that covers the full feature set.
 
-### What RunnerBar does NOT do with your token
+### What RunBot does NOT do with your token
 
 - ❌ Does not make any API calls to read, write, or access repository source code or file contents (even though the `repo` scope technically permits this)
 - ❌ Does not open issues, create pull requests, or write to repositories on your behalf
@@ -89,18 +89,18 @@ All per-scope keys are removed when a scope is deleted (`ScopePreferencesStore.c
 You can inspect or delete these values at any time:
 
 ```bash
-# List all RunnerBar defaults
-defaults read dev.eonist.runnerbar
+# List all RunBot defaults
+defaults read dev.eonist.runbot
 
-# Delete all RunnerBar defaults
-defaults delete dev.eonist.runnerbar
+# Delete all RunBot defaults
+defaults delete dev.eonist.runbot
 ```
 
 ---
 
 ## Failure Hooks
 
-When a workflow run fails, RunnerBar can optionally fire a **user-defined shell command** in Terminal (`FailureHookRunner.swift`). The following tokens are substituted before the command runs:
+When a workflow run fails, RunBot can optionally fire a **user-defined shell command** in Terminal (`FailureHookRunner.swift`). The following tokens are substituted before the command runs:
 
 | Token | Substituted with |
 |---|---|
@@ -109,17 +109,17 @@ When a workflow run fails, RunnerBar can optionally fire a **user-defined shell 
 | `$BRANCH` | The branch name of the failed run |
 | `$RUN_LINK` | The GitHub URL of the failed run |
 
-The command, path, and branch filter are stored in `UserDefaults` as described above. **RunnerBar does not transmit failure logs anywhere** — they are fetched from `api.github.com` and passed directly to your local shell command.
+The command, path, and branch filter are stored in `UserDefaults` as described above. **RunBot does not transmit failure logs anywhere** — they are fetched from `api.github.com` and passed directly to your local shell command.
 
 ---
 
 ## Network Activity
 
-RunnerBar makes HTTPS requests **only** to:
+RunBot makes HTTPS requests **only** to:
 
 - `api.github.com` — GitHub REST API (runs, jobs, steps, logs, runners)
 - `github.com` — OAuth token exchange only (at sign-in)
-- `*.amazonaws.com` — GitHub's job log endpoints (`/actions/jobs/{id}/logs`) return a 302 redirect to a pre-signed S3 URL. RunnerBar's `Authorization` token is **not** forwarded to S3; Apple's URLSession automatically strips the `Authorization` header before following cross-origin redirects (per RFC 7235). S3 authenticates purely via the pre-signed query parameters embedded in the redirect URL.
+- `*.amazonaws.com` — GitHub's job log endpoints (`/actions/jobs/{id}/logs`) return a 302 redirect to a pre-signed S3 URL. RunBot's `Authorization` token is **not** forwarded to S3; Apple's URLSession automatically strips the `Authorization` header before following cross-origin redirects (per RFC 7235). S3 authenticates purely via the pre-signed query parameters embedded in the redirect URL.
 
 No analytics, telemetry, crash reporting, or third-party network calls are made. All API requests are made over TLS with your OAuth token in the `Authorization` header.
 
@@ -139,16 +139,16 @@ All fetched run, job, step, and log data is held **in memory only**. Nothing is 
 | **Outbound network** | Required — to call `api.github.com` |
 | **Launch at login** | Optional — registers a LoginItem via `ServiceManagement` when enabled |
 
-RunnerBar does not request access to contacts, location, camera, microphone, Photos, or any other sensitive macOS permission category.
+RunBot does not request access to contacts, location, camera, microphone, Photos, or any other sensitive macOS permission category.
 
 ---
 
 ## Open Source
 
-RunnerBar is open source. You can audit every network call, every persistence write, and every credential access in the source code:
+RunBot is open source. You can audit every network call, every persistence write, and every credential access in the source code:
 
-- OAuth flow: [`Sources/RunnerBarCore/GitHub/OAuthService.swift`](../../Sources/RunnerBarCore/GitHub/OAuthService.swift)
-- Token storage: [`Sources/RunnerBarCore/GitHub/Keychain.swift`](../../Sources/RunnerBarCore/GitHub/Keychain.swift)
-- GitHub API calls: [`Sources/RunnerBar/GitHub/GitHubURLSessionTransport.swift`](../../Sources/RunnerBar/GitHub/GitHubURLSessionTransport.swift)
-- Per-scope preferences: [`Sources/RunnerBarCore/Scope/ScopePreferencesStore.swift`](../../Sources/RunnerBarCore/Scope/ScopePreferencesStore.swift)
-- Failure hooks: [`Sources/RunnerBar/Services/FailureHookRunner.swift`](../../Sources/RunnerBar/Services/FailureHookRunner.swift)
+- OAuth flow: [`Sources/RunBotCore/GitHub/OAuthService.swift`](../../Sources/RunBotCore/GitHub/OAuthService.swift)
+- Token storage: [`Sources/RunBotCore/GitHub/Keychain.swift`](../../Sources/RunBotCore/GitHub/Keychain.swift)
+- GitHub API calls: [`Sources/RunBot/GitHub/GitHubURLSessionTransport.swift`](../../Sources/RunBot/GitHub/GitHubURLSessionTransport.swift)
+- Per-scope preferences: [`Sources/RunBotCore/Scope/ScopePreferencesStore.swift`](../../Sources/RunBotCore/Scope/ScopePreferencesStore.swift)
+- Failure hooks: [`Sources/RunBot/Services/FailureHookRunner.swift`](../../Sources/RunBot/Services/FailureHookRunner.swift)

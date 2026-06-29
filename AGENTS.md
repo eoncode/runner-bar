@@ -1,9 +1,9 @@
 # AGENTS.md
 
-Context for AI coding agents working on **RunnerBar**. Read this first. If code and this file
+Context for AI coding agents working on **RunBot**. Read this first. If code and this file
 disagree, the code wins — flag the doc so it can be fixed.
 
-RunnerBar is a macOS 26 menu-bar app (Swift 6.2, SwiftPM, AppKit + SwiftUI) that monitors and
+RunBot is a macOS 26 menu-bar app (Swift 6.2, SwiftPM, AppKit + SwiftUI) that monitors and
 manages GitHub Actions self-hosted runners.
 
 ## Commands
@@ -13,7 +13,7 @@ Run these and make them pass **before** calling any change done. CI runs the exa
 
 ```bash
 swift build                                   # type-check the whole package
-swift test --filter RunnerBarCoreTests        # run the core suite (THIS is what CI runs)
+swift test --filter RunBotCoreTests        # run the core suite (THIS is what CI runs)
 swiftlint lint --strict                       # CI fails on warnings, not just errors
 periphery scan                                # dead-code scan (config: .periphery.yml)
 swift run                                      # build + launch the app locally
@@ -24,10 +24,10 @@ bash build.sh                                  # release build + .app bundle (ar
 >
 > 1. **SwiftLint runs with `--strict`.** A bare `swiftlint` passes locally while CI fails, because
 >    `--strict` promotes every warning to an error. Always run `swiftlint lint --strict`.
-> 2. **Tests run with `--filter RunnerBarCoreTests`.** Bare `swift test` is not what CI runs. The
->    UI tests (`RunnerBarUITests`) run separately via `xcodebuild` on the self-hosted runner — do
+> 2. **Tests run with `--filter RunBotCoreTests`.** Bare `swift test` is not what CI runs. The
+>    UI tests (`RunBotUITests`) run separately via `xcodebuild` on the self-hosted runner — do
 >    **not** try to run them with `swift test`.
-> 3. **Periphery uses `retain_public: true`** scoped to the `RunnerBar` and `RunnerBarCore` targets
+> 3. **Periphery uses `retain_public: true`** scoped to the `RunBot` and `RunBotCore` targets
 >    (test targets excluded). Don't "fix" a Periphery finding by making a symbol non-public if the
 >    app target needs it; mark intentional keeps with `// periphery:ignore` instead.
 >
@@ -39,8 +39,8 @@ bash build.sh                                  # release build + .app bundle (ar
 These opt-in rules fail CI and are the most common agent mistakes:
 
 - **`file_header`** — every Swift file's first two lines must match
-  `// <Filename>.swift` then `// RunnerBar`. New files without this header fail the strict lint.
-  (This regex is also why the second comment line must read `// RunnerBar` even in `RunnerBarCore`.)
+  `// <Filename>.swift` then `// RunBot`. New files without this header fail the strict lint.
+  (This regex is also why the second comment line must read `// RunBot` even in `RunBotCore`.)
 - **`missing_docs`** — every declaration needs a `///` doc comment. Don't add public/internal API
   without one.
 - **`sorted_imports`** — keep `import` statements alphabetised.
@@ -56,12 +56,12 @@ Don't reformat unrelated code to satisfy the linter — keep diffs scoped to you
 Two targets plus a test target (full map: `docs/architecture/file-hierarchy.md`):
 
 ```
-Sources/RunnerBarCore/   library — pure logic, no UI; the testable core
-Sources/RunnerBar/       executable — AppKit/SwiftUI app; depends on RunnerBarCore
-Tests/RunnerBarCoreTests/ swift-testing suite (+ TestSupport doubles & fixtures)
+Sources/RunBotCore/   library — pure logic, no UI; the testable core
+Sources/RunBot/       executable — AppKit/SwiftUI app; depends on RunBotCore
+Tests/RunBotCoreTests/ swift-testing suite (+ TestSupport doubles & fixtures)
 ```
 
-**Hard rule: `RunnerBarCore` must never import the `RunnerBar` app target.** App-layer
+**Hard rule: `RunBotCore` must never import the `RunBot` app target.** App-layer
 dependencies are injected into Core via protocols and closures (`RunnerPollerProtocol`,
 `RunnerViewModelProtocol`, the `*StoreProtocol`s). This boundary is load-bearing.
 

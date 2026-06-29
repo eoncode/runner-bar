@@ -28,16 +28,16 @@
 
 **Code Quality**
 
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=bugs)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
-[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=bugs)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eoncode_run-bot&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=eoncode_run-bot)
 
 ---
 

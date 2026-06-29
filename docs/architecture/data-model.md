@@ -1,11 +1,11 @@
 # Data Model
 
-This document describes the runtime data model of RunnerBar: how the GitHub poll loop
+This document describes the runtime data model of RunBot: how the GitHub poll loop
 fetches and enriches state, how that state reaches SwiftUI, and how local (on-disk)
 runners are reconciled with GitHub-hosted runners.
 
 > **Note on naming history.** What this document previously called `RunnerStore` was
-> renamed to **`RunnerPoller`** and moved into the `RunnerBarCore` target ("Step 10").
+> renamed to **`RunnerPoller`** and moved into the `RunBotCore` target ("Step 10").
 > The old `RunnerViewModel` push-coupling has been replaced by an injected
 > **`RunnerState`** observable read model ("Step 14"). The sections below reflect the
 > current code.
@@ -14,9 +14,9 @@ runners are reconciled with GitHub-hosted runners.
 
 ## `RunnerPoller` — what it does today
 
-`RunnerPoller` is a Swift 6 `actor` in `RunnerBarCore` that owns the GitHub poll loop
+`RunnerPoller` is a Swift 6 `actor` in `RunBotCore` that owns the GitHub poll loop
 and all derived runner/job/action state. It runs on its own (background) executor and
-has **no import of the `RunnerBar` app target** — all app-layer dependencies are injected
+has **no import of the `RunBot` app target** — all app-layer dependencies are injected
 as protocol-typed values or closures.
 
 **1. Polls GitHub on a timer**

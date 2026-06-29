@@ -82,30 +82,30 @@ jobs:
       # This must be a separate build step so the .app lands in DerivedData
       # before xcodebuild test runs. Using -derivedDataPath to share output
       # between this step and the test step.
-      # CRITICAL: Do NOT add RunnerBar as a target dependency in project.yml.
+      # CRITICAL: Do NOT add RunBot as a target dependency in project.yml.
       # On Xcode 26, any target-level dep from a ui-testing bundle to an app
       # causes XCTTargetAppPath to be auto-injected with .app stripped.
       - name: Build app (no test dependency)
         run: |
           xcodebuild build \
-            -project RunnerBar.xcodeproj \
-            -scheme RunnerBar \
+            -project RunBot.xcodeproj \
+            -scheme RunBot \
             -destination 'platform=macOS' \
             -derivedDataPath "$DERIVED_DATA"
 
       # Step 2: Run UI tests. The test bundle locates the app via
       # XCUIApplication(bundleIdentifier:) + Launch Services.
-      # No XCTTargetAppPath is injected because RunnerBarUITests has no
-      # target dependency on RunnerBar.
+      # No XCTTargetAppPath is injected because RunBotUITests has no
+      # target dependency on RunBot.
       - name: Run UI Tests
         run: |
           xcodebuild test \
-            -project RunnerBar.xcodeproj \
-            -scheme RunnerBarUITests \
+            -project RunBot.xcodeproj \
+            -scheme RunBotUITests \
             -destination 'platform=macOS' \
             -derivedDataPath "$DERIVED_DATA" \
-            -only-testing:RunnerBarUITests
+            -only-testing:RunBotUITests
 
       - name: Clean up ephemeral project
         if: always()
-        run: rm -rf RunnerBar.xcodeproj
+        run: rm -rf RunBot.xcodeproj

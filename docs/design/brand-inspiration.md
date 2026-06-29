@@ -1,15 +1,15 @@
-# Brand Inspiration — RunnerBar
+# Brand Inspiration — RunBot
 
 **Category:** macOS developer tooling · GitHub Actions / self-hosted runners · AI-augmented dev workflow
 **Date:** 2026-06-02
-**Subject repo:** [eoncode/runner-bar](https://github.com/eoncode/runner-bar) — "GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar." (Swift 6.2, macOS 26+, Liquid Glass)
+**Subject repo:** [eoncode/run-bot](https://github.com/eoncode/run-bot) — "GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar." (Swift 6.2, macOS 26+, Liquid Glass)
 **Focus areas:** Brand identity · Visual design
 
 ---
 
-## 1 · Where RunnerBar sits
+## 1 · Where RunBot sits
 
-RunnerBar lives at the intersection of three brand categories. Each pulls its visual language from a different lineage — and each shows up below in the swipe file.
+RunBot lives at the intersection of three brand categories. Each pulls its visual language from a different lineage — and each shows up below in the swipe file.
 
 | Category | What it signals | Reference brands |
 |---|---|---|
@@ -17,7 +17,7 @@ RunnerBar lives at the intersection of three brand categories. Each pulls its vi
 | **GitHub Actions / CI runner** | Speed, cost, drop-in replacement, technical credibility | [Blacksmith](https://www.blacksmith.sh), [Depot](https://depot.dev) |
 | **AI-era developer tool** | Agentic, modern, "born for the AI era" | [Cursor](https://cursor.com), [Warp](https://www.warp.dev), [Linear](https://linear.app), [Zed](https://zed.dev) |
 
-RunnerBar uniquely sits in *all three*. No competitor in the data does. That intersection is the brand opportunity.
+RunBot uniquely sits in *all three*. No competitor in the data does. That intersection is the brand opportunity.
 
 ---
 
@@ -53,7 +53,7 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 - **Visual signature:** **Terminal-as-platform** — the website itself feels like an IDE; copyable CLI commands are the primary action.
 - **Personality:** Technical, agentic, efficient, modern, ambitious.
 - **Social proof:** "Trusted by over 800,000 developers," 61k GitHub stars, executive testimonials.
-- **What to steal:** the *inline copy-install command as primary CTA* (RunnerBar already has the curl one-liner — make it the hero). Vocabulary of "agentic."
+- **What to steal:** the *inline copy-install command as primary CTA* (RunBot already has the curl one-liner — make it the hero). Vocabulary of "agentic."
 
 ### 2.3 [Linear](https://linear.app) — the dark-mode benchmark
 
@@ -69,7 +69,7 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 - **Visual signature:** **Numbered, system-like section layout** (1.0 Intake, 2.0 Plan, etc.) that mirrors the product's own organizational logic.
 - **Personality:** Sophisticated, efficient, modern, precise, forward-thinking.
 - **Social proof:** Logo wall (Vercel, Cursor, OpenAI, Coinbase, Cash App, Ramp) + "33,000+ product teams."
-- **What to steal:** **the structural restraint** — numbered sections, single accent color against black, mono for IDs. A RunnerBar page could be `1.0 Status`, `2.0 Runners`, `3.0 Hooks` mirroring its three feature pillars.
+- **What to steal:** **the structural restraint** — numbered sections, single accent color against black, mono for IDs. A RunBot page could be `1.0 Status`, `2.0 Runners`, `3.0 Hooks` mirroring its three feature pillars.
 
 ### 2.4 [CleanShot X](https://cleanshot.com) — Mac utility commercial benchmark
 
@@ -84,7 +84,7 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 - **Visual signature:** The **floating Quick Access Overlay** that looks like it's hovering on your actual desktop.
 - **Personality:** Powerful, sleek, professional, intuitive, reliable.
 - **Social proof:** 4.9 stars · 30-day money-back badge · testimonial wall with X/Twitter post links.
-- **What to steal:** the *"floating UI on a desktop wallpaper"* hero shot — RunnerBar's menu bar popover is a natural fit. The Apple-system-blue accent (`#007AFF`) is RunnerBar's existing badge color from the README. Use the dark-bookend CTA pattern.
+- **What to steal:** the *"floating UI on a desktop wallpaper"* hero shot — RunBot's menu bar popover is a natural fit. The Apple-system-blue accent (`#007AFF`) is RunBot's existing badge color from the README. Use the dark-bookend CTA pattern.
 
 ### 2.5 [Depot](https://depot.dev) — CI performance positioning
 
@@ -100,7 +100,7 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 - **Visual signature:** The **live, animated CI workflow tracker** in the hero — it sells speed by showing it happening.
 - **Personality:** Technical, efficient, modern, developer-centric.
 - **Social proof:** PostHog, Semgrep, Astral logos + tweet-style testimonials + live benchmark numbers.
-- **What to steal:** the **animated workflow visualization** is *exactly* what RunnerBar shows in its popover — turn the actual popover into the hero animation. The "AI velocity / CI bottleneck" framing maps perfectly to RunnerBar's AI failure-recovery story.
+- **What to steal:** the **animated workflow visualization** is *exactly* what RunBot shows in its popover — turn the actual popover into the hero animation. The "AI velocity / CI bottleneck" framing maps perfectly to RunBot's AI failure-recovery story.
 
 ### 2.6 [Blacksmith](https://www.blacksmith.sh) — the loud GitHub Actions challenger
 
@@ -116,7 +116,7 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 - **Visual signature:** **Neon-yellow + black + pixel wordmark** — terminal-meets-modern-web. Loud and unmistakable.
 - **Personality:** Developer-centric, high-performance, efficient, transparent.
 - **Social proof:** Supabase / Ashby / Clerk logos; "3000+ orgs · 50M+ jobs/month"; case-study metrics ("75% cost reduction"); YC / GV backing.
-- **What to steal:** the **YAML-diff hero** is mandatory inspiration — RunnerBar's value can be shown in a single code block (the install one-liner, or a config-token snippet). The unapologetic single-accent maximalism is the opposite of Linear's restraint and worth considering as an alternative direction.
+- **What to steal:** the **YAML-diff hero** is mandatory inspiration — RunBot's value can be shown in a single code block (the install one-liner, or a config-token snippet). The unapologetic single-accent maximalism is the opposite of Linear's restraint and worth considering as an alternative direction.
 
 ### 2.7 [Cursor](https://cursor.com) — premium AI-tool aesthetic
 
@@ -179,7 +179,7 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 
 - **Logo wall above the fold** (sometimes *immediately* after CTA, no subhead — Cursor).
 - **OS-detecting "Download for macOS" CTA** is now table stakes for Mac-native tools.
-- **Copy-the-install-command** as primary or secondary CTA for CLI-installable products (Warp, Blacksmith). RunnerBar already has this — `curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash` — and it's underused.
+- **Copy-the-install-command** as primary or secondary CTA for CLI-installable products (Warp, Blacksmith). RunBot already has this — `curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash` — and it's underused.
 - **Named testimonials > anonymous quotes.** Headshots of recognizable engineers carry more weight than star counts.
 
 ---
@@ -209,11 +209,11 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 - *Get started* (Depot)
 - Inline copy-install command (Warp, Blacksmith)
 
-### 4.4 Candidate RunnerBar taglines (built from these patterns)
+### 4.4 Candidate RunBot taglines (built from these patterns)
 
 > "Your GitHub runners. In your menu bar. Self-healing."
 >
-> "Stop watching Actions. Let RunnerBar watch them for you."
+> "Stop watching Actions. Let RunBot watch them for you."
 >
 > "Local runners, live workflows, AI failure recovery — without leaving your menu bar."
 >
@@ -221,9 +221,9 @@ RunnerBar uniquely sits in *all three*. No competitor in the data does. That int
 
 ---
 
-## 5 · Visual direction recommendations for RunnerBar
+## 5 · Visual direction recommendations for RunBot
 
-RunnerBar's existing signals from the [README](https://github.com/eoncode/runner-bar): macOS 26+, Apple Silicon, Liquid Glass UI, Apple system blue (`#0A84FF`), Swift orange (`#F05138`). These are strong anchors — don't fight them.
+RunBot's existing signals from the [README](https://github.com/eoncode/run-bot): macOS 26+, Apple Silicon, Liquid Glass UI, Apple system blue (`#0A84FF`), Swift orange (`#F05138`). These are strong anchors — don't fight them.
 
 ### 5.1 Direction A · "Native premium" (recommended)
 *Closest cousins: Raycast, CleanShot X, Linear*
@@ -231,7 +231,7 @@ RunnerBar's existing signals from the [README](https://github.com/eoncode/runner
 - **Palette:** Near-black `#0A0A0A` background · Apple system blue `#0A84FF` as the sole accent · pure white text. Optional Swift orange `#F05138` as the *secondary* AI/failure-state accent (it already lives in the badges).
 - **Hero imagery:** A **floating Liquid Glass popover on a moody macOS wallpaper** — CleanShot's exact trick. Liquid Glass is itself a visual moat; very few competitors can stage that imagery yet.
 - **Typography:** Inter or Geist for display + SF Mono for hotkeys, run IDs, YAML, and install command.
-- **Motion:** A live, looping animation of an Actions run progressing → failing → AI hook firing. This is RunnerBar's Depot-CI-tracker moment.
+- **Motion:** A live, looping animation of an Actions run progressing → failing → AI hook firing. This is RunBot's Depot-CI-tracker moment.
 - **Structural device:** Linear-style numbered sections — `1.0 Workflow status`, `2.0 Local runner manager`, `3.0 Failure hooks` (already the README's three pillars).
 - **Visual signature to own:** **The menu bar bezel.** Treat the macOS menu bar — and the icon sitting in it — as the brand frame. Every section can be presented "below the menu bar."
 
@@ -241,7 +241,7 @@ RunnerBar's existing signals from the [README](https://github.com/eoncode/runner
 - **Palette:** Black + a single saturated accent — recommended: **Swift orange `#F05138`** (already in your stack identity) over deep black. Avoid neon yellow/green to differentiate from Blacksmith/Depot.
 - **Hero:** A code diff showing a `.runner` workflow YAML or a single `curl | bash` install line.
 - **Wordmark:** A heavier, slightly pixel/block treatment for "RUNNERBAR" — echoing Blacksmith without imitating.
-- **Tone:** Punchier, drop-in-replacement framing. Best if RunnerBar wants to be read as a *replacement / upgrade* for the GitHub Actions web UI, not just a companion.
+- **Tone:** Punchier, drop-in-replacement framing. Best if RunBot wants to be read as a *replacement / upgrade* for the GitHub Actions web UI, not just a companion.
 
 ### 5.3 What to avoid
 
@@ -253,10 +253,10 @@ RunnerBar's existing signals from the [README](https://github.com/eoncode/runner
 
 ## 6 · Actionable next steps
 
-1. **Pick a direction (A or B).** Direction A is the safer, higher-trust play for a macOS menu bar utility; B is louder and better if positioning RunnerBar as an opinionated GitHub-Actions challenger.
+1. **Pick a direction (A or B).** Direction A is the safer, higher-trust play for a macOS menu bar utility; B is louder and better if positioning RunBot as an opinionated GitHub-Actions challenger.
 2. **Buy a one-page site.** Hero (Liquid Glass popover or YAML diff) → 3 numbered feature blocks → install command CTA → "what it replaces" comparison → footer with GitHub link.
-3. **Design the menu bar icon as the logo.** A single monochrome SF Symbol-style mark + "RunnerBar" wordmark is the only logo you need. Look at Raycast's symbol+wordmark proportions as the template.
-4. **Make the install command the hero CTA.** `curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash` with a copy-button is more credible to this audience than a "Download" button.
+3. **Design the menu bar icon as the logo.** A single monochrome SF Symbol-style mark + "RunBot" wordmark is the only logo you need. Look at Raycast's symbol+wordmark proportions as the template.
+4. **Make the install command the hero CTA.** `curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash` with a copy-button is more credible to this audience than a "Download" button.
 5. **Replace the README screenshot (`scrnsht.png`) with a hero-quality render.** A Liquid Glass popover floating over a desaturated macOS desktop is the single highest-leverage asset.
 6. **Pull a "Wall of Love."** Even 3–5 named testimonials from macOS / Swift / DevOps voices beats stars on a GitHub badge in marketing contexts.
 
@@ -264,7 +264,7 @@ RunnerBar's existing signals from the [README](https://github.com/eoncode/runner
 
 ## Sources
 
-- [eoncode/runner-bar](https://github.com/eoncode/runner-bar) — RunnerBar repository and README (via GitHub CLI)
+- [eoncode/run-bot](https://github.com/eoncode/run-bot) — RunBot repository and README (via GitHub CLI)
 - [Raycast](https://www.raycast.com)
 - [Warp](https://www.warp.dev)
 - [Linear](https://linear.app)

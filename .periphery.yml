@@ -4,8 +4,8 @@
 # docs: https://github.com/peripheryapp/periphery/blob/master/docs/configuration.md
 #
 # retain_public:
-#   Treat all public/open declarations as used. Set to true because RunnerBarCore
-#   exposes a public API surface consumed by the RunnerBar app target. Without this,
+#   Treat all public/open declarations as used. Set to true because RunBotCore
+#   exposes a public API surface consumed by the RunBot app target. Without this,
 #   Periphery would flag every public symbol as unused when scanning the library alone.
 #
 # targets:
@@ -15,5 +15,5 @@
 retain_public: true
 
 targets:
-  - RunnerBar
-  - RunnerBarCore
+  - RunBot
+  - RunBotCore

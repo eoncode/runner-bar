@@ -11,7 +11,7 @@ When a SwiftUI `.sheet` (e.g. `RunnerDetailPopover`, `ScopeEditSheet`, `AddRunne
 presented on top of `SettingsView`, the **parent window** — not the sheet — loses its rounded
 corners and goes fully rectangular.
 
-This is **not** a bug in RunnerBar's logic. It is a well-known consequence of how AppKit handles
+This is **not** a bug in RunBot's logic. It is a well-known consequence of how AppKit handles
 sheet presentation on windows that rely on any form of *custom* corner radius.
 
 ### Why it happens
@@ -25,7 +25,7 @@ When AppKit calls `window.beginSheet(sheet)` it:
    removed or invalidated by AppKit as a side-effect.
 
 This is documented nowhere publicly, but is confirmed by multiple developer reports:
-- https://github.com/eoncode/runner-bar/issues/1017
+- https://github.com/eoncode/run-bot/issues/1017
 - https://stackoverflow.com/questions/62995489 (clear bg + borderless doesn't survive sheet)
 - Electron issue #9159 (same root cause in a different runtime)
 
@@ -109,7 +109,7 @@ This is exactly how **every well-maintained macOS status bar app** works:
   uses `NSPopover`
 - The `fleetingpixels.com` and `capgemini.github.io` tutorials both use `NSPopover`
 
-The original reason RunnerBar moved to `NSPanel` (#377) was to prevent **lateral panel jumps**
+The original reason RunBot moved to `NSPanel` (#377) was to prevent **lateral panel jumps**
 on content-size changes. That concern is legitimate but can be solved within `NSPopover` using:
 1. `popover.contentSize` driven by `NSHostingController.preferredContentSize` (same KVO approach
    used today).

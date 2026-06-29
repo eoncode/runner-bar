@@ -2,23 +2,23 @@ Great question. Here's the full picture for your specific setup.
 
 ## The Core Rationale
 
-`RunnerBarCore` is a plain Swift package library target — no app bundle, no AppKit, no entitlements. Moving code there means that code is **completely decoupled from the macOS app runtime**. In a pure SPM codebase without `.xcodeproj`, this boundary is enforced by the compiler itself: if you accidentally import `AppKit` in a Core file, the build fails. The separation isn't just architectural — it's structural and verified on every build.
+`RunBotCore` is a plain Swift package library target — no app bundle, no AppKit, no entitlements. Moving code there means that code is **completely decoupled from the macOS app runtime**. In a pure SPM codebase without `.xcodeproj`, this boundary is enforced by the compiler itself: if you accidentally import `AppKit` in a Core file, the build fails. The separation isn't just architectural — it's structural and verified on every build.
 
 ***
 
 ## Pros
 
-**Testability is the biggest win.** Code in `RunnerBarCore` can be tested with `swift test` — no simulator, no app bundle, no entitlements, no Keychain access prompts. Your CI job becomes `swift build && swift test` and runs in seconds on a plain Linux or macOS runner with zero UI setup. App-layer code (`RunnerBar`) requires a full `xcodebuild` invocation with a derived data path, scheme, destination, and often a booted simulator or `-allowProvisioningUpdates`. The testing surface is fundamentally different.
+**Testability is the biggest win.** Code in `RunBotCore` can be tested with `swift test` — no simulator, no app bundle, no entitlements, no Keychain access prompts. Your CI job becomes `swift build && swift test` and runs in seconds on a plain Linux or macOS runner with zero UI setup. App-layer code (`RunBot`) requires a full `xcodebuild` invocation with a derived data path, scheme, destination, and often a booted simulator or `-allowProvisioningUpdates`. The testing surface is fundamentally different.
 
 **CI speed and reliability.** `swift test` on a library target is fast and deterministic. No simulator spin-up, no signing, no provisioning. If your GitHub Actions workflow currently runs `xcodebuild test` for everything, splitting testable logic into Core means you can run a fast `swift test` job in parallel (or before) the full app build, and fail early on pure logic errors without waiting for the full build chain.
 
-**Parallel compilation.** SPM builds targets in parallel. The more code lives in `RunnerBarCore`, the more of your codebase compiles independently of the app layer. In practice this means incrementally faster `swift build` times in CI because Core and the app target compile on separate threads.
+**Parallel compilation.** SPM builds targets in parallel. The more code lives in `RunBotCore`, the more of your codebase compiles independently of the app layer. In practice this means incrementally faster `swift build` times in CI because Core and the app target compile on separate threads.
 
-**Reusability across targets.** If you ever add a second target — a CLI tool, a helper app, an XCTest host, a Swift macro target — they can all import `RunnerBarCore` without pulling in any AppKit dependency graph. Right now `WorkflowActionsUseCase` only imports `RunnerBarCore` but lives in the app target, meaning any future tool that needs it must also link the full app.
+**Reusability across targets.** If you ever add a second target — a CLI tool, a helper app, an XCTest host, a Swift macro target — they can all import `RunBotCore` without pulling in any AppKit dependency graph. Right now `WorkflowActionsUseCase` only imports `RunBotCore` but lives in the app target, meaning any future tool that needs it must also link the full app.
 
 **Dependency discipline.** The compiler enforces the boundary. You can't accidentally call `NSWorkspace` or read `UserDefaults.standard` in a way that bypasses your injected store because the type isn't available. This prevents an entire class of subtle bugs where app-layer singletons leak into business logic.
 
-**SonarCloud / static analysis scope.** Tools like SonarCloud and Periphery can be scoped to `RunnerBarCore` alone for a fast, high-signal pass. Dead code in a library target is much easier to identify than in an app target where `@objc` and AppKit reflection can make things appear used.
+**SonarCloud / static analysis scope.** Tools like SonarCloud and Periphery can be scoped to `RunBotCore` alone for a fast, high-signal pass. Dead code in a library target is much easier to identify than in an app target where `@objc` and AppKit reflection can make things appear used.
 
 ***
 

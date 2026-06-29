@@ -1,4 +1,4 @@
-# RunnerBar Swift Commenting Standard
+# RunBot Swift Commenting Standard
 
 ## Guiding Principles
 
@@ -148,7 +148,7 @@ Every file begins with a minimal standard header. Issue history belongs in git l
 
 ```swift
 // FailureHookRunner.swift
-// RunnerBar
+// RunBot
 //
 // Fires a per-scope terminal command when a WorkflowActionGroup transitions
 // to a failure conclusion. Resolves all $TOKEN variables before shell handoff.

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -e
 
-BASE="https://eonist.github.io/runner-bar"
+BASE="https://eoncode.github.io/run-bot"
 TMP=$(mktemp -d)
 
-echo "→ Downloading RunnerBar..."
-curl -fsSL -L "$BASE/RunnerBar.zip" -o "$TMP/RunnerBar.zip"
+echo "→ Downloading RunBot..."
+curl -fsSL -L "$BASE/RunBot.zip" -o "$TMP/RunBot.zip"
 
 echo "→ Installing to /Applications..."
-rm -rf /Applications/RunnerBar.app
-unzip -qo "$TMP/RunnerBar.zip" -d /Applications
+rm -rf /Applications/RunBot.app
+unzip -qo "$TMP/RunBot.zip" -d /Applications
 
 rm -rf "$TMP"
 
 echo "→ Launching..."
-open /Applications/RunnerBar.app
+open /Applications/RunBot.app
 
-echo "✓ RunnerBar installed"
+echo "✓ RunBot installed"

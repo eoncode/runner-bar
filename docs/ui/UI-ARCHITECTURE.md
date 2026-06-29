@@ -1,4 +1,4 @@
-# RunnerBar — Architecture Reference
+# RunBot — Architecture Reference
 
 This document captures architectural decisions and regression guards that are
 enforced inline in the source as single-line comments. **Do not remove** the
@@ -165,7 +165,7 @@ kept — `openPanel()` reads it and calls `navigate(to: validatedView(for: saved
 > See also: `AppDelegate.swift` `application(_:open:)`
 
 The `application(_:open:)` delegate searches the **full** `urls` array for the
-`runnerbar://oauth/callback` URL rather than assuming `urls.first`. macOS may
+`runbot://oauth/callback` URL rather than assuming `urls.first`. macOS may
 deliver multiple URLs and the OAuth callback may not be first, which would leave
 the sign-in spinner stuck indefinitely.
 

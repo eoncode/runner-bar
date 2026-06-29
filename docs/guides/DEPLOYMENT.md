@@ -2,13 +2,13 @@
 
 ## Overview
 
-RunnerBar is distributed as a pre-built `.app` bundle, zipped and hosted on GitHub Pages. End users install with a single `curl` command — no Gatekeeper dialog, no Apple Developer account, no Xcode.
+RunBot is distributed as a pre-built `.app` bundle, zipped and hosted on GitHub Pages. End users install with a single `curl` command — no Gatekeeper dialog, no Apple Developer account, no Xcode.
 
 ```bash
-curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
+curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash
 ```
 
-> **Architecture:** RunnerBar requires Apple Silicon (arm64). The build pipeline produces an arm64-only binary. Intel Macs are not supported.
+> **Architecture:** RunBot requires Apple Silicon (arm64). The build pipeline produces an arm64-only binary. Intel Macs are not supported.
 
 ---
 
@@ -17,7 +17,7 @@ curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 This repo uses the `gh-pages` branch as the GitHub Pages source, served at:
 
 ```
-https://eonist.github.io/runner-bar/
+https://eoncode.github.io/run-bot/
 ```
 
 To enable:
@@ -31,7 +31,7 @@ Files hosted on `gh-pages`:
 ```
 gh-pages/
 ├── install.sh          ← the curl | bash target
-├── RunnerBar.zip       ← pre-built arm64 .app bundle
+├── RunBot.zip       ← pre-built arm64 .app bundle
 └── version.txt         ← current version string, e.g. 0.1.0
 ```
 
@@ -45,7 +45,7 @@ Run on the developer machine (Apple Silicon Mac with Swift CLT installed):
 #!/usr/bin/env bash
 set -e
 
-APP_NAME="RunnerBar"
+APP_NAME="RunBot"
 VERSION="0.1.0"
 OUT_DIR="dist"
 
@@ -72,7 +72,7 @@ codesign --force --deep --sign - "$OUT_DIR/$APP_NAME.app"
 # 4. Zip (preserves symlinks and resource forks)
 ditto -c -k --keepParent \
   "$OUT_DIR/$APP_NAME.app" \
-  "$OUT_DIR/RunnerBar.zip"
+  "$OUT_DIR/RunBot.zip"
 
 echo "$VERSION" > "$OUT_DIR/version.txt"
 
@@ -95,7 +95,7 @@ git worktree add _pages gh-pages 2>/dev/null || \
   git worktree add _pages --orphan gh-pages
 
 # Copy build artifacts
-cp dist/RunnerBar.zip _pages/
+cp dist/RunBot.zip _pages/
 cp dist/version.txt _pages/
 cp install.sh _pages/
 
@@ -107,7 +107,7 @@ git push origin gh-pages
 cd ..
 git worktree remove _pages
 
-echo "✓ Deployed to https://eonist.github.io/runner-bar/"
+echo "✓ Deployed to https://eoncode.github.io/run-bot/"
 ```
 
 ---
@@ -120,22 +120,22 @@ This file lives at the root of `gh-pages` and is the single URL users run:
 #!/usr/bin/env bash
 set -e
 
-BASE="https://eonist.github.io/runner-bar"
+BASE="https://eoncode.github.io/run-bot"
 TMP=$(mktemp -d)
 
-echo "→ Downloading RunnerBar..."
-curl -fsSL "$BASE/RunnerBar.zip" -o "$TMP/RunnerBar.zip"
+echo "→ Downloading RunBot..."
+curl -fsSL "$BASE/RunBot.zip" -o "$TMP/RunBot.zip"
 
 echo "→ Installing to /Applications..."
-rm -rf /Applications/RunnerBar.app
-unzip -qo "$TMP/RunnerBar.zip" -d /Applications
+rm -rf /Applications/RunBot.app
+unzip -qo "$TMP/RunBot.zip" -d /Applications
 
 rm -rf "$TMP"
 
 echo "→ Launching..."
-open /Applications/RunnerBar.app
+open /Applications/RunBot.app
 
-echo "✓ RunnerBar installed"
+echo "✓ RunBot installed"
 ```
 
 **Why no Gatekeeper fires:**
@@ -147,9 +147,9 @@ echo "✓ RunnerBar installed"
 
 | URL | Contents |
 |-----|----------|
-| `https://eonist.github.io/runner-bar/install.sh` | Installer script |
-| `https://eonist.github.io/runner-bar/RunnerBar.zip` | arm64 `.app` bundle |
-| `https://eonist.github.io/runner-bar/version.txt` | Current version string |
+| `https://eoncode.github.io/run-bot/install.sh` | Installer script |
+| `https://eoncode.github.io/run-bot/RunBot.zip` | arm64 `.app` bundle |
+| `https://eoncode.github.io/run-bot/version.txt` | Current version string |
 
 ---
 
@@ -163,7 +163,7 @@ echo "✓ RunnerBar installed"
 ## Quick deploy
 
 ```bash
-git pull && git fetch && bash build.sh && pkill RunnerBar; sleep 1 && open dist/RunnerBar.app 2>&1
+git pull && git fetch && bash build.sh && (pkill RunBot || true) && sleep 1 && open dist/RunBot.app 2>&1
 bash build.sh && bash deploy.sh
-curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash
+curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash
 ```

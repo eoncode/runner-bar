@@ -1,6 +1,6 @@
 # NSPopover Architecture — Dismiss, Sheets, and File Pickers
 
-This document describes how RunnerBar's NSPopover works, why it is built
+This document describes how RunBot's NSPopover works, why it is built
 the way it is, and how PR #1195 solved the problem of the popover
 dismissing when the user clicks inside an NSOpenPanel file picker.
 
@@ -10,12 +10,12 @@ For the full history of failed attempts see `docs/graveyard.md`.
 
 ## The problem
 
-RunnerBar uses an NSPopover as its main UI surface. Inside the popover,
+RunBot uses an NSPopover as its main UI surface. Inside the popover,
 SwiftUI presents a Settings flow via `.sheet`, and inside that sheet the
 user can open a folder picker (NSOpenPanel) to select a path.
 
 NSOpenPanel opens as a separate window. When the user clicks inside it,
-the click lands outside the popover's frame. RunnerBar's global
+the click lands outside the popover's frame. RunBot's global
 `NSEvent` monitor sees an outside click and calls `hidePanel()`,
 dismissing both the popover and the sheet before the user has picked anything.
 
@@ -25,7 +25,7 @@ This is the bug fixed by PR #1195.
 
 ## Why NSPopover (not NSPanel)
 
-RunnerBar switched from NSPanel to NSPopover in PR #1017 for one specific
+RunBot switched from NSPanel to NSPopover in PR #1017 for one specific
 reason: **rounded corners survive sheet attachment**.
 
 NSPanel with a custom `CAShapeLayer` mask or `masksToBounds` loses its

@@ -1,6 +1,6 @@
 # Development
 
-How to build, run, and verify RunnerBar locally. For agent-specific rules see
+How to build, run, and verify RunBot locally. For agent-specific rules see
 [`AGENTS.md`](../../AGENTS.md); for the full source map see
 [`docs/architecture/file-hierarchy.md`](../architecture/file-hierarchy.md).
 
@@ -12,7 +12,7 @@ How to build, run, and verify RunnerBar locally. For agent-specific rules see
 - **Swift 6.2**, strict concurrency (`NonisolatedNonsendingByDefault` enabled on every target).
 - **macOS 26 (Tahoe)** minimum, **Apple Silicon (arm64) only**.
 
-> **Note:** `Sources/RunnerBar/main.swift` has a compile-time guard
+> **Note:** `Sources/RunBot/main.swift` has a compile-time guard
 > (`#if !arch(arm64) #error(...)`) — the project will not build on x86_64. Intel Macs are not supported.
 
 ---
@@ -49,12 +49,12 @@ No `gh` CLI or `gh auth login` is required — see [Auth](#auth-during-developme
 ## Targets
 
 ```
-RunnerBarCore      (library)     — pure logic, no UI; the testable core
-RunnerBar          (executable)  — AppKit/SwiftUI app; depends on RunnerBarCore
-RunnerBarCoreTests (test)         — swift-testing suite for the core
+RunBotCore      (library)     — pure logic, no UI; the testable core
+RunBot          (executable)  — AppKit/SwiftUI app; depends on RunBotCore
+RunBotCoreTests (test)         — swift-testing suite for the core
 ```
 
-`RunnerBarCore` must never import the `RunnerBar` app target — app-layer dependencies are injected
+`RunBotCore` must never import the `RunBot` app target — app-layer dependencies are injected
 via protocols and closures. See [`docs/architecture/file-hierarchy.md`](../architecture/file-hierarchy.md)
 for the full annotated layout.
 
@@ -108,7 +108,7 @@ swiftlint lint --strict
 > ⚠️ **Use `--strict`.** A bare `swiftlint` passes locally while CI fails, because `--strict`
 > promotes every warning to an error — which is how CI runs it
 > (`.github/workflows/swiftlint.yml`). Common gotchas enforced by `.swiftlint.yml`:
-> - **`file_header`** — every file must start with `// <Filename>.swift` then `// RunnerBar`.
+> - **`file_header`** — every file must start with `// <Filename>.swift` then `// RunBot`.
 > - **`missing_docs`** — every declaration needs a `///` doc comment.
 > - **`sorted_imports`**, and **`large_tuple`** (no 3+ member tuples — use a small struct).
 
@@ -116,21 +116,21 @@ swiftlint lint --strict
 ```bash
 periphery scan
 ```
-Config (`.periphery.yml`) sets `retain_public: true` and scans the `RunnerBar` + `RunnerBarCore`
+Config (`.periphery.yml`) sets `retain_public: true` and scans the `RunBot` + `RunBotCore`
 targets (tests excluded). Don't make a symbol non-public to silence a finding if the app target
 needs it — mark intentional keeps with `// periphery:ignore`.
 
 ### Tests
 ```bash
-swift test --filter RunnerBarCoreTests
+swift test --filter RunBotCoreTests
 ```
 > ⚠️ This is exactly what CI runs (`.github/workflows/swift-test.yml`, on `macos-26`). Bare
-> `swift test` is not the CI command. The UI tests (`RunnerBarUITests`) run separately via
+> `swift test` is not the CI command. The UI tests (`RunBotUITests`) run separately via
 > `xcodebuild` on the self-hosted runner (`.github/workflows/ui-tests.yml`) and are **not** part
 > of the SwiftPM test run — don't try to run them with `swift test`.
 
-Add new tests under `Tests/RunnerBarCoreTests/` alongside any new logic in `RunnerBarCore`; reuse
-the shared doubles/fixtures in `Tests/RunnerBarCoreTests/TestSupport/`.
+Add new tests under `Tests/RunBotCoreTests/` alongside any new logic in `RunBotCore`; reuse
+the shared doubles/fixtures in `Tests/RunBotCoreTests/TestSupport/`.
 
 ---
 
@@ -171,6 +171,6 @@ swift package resolve
 bash build.sh
 ```
 Builds an arm64-only release binary (`swift build -c release --arch arm64`), assembles the `.app`
-bundle, ad-hoc signs it, and zips to `dist/RunnerBar.zip`. The arch flag and build path in
+bundle, ad-hoc signs it, and zips to `dist/RunBot.zip`. The arch flag and build path in
 `build.sh` are pinned intentionally — do not change them. See
 [`docs/guides/deployment.md`](deployment.md) for publishing.

@@ -1,4 +1,4 @@
-# SwiftLint configuration for runner-bar
+# SwiftLint configuration for run-bot
 # https://github.com/realm/SwiftLint
 
 included:
@@ -50,7 +50,7 @@ missing_docs:
   excludes_inherited_types: false
 
 file_header:
-  required_pattern: "^// [\\w+]+\\.swift\\n// RunnerBar"
+  required_pattern: "^// [\\w+]+\\.swift\\n// RunBot"
 
 # ── Disabled rules ────────────────────────────────────────────────────────────────────────────────────────────────────────
 disabled_rules:

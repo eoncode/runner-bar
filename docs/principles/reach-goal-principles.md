@@ -1,6 +1,6 @@
 # Reach Goal Principles
 
-This document captures aspirational engineering principles for RunnerBar — modern Swift 6.0–6.2 patterns and language features that are not yet adopted but represent the next frontier of code quality, safety, and expressiveness. These are deliberate stretch goals rather than current requirements.
+This document captures aspirational engineering principles for RunBot — modern Swift 6.0–6.2 patterns and language features that are not yet adopted but represent the next frontier of code quality, safety, and expressiveness. These are deliberate stretch goals rather than current requirements.
 
 ---
 
@@ -42,9 +42,9 @@ Swift 6.2 adds `Observations<Value>` — an `AsyncSequence` that streams transac
 
 ## 3. Access Control for Imports (internal import)
 
-Swift 6.0 introduced `internal import` and `package import` as formal access control on import declarations. The `RunnerBarCore` library can explicitly prevent implementation-detail dependencies from leaking into its public API surface — enforced by the compiler, not by convention. This complements the Multi-Target Package principle by making the dependency graph of the library as auditable as its type graph.
+Swift 6.0 introduced `internal import` and `package import` as formal access control on import declarations. The `RunBotCore` library can explicitly prevent implementation-detail dependencies from leaking into its public API surface — enforced by the compiler, not by convention. This complements the Multi-Target Package principle by making the dependency graph of the library as auditable as its type graph.
 
-**Principle:** All imports in `RunnerBarCore` are annotated with the minimum required access level (`internal import` or `private import` for implementation details). Public re-export of transitive dependencies is never implicit.
+**Principle:** All imports in `RunBotCore` are annotated with the minimum required access level (`internal import` or `private import` for implementation details). Public re-export of transitive dependencies is never implicit.
 
 ---
 
@@ -76,7 +76,7 @@ Swift 6.2 introduced Task naming via `Task(name:)` and Task Priority Escalation 
 
 Swift 6.0 added `@attached(body)` macros that synthesise or augment function implementations, not just declarations. This makes it practical to attach cross-cutting behaviours — logging, timing, retry logic — to use-case `execute()` methods without subclassing or decorator boilerplate. Combined with `@attached(peer)` and `@attached(conformance)`, custom macros can auto-generate protocol + fake test double pairs from a concrete type declaration, eliminating manual protocol mirroring.
 
-**Principle:** Cross-cutting concerns (telemetry, retry, logging) are implemented as `@attached(body)` macros rather than base classes or manual wrapper types. Custom macros live in a dedicated `RunnerBarMacros` target and are tested independently using `swift-syntax`'s macro testing utilities.
+**Principle:** Cross-cutting concerns (telemetry, retry, logging) are implemented as `@attached(body)` macros rather than base classes or manual wrapper types. Custom macros live in a dedicated `RunBotMacros` target and are tested independently using `swift-syntax`'s macro testing utilities.
 
 ---
 
@@ -90,9 +90,9 @@ Swift 6.2 introduced the `@concurrent` attribute as a first-class way to mark as
 
 ## 9. Opt-In Strict Memory Safety Mode
 
-Swift 6.2 adds a `-strict-memory-safety` compiler flag that audits every use of unsafe constructs in a module, introducing `@unsafe` / `@safe` annotations and an `unsafe` expression keyword analogous to `try` and `await`. This makes unsafe call sites explicit and auditable at the source level — the same philosophy that strict concurrency checking applied to data races. Given the existing principle of making all concurrency boundaries visible at the call site, enabling this flag on `RunnerBarCore` is the natural extension.
+Swift 6.2 adds a `-strict-memory-safety` compiler flag that audits every use of unsafe constructs in a module, introducing `@unsafe` / `@safe` annotations and an `unsafe` expression keyword analogous to `try` and `await`. This makes unsafe call sites explicit and auditable at the source level — the same philosophy that strict concurrency checking applied to data races. Given the existing principle of making all concurrency boundaries visible at the call site, enabling this flag on `RunBotCore` is the natural extension.
 
-**Principle:** `RunnerBarCore` is compiled with `-strict-memory-safety`. Any use of unsafe APIs is marked with the `unsafe` expression keyword at the call site, making the safety contract explicit and reviewable. New unsafe call sites require a comment justifying why no safe alternative exists.
+**Principle:** `RunBotCore` is compiled with `-strict-memory-safety`. Any use of unsafe APIs is marked with the `unsafe` expression keyword at the call site, making the safety contract explicit and reviewable. New unsafe call sites require a comment justifying why no safe alternative exists.
 
 ---
 
