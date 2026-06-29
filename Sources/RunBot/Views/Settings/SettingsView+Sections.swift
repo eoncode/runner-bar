@@ -131,7 +131,7 @@ internal extension SettingsView {
     }
 
     // MARK: - General
-    /// General section: polling interval, API call counter, notification toggles, launch-at-login, and popover arrow.
+    /// General section: polling interval, API call counter, notification toggles, launch-at-login, popover arrow, and beta channel.
     ///
     /// `settings` and `notifications` are injected `let` properties on an `@Observable` type.
     /// SwiftUI cannot synthesise `$`-bindings from plain `let` stored properties, so we
@@ -181,6 +181,8 @@ internal extension SettingsView {
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)
             popoverArrowRow
+            Divider().padding(.leading, RBSpacing.md)
+            betaChannelRow
         }
     }
 
@@ -198,6 +200,23 @@ internal extension SettingsView {
             }
             Spacer()
             Toggle("", isOn: bindableSettings.showPopoverArrow)
+                .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
+    }
+
+    // MARK: - Beta channel row
+    /// Toggle row that opts the user into pre-release (beta) builds for the in-app update check.
+    var betaChannelRow: some View {
+        let bindableBeta = Bindable(settings)
+        return HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Beta channel").font(.system(size: 12))
+                Text("Receive pre-release builds for early access to new features.")
+                    .font(.caption2).foregroundColor(Color.rbTextSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: bindableBeta.betaChannel)
                 .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
         }
         .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
