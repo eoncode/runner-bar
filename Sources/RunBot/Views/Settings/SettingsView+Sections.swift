@@ -235,29 +235,45 @@ internal extension SettingsView {
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
             if runnerState.availableUpdate != nil {
                 Divider().padding(.leading, RBSpacing.md)
-                updateBannerRow
+                updateActionRow
             }
         }
     }
 
-    // MARK: - Update available banner
-    /// Shown in the About section when `runnerState.availableUpdate` is non-nil.
-    var updateBannerRow: some View {
+    // MARK: - Update action row
+    /// This is the only place in the app where update UI appears — no banners elsewhere.
+    var updateActionRow: some View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.down.circle.fill")
                 .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Update available: \(runnerState.availableUpdate ?? "")")
                     .font(.system(size: 12))
-                Text("Download the latest release from GitHub.")
+                Text("A new version of RunBot is ready.")
                     .font(.caption2).foregroundColor(Color.rbTextSecondary)
             }
             Spacer()
-            if let downloadURL = URL(string: "https://github.com/runbot-hq/run-bot/releases/latest") {
-                Link("Download", destination: downloadURL)
-                    .font(.system(size: 12))
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+            if runnerState.updateAssetMissing || runnerState.updateActionFailed {
+                Button("Download") {
+                    NSWorkspace.shared.open(
+                        URL(string: "https://github.com/runbot-hq/run-bot/releases/latest")!
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else if runnerState.updateZipURL == nil {
+                HStack(spacing: 4) {
+                    ProgressView("Downloading update…").scaleEffect(RBMetrics.updateProgressScale)
+                    Text("Downloading…").font(.caption2).foregroundColor(Color.rbTextSecondary)
+                }
+            } else {
+                Button("Install & Relaunch") {
+                    Task {
+                        await AutoUpdater.shared.installAndRelaunch(runnerState: runnerState)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
