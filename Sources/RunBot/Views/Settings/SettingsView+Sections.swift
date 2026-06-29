@@ -255,12 +255,12 @@ internal extension SettingsView {
                         .font(.caption2).foregroundColor(Color.rbTextSecondary)
                 }
                 Spacer()
-                Link("Download", destination: URL(
-                    string: "https://github.com/runbot-hq/run-bot/releases/latest"
-                )!)
-                .font(.system(size: 12))
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                if let downloadURL = URL(string: "https://github.com/runbot-hq/run-bot/releases/latest") {
+                    Link("Download", destination: downloadURL)
+                        .font(.system(size: 12))
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
         }

@@ -7,12 +7,15 @@ import Foundation
 /// Hits `GET /repos/runbot-hq/run-bot/releases` (the full list, not /latest)
 /// so it can filter by channel. The `prerelease` field on each release is set
 /// by the `--prerelease` flag in `publish.yml` at release creation time.
-public struct UpdateChecker {
+public enum UpdateChecker {
 
     /// GitHub Releases API endpoint for this repository.
-    private static let releasesURL = URL(
-        string: "https://api.github.com/repos/runbot-hq/run-bot/releases"
-    )!
+    ///
+    /// Force-unwrap is intentional: the URL string is a compile-time constant
+    /// and cannot be invalid. If it ever fails, a crash at startup is preferable
+    /// to silently skipping all update checks.
+    // swiftlint:disable:next force_unwrap
+    private static let releasesURL = URL(string: "https://api.github.com/repos/runbot-hq/run-bot/releases")!
 
     /// A minimal Codable model for a GitHub Release API response object.
     private struct Release: Decodable {
@@ -49,7 +52,7 @@ public struct UpdateChecker {
             let core = String(parts[0])
             isPrerelease = parts.count > 1
             let nums = core.split(separator: ".").compactMap { Int($0) }
-            major = nums.count > 0 ? nums[0] : 0
+            major = nums.isEmpty ? 0 : nums[0]
             minor = nums.count > 1 ? nums[1] : 0
             patch = nums.count > 2 ? nums[2] : 0
         }
@@ -69,9 +72,11 @@ public struct UpdateChecker {
         }
 
         do {
-            var components = URLComponents(url: releasesURL, resolvingAgainstBaseURL: false)!
+            guard var components = URLComponents(url: releasesURL, resolvingAgainstBaseURL: false)
+            else { return nil }
             components.queryItems = [URLQueryItem(name: "per_page", value: "20")]
-            var request = URLRequest(url: components.url!)
+            guard let requestURL = components.url else { return nil }
+            var request = URLRequest(url: requestURL)
             // GitHub API requires a User-Agent header.
             request.setValue("RunBot", forHTTPHeaderField: "User-Agent")
 

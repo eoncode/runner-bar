@@ -44,7 +44,7 @@ fi
 # ────────────────────────────────────────────────────────────────────
 # Determine target branch
 # ────────────────────────────────────────────────────────────────────
-if [[ "$BETA" == true ]]; then
+if [[ "$BETA" = true ]]; then
     BRANCH="beta"
 else
     BRANCH="release"
