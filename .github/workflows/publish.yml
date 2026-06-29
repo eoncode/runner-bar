@@ -45,8 +45,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          fetch-depth: 0   # full history required for tag computation
-          fetch-tags: true # tag computation inspects existing version tags
+          fetch-depth: 0   # full history + all tags required for tag computation
+          # Note: fetch-tags: true is technically redundant when fetch-depth: 0
+          # is set (a full clone already includes all tags), but it is kept here
+          # for self-documentation — it makes the tag dependency explicit to
+          # future readers without any runtime cost.
 
       # ── Compute next tag ───────────────────────────────────────────────────
       # Tag scheme:
@@ -189,6 +192,11 @@ jobs:
         id: verify
 
       # ── Tag + push ────────────────────────────────────────────────────────
+      # Note on the dry_run condition: when this workflow fires from a `push`
+      # event (not `workflow_dispatch`), `github.event.inputs.dry_run` is `null`
+      # rather than `"false"`. The expression `null != 'true'` evaluates to `true`,
+      # so tag + release steps DO execute on push — which is the intended behaviour.
+      # This is not a bug; it's standard GitHub Actions null-coercion semantics.
       - name: Tag and push
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |

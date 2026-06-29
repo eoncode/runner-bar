@@ -41,6 +41,24 @@ struct UpdateCheckerTests {
         #expect(UpdateChecker.isNewer("0.7.1-beta.1", than: "0.7.1") == false)
     }
 
+    // MARK: - Beta-to-beta ordering
+
+    /// A higher beta.N should be offered to users already on a lower beta.N
+    /// of the same base version. Previously `isNewer` returned `false` here
+    /// because major/minor/patch were identical and both `isPrerelease = true`,
+    /// silently suppressing beta-to-beta update prompts.
+    @Test func newerBetaWithinSameBase() {
+        #expect(UpdateChecker.isNewer("0.7.1-beta.2", than: "0.7.1-beta.1") == true)
+    }
+
+    @Test func olderBetaWithinSameBase() {
+        #expect(UpdateChecker.isNewer("0.7.1-beta.1", than: "0.7.1-beta.2") == false)
+    }
+
+    @Test func sameBetaVersion() {
+        #expect(UpdateChecker.isNewer("0.7.1-beta.2", than: "0.7.1-beta.2") == false)
+    }
+
     // MARK: - Already up to date
 
     @Test func sameVersion() {

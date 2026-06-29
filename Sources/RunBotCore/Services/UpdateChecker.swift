@@ -45,10 +45,16 @@ public enum UpdateChecker {
         let patch: Int
         /// `true` when the version string contains a pre-release suffix (e.g. `-beta.2`).
         let isPrerelease: Bool
+        /// The numeric suffix from a `-beta.N` pre-release tag, or `nil` if not a
+        /// beta tag or if the suffix cannot be parsed. Used to order beta.1 < beta.2
+        /// when major/minor/patch are identical — without this, two betas of the same
+        /// base version compare equal and `isNewer` returns `false`, silently
+        /// suppressing beta-to-beta update prompts.
+        let betaIndex: Int?
 
-        /// Parses a version string of the form `"X.Y.Z"` or `"X.Y.Z-suffix"`.
+        /// Parses a version string of the form `"X.Y.Z"` or `"X.Y.Z-beta.N"`.
         ///
-        /// Components that cannot be parsed default to `0`.
+        /// Components that cannot be parsed default to `0`. `betaIndex` defaults to `nil`.
         init(_ version: String) {
             let parts = version.split(separator: "-", maxSplits: 1)
             let core = String(parts[0])
@@ -57,6 +63,19 @@ public enum UpdateChecker {
             major = nums.isEmpty ? 0 : nums[0]
             minor = nums.count > 1 ? nums[1] : 0
             patch = nums.count > 2 ? nums[2] : 0
+            // Parse beta.N suffix — e.g. "beta.2" → betaIndex = 2.
+            if parts.count > 1 {
+                let suffix = String(parts[1]) // e.g. "beta.2"
+                let suffixParts = suffix.split(separator: ".")
+                if suffixParts.count == 2, suffixParts[0] == "beta",
+                   let n = Int(suffixParts[1]) {
+                    betaIndex = n
+                } else {
+                    betaIndex = nil
+                }
+            } else {
+                betaIndex = nil
+            }
         }
     }
 
@@ -73,6 +92,10 @@ public enum UpdateChecker {
         var request = URLRequest(url: requestURL)
         // GitHub API requires a User-Agent header.
         request.setValue("RunBot", forHTTPHeaderField: "User-Agent")
+        // Recommended by GitHub REST API docs to ensure a stable v3 response shape.
+        // Without this the API still responds correctly today, but the content type
+        // is not guaranteed to remain stable across API versions.
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         return request
     }
 
@@ -125,6 +148,13 @@ public enum UpdateChecker {
         if candidateParsed.patch != runningParsed.patch { return candidateParsed.patch > runningParsed.patch }
         // Same base version: stable (isPrerelease=false) beats a beta (isPrerelease=true)
         if candidateParsed.isPrerelease != runningParsed.isPrerelease { return !candidateParsed.isPrerelease }
+        // Both are betas of the same base: compare beta.N index so that
+        // beta.2 is correctly seen as newer than beta.1. Without this,
+        // two betas with identical major/minor/patch return false and
+        // users on beta.1 are never offered the beta.2 update.
+        if let ci = candidateParsed.betaIndex, let ri = runningParsed.betaIndex {
+            return ci > ri
+        }
         return false
     }
 }
