@@ -8,18 +8,18 @@ import Foundation
 ///
 /// Keys follow the reverse-DNS bundle identifier prefix so they are namespaced
 /// away from any future SDK or system key collisions.
-enum AutoUpdaterDefaults {
+public enum AutoUpdaterDefaults {
     /// `UserDefaults` key for the version string of the cached update zip.
     ///
     /// Written by `AutoUpdater` after a successful download; cleared by
     /// `AppDelegate+PanelSetup` on startup when the cached version is no
     /// longer newer than the installed version.
-    static let cachedUpdateVersion = "io.github.runbot-hq.cachedUpdateVersion"
+    public static let cachedUpdateVersion = "io.github.runbot-hq.cachedUpdateVersion"
 
     /// `UserDefaults` key for the file-system path of the cached update zip.
     ///
     /// Written alongside `cachedUpdateVersion`; cleared under the same conditions.
-    static let cachedUpdateZipPath = "io.github.runbot-hq.cachedUpdateZipPath"
+    public static let cachedUpdateZipPath = "io.github.runbot-hq.cachedUpdateZipPath"
 
     /// How often `NSBackgroundActivityScheduler` fires a background update check.
     ///
@@ -33,9 +33,9 @@ enum AutoUpdaterDefaults {
     /// elapses — this is by design, not an oversight.
     #if DEBUG
     /// 60-second interval used in DEBUG builds. Override in tests for faster QA cycles.
-    static var checkInterval: TimeInterval = 60
+    @MainActor public static var checkInterval: TimeInterval = 60
     #else
     /// 24-hour interval used in release builds.
-    static let checkInterval: TimeInterval = 24 * 60 * 60
+    public static let checkInterval: TimeInterval = 24 * 60 * 60
     #endif
 }

@@ -269,7 +269,7 @@ internal extension SettingsView {
             } else {
                 Button("Install & Relaunch") {
                     Task {
-                        await AutoUpdater.shared.installAndRelaunch(runnerState: runnerState)
+                        await AutoUpdater.installAndRelaunch(state: runnerState)
                     }
                 }
                 .buttonStyle(.borderedProminent)

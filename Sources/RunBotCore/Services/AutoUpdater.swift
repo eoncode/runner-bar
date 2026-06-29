@@ -192,7 +192,7 @@ public enum AutoUpdater {
 
         scheduler.schedule { completion in
             Task {
-                let beta = AppPreferencesStore.shared.betaChannel
+                let beta = await AppPreferencesStore.shared.betaChannel
                 let result = await UpdateChecker.checkForUpdate(betaChannel: beta)
                 await MainActor.run {
                     if case .updateAvailable(let release) = result {
