@@ -1,5 +1,6 @@
 // AutoUpdater.swift
 // RunBotCore
+import AppKit
 import Foundation
 
 // MARK: - AutoUpdater
@@ -164,5 +165,152 @@ public enum AutoUpdater {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: AutoUpdaterDefaults.cachedUpdateVersion)
         defaults.removeObject(forKey: AutoUpdaterDefaults.cachedUpdateZipPath)
+    }
+
+    // MARK: - Background scheduler
+
+    /// Registers an `NSBackgroundActivityScheduler` that fires a full
+    /// update check every `AutoUpdaterDefaults.checkInterval` seconds.
+    ///
+    /// Call once from `AppDelegate` after the startup sequence completes.
+    /// The scheduler is owned by the system and does not need to be stored;
+    /// it fires on a background queue and bridges back to `MainActor` for
+    /// any `RunnerState` mutations.
+    ///
+    /// - Parameter state: The shared `RunnerState` instance to update.
+    @MainActor
+    public static func scheduleBackgroundCheck(state: RunnerState) {
+        let scheduler = NSBackgroundActivityScheduler(
+            identifier: "io.github.runbot-hq.update-check"
+        )
+        scheduler.repeats = true
+        scheduler.interval = AutoUpdaterDefaults.checkInterval
+        // Allow the system up to 20 % of the interval as tolerance so it can
+        // coalesce with other background work and save power.
+        scheduler.tolerance = AutoUpdaterDefaults.checkInterval * 0.2
+        scheduler.qualityOfService = .background
+
+        scheduler.schedule { completion in
+            Task {
+                let beta = AppPreferencesStore.shared.betaChannel
+                let result = await UpdateChecker.checkForUpdate(betaChannel: beta)
+                await MainActor.run {
+                    if case .updateAvailable(let release) = result {
+                        state.setAvailableUpdate(release.tagName)
+                        Task { await AutoUpdater.handle(release, state: state) }
+                    }
+                }
+                completion(.finished)
+            }
+        }
+    }
+
+    // MARK: - Install & Relaunch
+
+    /// Unzips the cached `RunBot.zip`, replaces the running `.app` bundle,
+    /// and relaunches the new version.
+    ///
+    /// ## Flow
+    /// 1. Unzip the cached zip into a temporary directory via `/usr/bin/ditto`.
+    /// 2. Locate `RunBot.app` inside the unzipped contents.
+    /// 3. Copy it over the running bundle path via `/bin/cp -R`.
+    /// 4. Relaunch the new binary with `/usr/bin/open`.
+    /// 5. Terminate this process via `NSApp.terminate`.
+    ///
+    /// On any failure the function sets `state.updateActionFailed = true` and
+    /// returns without terminating — the user is left with the running version
+    /// and the browser-fallback Download button becomes visible.
+    ///
+    /// - Parameter state: The shared `RunnerState` used to report failure.
+    @MainActor
+    public static func installAndRelaunch(state: RunnerState) async {
+        guard let zipURL = state.updateZipURL else {
+            state.updateActionFailed = true
+            return
+        }
+
+        let fm = FileManager.default
+        let bundlePath = Bundle.main.bundlePath  // e.g. …/RunBot.app
+
+        // ── 1. Unzip to a temp directory ────────────────────────────────────
+        let tmpDir = fm.temporaryDirectory
+            .appendingPathComponent("runbot-update-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        } catch {
+            state.updateActionFailed = true
+            return
+        }
+
+        // ditto preserves symlinks and resource forks; superior to `unzip` for .app bundles.
+        let dittoResult = await runCommand("/usr/bin/ditto",
+                                           args: ["-xk", zipURL.path, tmpDir.path])
+        guard dittoResult else {
+            state.updateActionFailed = true
+            try? fm.removeItem(at: tmpDir)
+            return
+        }
+
+        // ── 2. Find RunBot.app inside the unzipped contents ─────────────────
+        guard let appInZip = (try? fm.contentsOfDirectory(
+            at: tmpDir,
+            includingPropertiesForKeys: nil
+        ))?.first(where: { $0.lastPathComponent == "RunBot.app" }) else {
+            state.updateActionFailed = true
+            try? fm.removeItem(at: tmpDir)
+            return
+        }
+
+        // ── 3. Replace the running bundle ───────────────────────────────────
+        // cp -R replaces the destination atomically enough for our purposes;
+        // the running process keeps its open file descriptors until it exits.
+        let cpResult = await runCommand("/bin/cp",
+                                        args: ["-Rf", appInZip.path, bundlePath])
+        guard cpResult else {
+            state.updateActionFailed = true
+            try? fm.removeItem(at: tmpDir)
+            return
+        }
+
+        // ── 4. Clear cached defaults so next launch starts clean ─────────────
+        clearCachedDefaults()
+        try? fm.removeItem(at: tmpDir)
+        try? fm.removeItem(at: zipURL)
+
+        // ── 5. Relaunch + terminate ──────────────────────────────────────────
+        // `open -n` forces a new instance even if one is already running.
+        // We do NOT await — NSApp.terminate must fire immediately after.
+        let relaunchTask = Process()
+        relaunchTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        relaunchTask.arguments = ["-n", bundlePath]
+        try? relaunchTask.run()
+
+        NSApp.terminate(nil)
+    }
+
+    // MARK: - Process helper
+
+    /// Runs a command synchronously on a background thread and returns `true`
+    /// on exit code 0, `false` otherwise.
+    ///
+    /// Used for `ditto` (unzip) and `cp` (replace bundle) which are short-lived
+    /// and do not need streaming output.
+    private static func runCommand(_ executable: String, args: [String]) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: executable)
+                process.arguments = args
+                process.standardOutput = FileHandle.nullDevice
+                process.standardError  = FileHandle.nullDevice
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    continuation.resume(returning: process.terminationStatus == 0)
+                } catch {
+                    continuation.resume(returning: false)
+                }
+            }
+        }
     }
 }

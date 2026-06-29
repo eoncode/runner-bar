@@ -315,5 +315,12 @@ extension AppDelegate: NSPopoverDelegate {
         case .failed(let error):
             log("AppDelegate › startup — update check failed: \(error) (betaChannel=\(beta))")
         }
+
+        // ── Background scheduler ───────────────────────────────────────────────────────
+        // Fires every AutoUpdaterDefaults.checkInterval (24 h release / 60 s debug).
+        // The launch-time check above already ran once; the scheduler fires only
+        // after the first interval elapses — this is intentional.
+        AutoUpdater.scheduleBackgroundCheck(state: runnerState)
+        log("AppDelegate › startup — update background scheduler registered (interval=\(AutoUpdaterDefaults.checkInterval)s)")
     }
 }
