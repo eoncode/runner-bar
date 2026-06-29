@@ -251,52 +251,11 @@ extension AppDelegate: NSPopoverDelegate {
         log("AppDelegate › setupSubscriptions — RunnerPoller created with injected stores")
 
         // FIX: Await LocalRunnerStore.refreshAsync() before starting the poll loop.
-        //
-        // refresh() (fire-and-forget) spawns a Task and returns immediately.
-        // start() fires fetch() on the very next runloop turn — before refresh()'s
-        // Task has a chance to run, because both are @MainActor and start() is called
-        // synchronously. Result: localRunners=[] on cycle 1, installPathMap empty,
-        // metrics missing on first runner appearance.
-        //
-        // refreshAsync() suspends until disk hydration + launchctl + GitHub enrichment
-        // completes, then start() fires. Cycle 1 always has a populated installPathMap
-        // so runner rows appear with CPU/MEM already set.
-        //
-        // Task name (Reach Goal 6): surfaces this structurally significant startup
-        // sequence by name in Instruments and crash logs.
-        // Priority .userInitiated: this is a direct response to app launch — the user
-        // is actively waiting for runners to appear.
+        // See performStartupSequence() for rationale.
         log("AppDelegate › setupSubscriptions — scheduling async startup sequence")
         Task(name: "AppDelegate.startup: localRunnerStore.refreshAsync → runnerStore.start",
              priority: .userInitiated) { [weak self] in
-            guard let self else { return }
-            log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
-            await self.localRunnerStore.refreshAsync()
-            log("AppDelegate › startup — refreshAsync() complete, starting runnerStore poll loop")
-            // `runnerStore` is `(any RunnerPollerProtocol)?`.
-            // This guard is structurally unreachable in normal execution: runnerStore is
-            // assigned unconditionally just before this Task is spawned, and nothing
-            // currently nils it out. It exists to make the condition observable if that
-            // ever changes — the app would otherwise appear to start but silently never
-            // poll. The assertionFailure in DEBUG makes the severity match the consequence.
-            guard let store = self.runnerStore else {
-                log("AppDelegate › startup — ⚠️ runnerStore is nil after refreshAsync(); poll loop NOT started")
-                #if DEBUG
-                assertionFailure("AppDelegate.startup: runnerStore is nil after refreshAsync() — this is structurally unreachable; a future change must have introduced an unintended nil path")
-                #endif
-                return
-            }
-            await store.start()
-            log("AppDelegate › startup — runnerStore poll loop started")
-
-            // ── Update check ───────────────────────────────────────────────────────────────
-            let beta = AppPreferencesStore.shared.betaChannel
-            if let newVersion = await UpdateChecker.checkForUpdate(betaChannel: beta) {
-                self.runnerState.availableUpdate = newVersion
-                log("AppDelegate › startup — update available: \(newVersion) (betaChannel=\(beta))")
-            } else {
-                log("AppDelegate › startup — no update available (betaChannel=\(beta))")
-            }
+            await self?.performStartupSequence()
         }
 
         // Scope changes (add / remove / enable toggle) restart RunnerPoller so it polls
@@ -304,5 +263,51 @@ extension AppDelegate: NSPopoverDelegate {
         // ScopeStore.activeScopes internally via withObservationTracking/AsyncStream,
         // so no Combine sink is needed here — the actor's own observer handles it.
         log("AppDelegate › setupSubscriptions — complete")
+    }
+
+    /// Runs the ordered async startup sequence: hydrate local runners, then start
+    /// the poll loop, then perform an update check.
+    ///
+    /// Extracted from `setupSubscriptions` to keep that method's cyclomatic complexity
+    /// low and to give this structurally significant sequence a named entry point that
+    /// surfaces in Instruments and crash logs via the parent Task's `name:` label.
+    ///
+    /// **Why `refreshAsync()` before `start()`:**
+    /// `refresh()` (fire-and-forget) spawns a Task and returns immediately.
+    /// `start()` fires `fetch()` on the very next runloop turn — before `refresh()`'s
+    /// Task has a chance to run, because both are `@MainActor` and `start()` is called
+    /// synchronously. Result: `localRunners=[]` on cycle 1, `installPathMap` empty,
+    /// metrics missing on first runner appearance.
+    /// `refreshAsync()` suspends until disk hydration + launchctl + GitHub enrichment
+    /// completes, then `start()` fires. Cycle 1 always has a populated `installPathMap`.
+    private func performStartupSequence() async {
+        log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
+        await localRunnerStore.refreshAsync()
+        log("AppDelegate › startup — refreshAsync() complete, starting runnerStore poll loop")
+
+        // `runnerStore` is `(any RunnerPollerProtocol)?`.
+        // This guard is structurally unreachable in normal execution: runnerStore is
+        // assigned unconditionally just before this Task is spawned, and nothing
+        // currently nils it out. It exists to make the condition observable if that
+        // ever changes — the app would otherwise appear to start but silently never
+        // poll. The assertionFailure in DEBUG makes the severity match the consequence.
+        guard let store = runnerStore else {
+            log("AppDelegate › startup — ⚠️ runnerStore is nil after refreshAsync(); poll loop NOT started")
+            #if DEBUG
+            assertionFailure("AppDelegate.startup: runnerStore is nil after refreshAsync() — this is structurally unreachable; a future change must have introduced an unintended nil path")
+            #endif
+            return
+        }
+        await store.start()
+        log("AppDelegate › startup — runnerStore poll loop started")
+
+        // ── Update check ───────────────────────────────────────────────────────────────
+        let beta = AppPreferencesStore.shared.betaChannel
+        if let newVersion = await UpdateChecker.checkForUpdate(betaChannel: beta) {
+            runnerState.availableUpdate = newVersion
+            log("AppDelegate › startup — update available: \(newVersion) (betaChannel=\(beta))")
+        } else {
+            log("AppDelegate › startup — no update available (betaChannel=\(beta))")
+        }
     }
 }

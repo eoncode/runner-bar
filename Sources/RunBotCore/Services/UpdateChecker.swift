@@ -11,11 +11,10 @@ public enum UpdateChecker {
 
     /// GitHub Releases API endpoint for this repository.
     ///
-    /// Force-unwrap is intentional: the URL string is a compile-time constant
-    /// and cannot be invalid. If it ever fails, a crash at startup is preferable
-    /// to silently skipping all update checks.
-    // swiftlint:disable:next force_unwrap
-    private static let releasesURL = URL(string: "https://api.github.com/repos/runbot-hq/run-bot/releases")!
+    /// Uses the non-optional `URL(_:StaticString)` initialiser (SE-0392,
+    /// Swift 5.9+) — the compiler verifies the literal at build time so
+    /// this can never produce `nil` at runtime.
+    private static let releasesURL = URL("https://api.github.com/repos/runbot-hq/run-bot/releases")
 
     /// A minimal Codable model for a GitHub Release API response object.
     private struct Release: Decodable {
@@ -58,6 +57,30 @@ public enum UpdateChecker {
         }
     }
 
+    /// Builds a `URLRequest` for the releases endpoint with the given page size.
+    ///
+    /// Returns `nil` if `URLComponents` cannot produce a valid URL (should never
+    /// happen in practice given the compile-time-verified base URL).
+    private static func buildRequest(perPage: Int) -> URLRequest? {
+        guard var components = URLComponents(url: releasesURL, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.queryItems = [URLQueryItem(name: "per_page", value: String(perPage))]
+        guard let requestURL = components.url else { return nil }
+        var request = URLRequest(url: requestURL)
+        // GitHub API requires a User-Agent header.
+        request.setValue("RunBot", forHTTPHeaderField: "User-Agent")
+        return request
+    }
+
+    /// Fetches and decodes the releases list, then returns the first release
+    /// matching `betaChannel` filter, or `nil` on failure.
+    private static func latestMatchingRelease(betaChannel: Bool) async -> Release? {
+        guard let request = buildRequest(perPage: 20) else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        guard let releases = try? JSONDecoder().decode([Release].self, from: data) else { return nil }
+        return releases.first(where: { betaChannel ? true : !$0.prerelease })
+    }
+
     /// Checks for an available update.
     ///
     /// - Parameter betaChannel: When `true`, considers pre-release builds.
@@ -67,45 +90,20 @@ public enum UpdateChecker {
     ///   if the check fails (network error, decode error, etc.).
     public static func checkForUpdate(betaChannel: Bool) async -> String? {
         guard let current = Bundle.main
-            .infoDictionary?["CFBundleShortVersionString"] as? String else {
-            return nil
-        }
+            .infoDictionary?["CFBundleShortVersionString"] as? String else { return nil }
+        guard let latest = await latestMatchingRelease(betaChannel: betaChannel) else { return nil }
 
-        do {
-            guard var components = URLComponents(url: releasesURL, resolvingAgainstBaseURL: false)
-            else { return nil }
-            components.queryItems = [URLQueryItem(name: "per_page", value: "20")]
-            guard let requestURL = components.url else { return nil }
-            var request = URLRequest(url: requestURL)
-            // GitHub API requires a User-Agent header.
-            request.setValue("RunBot", forHTTPHeaderField: "User-Agent")
+        let latestVersion = latest.tagName.trimmingCharacters(in: .init(charactersIn: "v"))
+        let currentVersion = current.trimmingCharacters(in: .whitespaces)
 
-            let (data, _) = try await URLSession.shared.data(for: request)
-            let releases = try JSONDecoder().decode([Release].self, from: data)
-
-            // Pick the first release that matches the channel filter.
-            // Releases are returned newest-first by the GitHub API.
-            guard let latest = releases.first(where: { betaChannel ? true : !$0.prerelease })
-            else { return nil }
-
-            let latestVersion = latest.tagName.trimmingCharacters(in: .init(charactersIn: "v"))
-            let currentVersion = current
-                .trimmingCharacters(in: .whitespaces)
-                .trimmingCharacters(in: .init(charactersIn: "v"))
-
-            // NOTE: Component-wise semver comparison.
-            // Lexicographic string comparison fails once any component reaches
-            // two digits (e.g. "1.10.0" < "1.9.0" lexicographically).
-            // The rollover-at-10 rule prevents this in practice, but a proper
-            // numeric compare is used here for safety.
-            // Beta tags ("0.7.1-beta.2") are handled by splitting on "-" first:
-            // the stable version "0.7.1" is always considered newer than "0.7.1-beta.N".
-            return isNewer(latestVersion, than: currentVersion) ? latest.tagName : nil
-        } catch {
-            // Network failures and decode errors are silently swallowed —
-            // update checks are best-effort and must never crash the app.
-            return nil
-        }
+        // NOTE: Component-wise semver comparison.
+        // Lexicographic string comparison fails once any component reaches
+        // two digits (e.g. "1.10.0" < "1.9.0" lexicographically).
+        // The rollover-at-10 rule prevents this in practice, but a proper
+        // numeric compare is used here for safety.
+        // Beta tags ("0.7.1-beta.2") are handled by splitting on "-" first:
+        // the stable version "0.7.1" is always considered newer than "0.7.1-beta.N".
+        return isNewer(latestVersion, than: currentVersion) ? latest.tagName : nil
     }
 
     /// Returns `true` if `candidate` is a strictly newer semver than `current`.
