@@ -223,7 +223,7 @@ internal extension SettingsView {
     }
 
     // MARK: - About
-    /// App version, build number, and links to changelog / support.
+    /// App version, build number, and update available banner (when a newer release exists).
     var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("About").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -233,6 +233,36 @@ internal extension SettingsView {
                 Text("\(appVersion) (\(appBuild))").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
+            if runnerState.availableUpdate != nil {
+                Divider().padding(.leading, RBSpacing.md)
+                updateBannerRow
+            }
+        }
+    }
+
+    // MARK: - Update available banner
+    /// Shown in the About section when `runnerState.availableUpdate` is non-nil.
+    @ViewBuilder
+    var updateBannerRow: some View {
+        if let update = runnerState.availableUpdate {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Update available: \(update)")
+                        .font(.system(size: 12))
+                    Text("Download the latest release from GitHub.")
+                        .font(.caption2).foregroundColor(Color.rbTextSecondary)
+                }
+                Spacer()
+                Link("Download", destination: URL(
+                    string: "https://github.com/runbot-hq/run-bot/releases/latest"
+                )!)
+                .font(.system(size: 12))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
         }
     }
 }
