@@ -47,8 +47,11 @@ echo "✓ Done — dist/RunBot.zip is ready"
 # Always use `open dist/RunBot.app` for development — this script does it
 # automatically. The pkill ensures a clean restart without a stale process.
 # ────────────────────────────────────────────────────────────────────────────
-echo "→ Restarting app via open (registers runbot:// URL scheme)..."
-pkill -x RunBot 2>/dev/null || true
-sleep 0.5
-open "$OUT_DIR/$APP_NAME.app"
-echo "✓ RunBot launched"
+# Only kill/relaunch the running app when building locally, not in CI.
+if [[ -z "${CI:-}" ]]; then
+    echo "→ Restarting app via open (registers runbot:// URL scheme)..."
+    pkill -x RunBot 2>/dev/null || true
+    sleep 0.5
+    open "$OUT_DIR/$APP_NAME.app"
+    echo "✓ RunBot launched"
+fi
