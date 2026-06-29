@@ -172,8 +172,8 @@ struct ScopeEditSheetTests {
   func confirmSaveTargetsCorrectScope() async {
     let fake = FakeScopePreferencesStore()
     let prefs = ScopePreferences(alias: "My Repo")
-    await confirmSave(scope: "eoncode/run-bot", updated: prefs, into: fake)
-    #expect(await fake.writeLog.first?.scope == "eoncode/run-bot")
+    await confirmSave(scope: "runbot-hq/run-bot", updated: prefs, into: fake)
+    #expect(await fake.writeLog.first?.scope == "runbot-hq/run-bot")
   }
 
   /// Verifies that a single `confirmSave` call persists every field of `ScopePreferences` atomically in one write.

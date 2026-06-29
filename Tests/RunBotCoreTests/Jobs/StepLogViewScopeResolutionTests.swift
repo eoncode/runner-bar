@@ -30,7 +30,7 @@ struct StepLogViewScopeResolutionTests {
   @Test("extracts owner/repo from a well-formed GitHub job URL")
   func extractsOwnerRepoFromWellFormedURL() {
     let url = "https://github.com/runbot-hq/run-bot/actions/runs/12345/job/67890"
-    #expect(repoScopeForFetch(htmlUrl: url) == "eoncode/run-bot")
+    #expect(repoScopeForFetch(htmlUrl: url) == "runbot-hq/run-bot")
   }
 
   /// Verifies that a minimal URL containing only scheme, host, owner, and repo (no trailing path) still resolves correctly.
