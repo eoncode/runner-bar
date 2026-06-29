@@ -41,7 +41,7 @@
 /// See the block comment above for why committing these is safe and intentional.
 public enum OAuthSecrets {
     /// Public client identifier for the registered GitHub OAuth app.
-    public static let clientID = "Ov23linOj2gogHg7LdFd"
+    public static let clientID = "Ov23linOj2gogHg7LdFd" // skipcq: SCT-A000
     /// Client secret bundled with the native app as documented above.
-    public static let clientSecret = "ddacc9a959a60584b01f2830827dcf55a8fb4659"
+    public static let clientSecret = "ddacc9a959a60584b01f2830827dcf55a8fb4659" // skipcq: SCT-A000
 }
