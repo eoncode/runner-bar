@@ -99,7 +99,7 @@ extension WorkflowActionGroup {
         return first.runnerName?.lowercased().contains("self-hosted") == true
     }
 
-    /// The short repo name (without owner prefix), e.g. `"run-bot"` from `"eoncode/run-bot"`.
+    /// The short repo name (without owner prefix), e.g. `"run-bot"` from `"runbot-hq/run-bot"`.
     /// Falls back to the full `repo` string when no slash is present.
     var repoShortName: String {
         repo.components(separatedBy: "/").last ?? repo
