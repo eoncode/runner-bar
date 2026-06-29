@@ -72,4 +72,18 @@ public enum AnyJSON: Codable, Equatable {
         case .null: try container.encodeNil()
         }
     }
+
+    /// Returns `true` when two `AnyJSON` values are equal.
+    public static func == (lhs: AnyJSON, rhs: AnyJSON) -> Bool {
+        switch (lhs, rhs) {
+        case (.object(let l), .object(let r)): return l == r
+        case (.array(let l), .array(let r)): return l == r
+        case (.string(let l), .string(let r)): return l == r
+        case (.number(let l), .number(let r)): return l == r
+        case (.int(let l), .int(let r)): return l == r
+        case (.bool(let l), .bool(let r)): return l == r
+        case (.null, .null): return true
+        default: return false
+        }
+    }
 }

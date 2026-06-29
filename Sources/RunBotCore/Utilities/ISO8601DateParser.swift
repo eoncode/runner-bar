@@ -21,6 +21,9 @@ public actor ISO8601DateParser {
     /// The module-wide shared instance. Use this from all call sites.
     public static let shared = ISO8601DateParser()
 
+    /// Initialises the actor and allocates the underlying `ISO8601DateFormatter`.
+    private init() {}
+
     /// Parses an ISO-8601 date string. Returns `nil` on failure.
     public func parse(_ str: String) -> Date? {
         iso.date(from: str)

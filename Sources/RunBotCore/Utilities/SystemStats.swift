@@ -52,4 +52,13 @@ public struct SystemStats: Sendable {
     public static let zero = SystemStats(
         cpuPct: 0, memUsedGB: 0, memTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0
     )
+
+    /// Returns `true` when two snapshots contain identical metric values.
+    public static func == (lhs: SystemStats, rhs: SystemStats) -> Bool {
+        lhs.cpuPct == rhs.cpuPct
+            && lhs.memUsedGB == rhs.memUsedGB
+            && lhs.memTotalGB == rhs.memTotalGB
+            && lhs.diskUsedGB == rhs.diskUsedGB
+            && lhs.diskTotalGB == rhs.diskTotalGB
+    }
 }
