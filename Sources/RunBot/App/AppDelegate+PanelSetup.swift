@@ -254,7 +254,7 @@ extension AppDelegate: NSPopoverDelegate {
         // See performStartupSequence() for rationale.
         log("AppDelegate › setupSubscriptions — scheduling async startup sequence")
         Task(name: "AppDelegate.startup: localRunnerStore.refreshAsync → runnerStore.start",
-             priority: .userInitiated) { [weak self] in
+             priority: .userInitiated) { @MainActor [weak self] in
             await self?.performStartupSequence()
         }
 

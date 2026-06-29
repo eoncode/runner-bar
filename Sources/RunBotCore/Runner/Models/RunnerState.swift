@@ -71,14 +71,12 @@ public final class RunnerState {
     ///
     /// **Read-only for all callers.** Write via `setAvailableUpdate(_:)` below.
     ///
-    /// **Why `public var` and not `public internal(set) var`:**
-    /// The startup Task that writes this property lives in the `RunBot` module (app layer),
-    /// which is a *different* module from `RunBotCore` where `RunnerState` is defined.
-    /// `internal(set)` restricts the setter to the *defining* module (`RunBotCore`) only —
-    /// it would make this property read-only from `RunBot`, causing a compile error at the
-    /// only write site. `public var` is the correct and only option here.
-    /// The dedicated `setAvailableUpdate(_:)` method below acts as the single authorised
-    /// write site and makes accidental mutation visible in code review.
+    /// **Why `public private(set)` with a dedicated setter method:**
+    /// `private(set)` restricts the synthesised setter to `RunnerState` itself — direct
+    /// assignment from outside the type (including from the `RunBot` app module) is a
+    /// compile error. Cross-module mutation is intentionally funnelled through the
+    /// `public func setAvailableUpdate(_:)` method below, which is the single authorised
+    /// write site and keeps ad-hoc mutation visible in code review.
     public private(set) var availableUpdate: String?
 
     /// Sets `availableUpdate`. Called exactly once, from the startup Task in

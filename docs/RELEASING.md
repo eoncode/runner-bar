@@ -35,6 +35,12 @@ zipping, and creating the GitHub Release — is handled by CI automatically.
    - Creates an annotated git tag and pushes it.
    - Creates the GitHub Release with the zip attached.
 
+   > **Dry-run via `workflow_dispatch`:** When triggering manually from the
+   > Actions UI, select the **`beta`** or **`release`** branch in the branch
+   > selector to simulate the correct channel. Triggering from `main` always
+   > exercises the stable path regardless of channel intent — it is useful
+   > only as a build smoke-test, not a full beta simulation.
+
 ---
 
 ## Channels
@@ -54,6 +60,10 @@ always force-pushed by `publish.sh`.
 
 - **Source of truth:** `Resources/Info.plist`
   - `CFBundleShortVersionString` — the human-visible version (`X.Y.Z`).
+  - `RBVersionString` — the full semver including pre-release suffix
+    (e.g. `0.7.0-beta.2`). This is the key `UpdateChecker` reads at runtime
+    for version comparison; it carries the beta suffix that
+    `CFBundleShortVersionString` omits.
   - `CFBundleVersion` — monotonically increasing build number (git commit
     count); used by Gatekeeper ordering.
 - **You never set the version manually.** CI computes it from the latest
