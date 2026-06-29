@@ -2,7 +2,7 @@
 
 **Category:** macOS developer tooling · GitHub Actions / self-hosted runners · AI-augmented dev workflow
 **Date:** 2026-06-02
-**Subject repo:** [eoncode/run-bot](https://github.com/eoncode/run-bot) — "GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar." (Swift 6.2, macOS 26+, Liquid Glass)
+**Subject repo:** [eoncode/run-bot](https://github.com/runbot-hq/run-bot) — "GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar." (Swift 6.2, macOS 26+, Liquid Glass)
 **Focus areas:** Brand identity · Visual design
 
 ---
@@ -179,7 +179,7 @@ RunBot uniquely sits in *all three*. No competitor in the data does. That inters
 
 - **Logo wall above the fold** (sometimes *immediately* after CTA, no subhead — Cursor).
 - **OS-detecting "Download for macOS" CTA** is now table stakes for Mac-native tools.
-- **Copy-the-install-command** as primary or secondary CTA for CLI-installable products (Warp, Blacksmith). RunBot already has this — `curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash` — and it's underused.
+- **Copy-the-install-command** as primary or secondary CTA for CLI-installable products (Warp, Blacksmith). RunBot already has this — `curl -fsSL https://runbot-hq.github.io/run-bot/install.sh | bash` — and it's underused.
 - **Named testimonials > anonymous quotes.** Headshots of recognizable engineers carry more weight than star counts.
 
 ---
@@ -223,7 +223,7 @@ RunBot uniquely sits in *all three*. No competitor in the data does. That inters
 
 ## 5 · Visual direction recommendations for RunBot
 
-RunBot's existing signals from the [README](https://github.com/eoncode/run-bot): macOS 26+, Apple Silicon, Liquid Glass UI, Apple system blue (`#0A84FF`), Swift orange (`#F05138`). These are strong anchors — don't fight them.
+RunBot's existing signals from the [README](https://github.com/runbot-hq/run-bot): macOS 26+, Apple Silicon, Liquid Glass UI, Apple system blue (`#0A84FF`), Swift orange (`#F05138`). These are strong anchors — don't fight them.
 
 ### 5.1 Direction A · "Native premium" (recommended)
 *Closest cousins: Raycast, CleanShot X, Linear*
@@ -256,7 +256,7 @@ RunBot's existing signals from the [README](https://github.com/eoncode/run-bot):
 1. **Pick a direction (A or B).** Direction A is the safer, higher-trust play for a macOS menu bar utility; B is louder and better if positioning RunBot as an opinionated GitHub-Actions challenger.
 2. **Buy a one-page site.** Hero (Liquid Glass popover or YAML diff) → 3 numbered feature blocks → install command CTA → "what it replaces" comparison → footer with GitHub link.
 3. **Design the menu bar icon as the logo.** A single monochrome SF Symbol-style mark + "RunBot" wordmark is the only logo you need. Look at Raycast's symbol+wordmark proportions as the template.
-4. **Make the install command the hero CTA.** `curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash` with a copy-button is more credible to this audience than a "Download" button.
+4. **Make the install command the hero CTA.** `curl -fsSL https://runbot-hq.github.io/run-bot/install.sh | bash` with a copy-button is more credible to this audience than a "Download" button.
 5. **Replace the README screenshot (`scrnsht.png`) with a hero-quality render.** A Liquid Glass popover floating over a desaturated macOS desktop is the single highest-leverage asset.
 6. **Pull a "Wall of Love."** Even 3–5 named testimonials from macOS / Swift / DevOps voices beats stars on a GitHub badge in marketing contexts.
 
@@ -264,7 +264,7 @@ RunBot's existing signals from the [README](https://github.com/eoncode/run-bot):
 
 ## Sources
 
-- [eoncode/run-bot](https://github.com/eoncode/run-bot) — RunBot repository and README (via GitHub CLI)
+- [eoncode/run-bot](https://github.com/runbot-hq/run-bot) — RunBot repository and README (via GitHub CLI)
 - [Raycast](https://www.raycast.com)
 - [Warp](https://www.warp.dev)
 - [Linear](https://linear.app)

@@ -14,11 +14,11 @@
 
 **CI Checks**
 
-![UI Tests](https://github.com/eoncode/run-bot/actions/workflows/ui-tests.yml/badge.svg)
-![Unit Tests](https://github.com/eoncode/run-bot/actions/workflows/swift-test.yml/badge.svg)
-![SwiftLint](https://github.com/eoncode/run-bot/actions/workflows/swiftlint.yml/badge.svg)
-![Periphery](https://github.com/eoncode/run-bot/actions/workflows/periphery.yml/badge.svg)
-[![CodeQL](https://github.com/eoncode/run-bot/actions/workflows/codeql.yml/badge.svg)](https://github.com/eoncode/run-bot/actions/workflows/codeql.yml)
+![UI Tests](https://github.com/runbot-hq/run-bot/actions/workflows/ui-tests.yml/badge.svg)
+![Unit Tests](https://github.com/runbot-hq/run-bot/actions/workflows/swift-test.yml/badge.svg)
+![SwiftLint](https://github.com/runbot-hq/run-bot/actions/workflows/swiftlint.yml/badge.svg)
+![Periphery](https://github.com/runbot-hq/run-bot/actions/workflows/periphery.yml/badge.svg)
+[![CodeQL](https://github.com/runbot-hq/run-bot/actions/workflows/codeql.yml/badge.svg)](https://github.com/runbot-hq/run-bot/actions/workflows/codeql.yml)
 
 **AI Reviewers**
 
@@ -67,7 +67,7 @@
 ## Install
 
 ```bash
-curl -fsSL https://eoncode.github.io/run-bot/install.sh | bash
+curl -fsSL https://runbot-hq.github.io/run-bot/install.sh | bash
 ```
 
 ---

@@ -29,7 +29,7 @@ struct StepLogViewScopeResolutionTests {
   /// Verifies that a full GitHub Actions job URL correctly yields `"owner/repo"` as the scope string.
   @Test("extracts owner/repo from a well-formed GitHub job URL")
   func extractsOwnerRepoFromWellFormedURL() {
-    let url = "https://github.com/eoncode/run-bot/actions/runs/12345/job/67890"
+    let url = "https://github.com/runbot-hq/run-bot/actions/runs/12345/job/67890"
     #expect(repoScopeForFetch(htmlUrl: url) == "eoncode/run-bot")
   }
 
@@ -80,7 +80,7 @@ struct StepLogViewScopeResolutionTests {
   @Test("returns empty string when repo component is empty")
   func returnsEmptyWhenRepoIsEmpty() {
     // malformed: double slash produces an empty repo component
-    let url = "https://github.com/eoncode//actions/runs/1"
+    let url = "https://github.com/runbot-hq//actions/runs/1"
     #expect(repoScopeForFetch(htmlUrl: url) == "")
   }
 

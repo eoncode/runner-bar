@@ -25,7 +25,7 @@ When AppKit calls `window.beginSheet(sheet)` it:
    removed or invalidated by AppKit as a side-effect.
 
 This is documented nowhere publicly, but is confirmed by multiple developer reports:
-- https://github.com/eoncode/run-bot/issues/1017
+- https://github.com/runbot-hq/run-bot/issues/1017
 - https://stackoverflow.com/questions/62995489 (clear bg + borderless doesn't survive sheet)
 - Electron issue #9159 (same root cause in a different runtime)
 
