@@ -67,7 +67,9 @@ public final class RunnerState {
     public var isLocalScanning: Bool = false
 
     /// The latest available version string if a newer version exists, or `nil` if
-    /// up to date. Set once on launch by the startup Task in `AppDelegate+PanelSetup`.
+    /// up to date.
+    ///
+    /// **Read-only for all callers.** Write via `setAvailableUpdate(_:)` below.
     ///
     /// **Why `public var` and not `public internal(set) var`:**
     /// The startup Task that writes this property lives in the `RunBot` module (app layer),
@@ -75,8 +77,18 @@ public final class RunnerState {
     /// `internal(set)` restricts the setter to the *defining* module (`RunBotCore`) only —
     /// it would make this property read-only from `RunBot`, causing a compile error at the
     /// only write site. `public var` is the correct and only option here.
-    /// This is not an invitation for external mutation — only the startup Task writes it.
-    public var availableUpdate: String?
+    /// The dedicated `setAvailableUpdate(_:)` method below acts as the single authorised
+    /// write site and makes accidental mutation visible in code review.
+    public private(set) var availableUpdate: String?
+
+    /// Sets `availableUpdate`. Called exactly once, from the startup Task in
+    /// `AppDelegate+PanelSetup`, after `UpdateChecker.checkForUpdate` resolves.
+    ///
+    /// Using an explicit method (rather than direct property assignment) makes the
+    /// single authorised write site obvious and prevents ad-hoc mutation elsewhere.
+    public func setAvailableUpdate(_ version: String?) {
+        availableUpdate = version
+    }
 
     /// The overall connectivity state of the runner fleet, derived from `runners`.
     /// Observed by `AppDelegate`'s `statusIconLoop` via `ObservationLoop`.

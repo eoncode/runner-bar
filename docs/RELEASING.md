@@ -61,9 +61,13 @@ always force-pushed by `publish.sh`.
 - **Rollover:** PATCH rolls over from 9 → 0 and MINOR increments; MINOR
   rolls over from 9 → 0 and MAJOR increments. This keeps all components
   single-digit by convention.
-- **Beta sequence:** multiple betas for the same base share the same
-  `vX.Y.Z` base and increment only the `beta.N` suffix
-  (e.g. `v0.7.1-beta.1`, `v0.7.1-beta.2`, …).
+- **Beta sequence:** multiple betas for the same base share the **current
+  stable** `vX.Y.Z` base and increment only the `beta.N` suffix
+  (e.g. `v0.7.0-beta.1`, `v0.7.0-beta.2`, …). The base is *not*
+  pre-incremented to `vX.Y.(Z+1)` — betas sit on the same base as the
+  current stable so that the stable release simply bumps PATCH when it
+  ships, giving the correct ordering:
+  `v0.7.0-beta.1` → `v0.7.0-beta.2` → `v0.7.1` (stable).
 - **Promoting to stable:** run `./publish.sh` — CI bumps PATCH from the
   latest stable tag and creates `vX.Y.(Z+1)` regardless of how many betas
   preceded it.

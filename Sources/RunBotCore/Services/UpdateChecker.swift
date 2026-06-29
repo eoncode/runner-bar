@@ -14,11 +14,14 @@ public enum UpdateChecker {
 
     /// The GitHub Releases API URL string for this repository.
     ///
-    /// Kept as a plain `String` constant so there is no dependency on a
-    /// particular `URL` initialiser overload. `buildRequest(perPage:)` converts
-    /// it to a `URL` via `URL(string:)` and returns `nil` on failure, so a
-    /// typo here degrades gracefully (update check silently no-ops) rather
+    /// Kept as a plain `String` constant (not a `URL` literal) so there is no
+    /// dependency on a particular `URL` initialiser overload. `buildRequest(perPage:)`
+    /// converts it to a `URL` via `URL(string:)` and returns `nil` on failure,
+    /// so a typo here degrades gracefully (update check silently no-ops) rather
     /// than crashing at startup.
+    ///
+    /// Centralised here so that the URL appears in exactly one place — grep
+    /// for `releasesURLString` to find every usage.
     private static let releasesURLString =
         "https://api.github.com/repos/runbot-hq/run-bot/releases"
 
@@ -99,15 +102,34 @@ public enum UpdateChecker {
         // Without this the API still responds correctly today, but the content type
         // is not guaranteed to remain stable across API versions.
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        // Pins the GitHub REST API to the 2022-11-28 version.
+        // Without this header the API responds correctly today, but GitHub
+        // reserves the right to change the default API version. Pinning
+        // ensures the response shape (including `tag_name` and `prerelease`
+        // fields) remains stable even if GitHub later changes its default.
+        // See: https://docs.github.com/en/rest/about-the-rest-api/api-versions
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         return request
     }
 
     /// Fetches and decodes the releases list, then returns the first release
-    /// matching `betaChannel` filter, or `nil` on failure.
+    /// matching the `betaChannel` filter, or `nil` on any failure.
+    ///
+    /// The GitHub Releases API returns releases sorted by **published date**
+    /// (newest first), not by semver. In normal operation this is equivalent
+    /// because releases are published in version order. If a release is
+    /// ever published out of order (e.g. a hotfix to an older branch),
+    /// `.first(where:)` may return the wrong result. A future improvement
+    /// would sort the array by semver before filtering. For now, the
+    /// published-date ordering is relied upon and documented here so the
+    /// assumption is explicit.
     private static func latestMatchingRelease(betaChannel: Bool) async -> Release? {
         guard let request = buildRequest(perPage: 20) else { return nil }
         guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
         guard let releases = try? JSONDecoder().decode([Release].self, from: data) else { return nil }
+        // Releases are in published-date order (newest first) per the API.
+        // betaChannel=true: accept any release (stable or pre-release).
+        // betaChannel=false: skip pre-releases, take the first stable one.
         return releases.first(where: { betaChannel ? true : !$0.prerelease })
     }
 
@@ -119,8 +141,14 @@ public enum UpdateChecker {
     ///   if a newer version is available, or `nil` if already up to date or
     ///   if the check fails (network error, decode error, etc.).
     public static func checkForUpdate(betaChannel: Bool) async -> String? {
+        // Read RBVersionString (not CFBundleShortVersionString) because macOS strips
+        // pre-release suffixes from CFBundleShortVersionString for display purposes.
+        // A user running "0.7.1-beta.1" would appear as "0.7.1" via the standard key,
+        // causing the beta-to-beta comparison to silently return false and suppress
+        // the update prompt. RBVersionString is patched by publish.yml with the full
+        // version string (e.g. "0.7.1-beta.2") via PlistBuddy at build time.
         guard let current = Bundle.main
-            .infoDictionary?["CFBundleShortVersionString"] as? String else { return nil }
+            .infoDictionary?["RBVersionString"] as? String else { return nil }
         guard let latest = await latestMatchingRelease(betaChannel: betaChannel) else { return nil }
 
         let latestVersion = latest.tagName.trimmingCharacters(in: .init(charactersIn: "v"))

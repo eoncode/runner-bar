@@ -88,8 +88,15 @@ jobs:
             | sort -V | tail -1 || true)
 
           if [[ -z "$LATEST_STABLE" ]]; then
+            # ⚠️  SEED VERSION — only reached on a pristine repo with no stable
+            # tags (e.g. first-ever run or after manually deleting all tags).
+            # If you see this message in CI output on an established repo,
+            # something has gone wrong with tag fetching — stop and investigate
+            # before the release proceeds, as the wrong base version will be
+            # embedded in the artifact and pushed to gh-pages.
             LATEST_STABLE="v0.7.0"
-            echo "No stable tags found, using seed: $LATEST_STABLE"
+            echo "⚠️  WARNING: No stable tags found — using seed version ${LATEST_STABLE}." >&2
+            echo "⚠️  If this is not a first-run on a fresh repo, tag fetching may have failed." >&2
           fi
 
           # Strip leading v
@@ -146,7 +153,14 @@ jobs:
           echo "Tag $TAG is available."
 
       # ── Patch Info.plist ───────────────────────────────────────────────────
-      # CFBundleShortVersionString  ← computed version (e.g. 0.7.1)
+      # CFBundleShortVersionString  ← X.Y.Z only (macOS strips pre-release
+      #                               suffixes here for display; used by
+      #                               Gatekeeper and the App Store but NOT
+      #                               by UpdateChecker).
+      # RBVersionString             ← full semver incl. pre-release suffix
+      #                               (e.g. "0.7.1-beta.2"); read by
+      #                               UpdateChecker.checkForUpdate so that
+      #                               beta-to-beta comparisons work correctly.
       # CFBundleVersion             ← monotonically incrementing build number
       #                               derived from total git commit count
       - name: Patch Info.plist
@@ -161,10 +175,13 @@ jobs:
             "Set :CFBundleShortVersionString ${SHORT_VERSION}" \
             Resources/Info.plist
           /usr/libexec/PlistBuddy -c \
+            "Set :RBVersionString ${VERSION}" \
+            Resources/Info.plist
+          /usr/libexec/PlistBuddy -c \
             "Set :CFBundleVersion ${BUILD}" \
             Resources/Info.plist
 
-          echo "Patched Info.plist: version=${SHORT_VERSION} build=${BUILD}"
+          echo "Patched Info.plist: shortVersion=${SHORT_VERSION} fullVersion=${VERSION} build=${BUILD}"
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Build

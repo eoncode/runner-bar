@@ -304,7 +304,7 @@ extension AppDelegate: NSPopoverDelegate {
         // ── Update check ───────────────────────────────────────────────────────────────
         let beta = AppPreferencesStore.shared.betaChannel
         if let newVersion = await UpdateChecker.checkForUpdate(betaChannel: beta) {
-            runnerState.availableUpdate = newVersion
+            runnerState.setAvailableUpdate(newVersion)
             log("AppDelegate › startup — update available: \(newVersion) (betaChannel=\(beta))")
         } else {
             log("AppDelegate › startup — no update available (betaChannel=\(beta))")
