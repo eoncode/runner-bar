@@ -101,10 +101,8 @@ struct SettingsView: View {
     }
 
     // MARK: - Computed properties
-    /// Short version string from `CFBundleShortVersionString`.
-    var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-    }
+    /// Full version string (preserves pre-release suffixes like `-beta.1`).
+    var appVersion: String { Bundle.main.rbVersionString }
     /// Build number from `CFBundleVersion`.
     var appBuild: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
