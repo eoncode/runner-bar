@@ -1,5 +1,8 @@
+// Bundle+Version.swift
+// RunBotCore
 import Foundation
 
+/// Convenience accessors for the running bundle's version string.
 extension Bundle {
     /// The full version string for this bundle, read from `RBVersionString`.
     ///
@@ -8,7 +11,7 @@ extension Bundle {
     /// `CFBundleShortVersionString`. Falls back to `CFBundleShortVersionString`
     /// when running in development and `RBVersionString` is absent.
     public var rbVersionString: String {
-        if let v = infoDictionary?["RBVersionString"] as? String, !v.isEmpty { return v }
+        if let versionString = infoDictionary?["RBVersionString"] as? String, !versionString.isEmpty { return versionString }
         return infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     }
 

@@ -18,8 +18,11 @@ public struct ReleaseAsset: Decodable, Sendable {
     /// it does not require authentication for public repositories.
     public let browserDownloadURL: URL
 
+    /// Maps JSON keys to Swift property names.
     enum CodingKeys: String, CodingKey {
+        /// Maps to the `name` field in the GitHub API response.
         case name
+        /// Maps to the `browser_download_url` field in the GitHub API response.
         case browserDownloadURL = "browser_download_url"
     }
 }
