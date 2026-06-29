@@ -11,8 +11,9 @@
 #
 # Prerequisites:
 #   - Working tree must be clean (no uncommitted changes or untracked files).
-#   - Must be run from the repo root on the `main` branch (or any branch you
-#     want to release; the force-push routes HEAD, not a hardcoded ref).
+#   - Must be run from the repo root on the `main` branch.
+#     This script intentionally publishes `main` only; the routing branch
+#     (`beta` / `release`) is just a CI trigger target, not the source of truth.
 set -euo pipefail
 
 # ────────────────────────────────────────────────────────────────────
@@ -32,12 +33,19 @@ done
 
 # ────────────────────────────────────────────────────────────────────
 # Dirty-tree guard
-# A dirty working tree means uncommitted changes would be silently excluded
-# from the release build. Abort early and let the user decide what to do.
+# A dirty working tree means uncommitted or untracked changes would be silently
+# excluded from the release build. Abort early and let the user decide what to do.
 # ────────────────────────────────────────────────────────────────────
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "error: working tree is dirty. Commit or stash your changes before publishing." >&2
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "error: working tree is dirty. Commit, stash, or remove all changes before publishing." >&2
     git status --short >&2
+    exit 1
+fi
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    echo "error: publish.sh must be run from 'main' (current: '$CURRENT_BRANCH')." >&2
+    echo "error: switch to main first so the release source is explicit and reproducible." >&2
     exit 1
 fi
 
@@ -50,16 +58,19 @@ else
     BRANCH="release"
 fi
 
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "➜ Publishing from branch '${CURRENT_BRANCH}' → '${BRANCH}'"
 
 # ────────────────────────────────────────────────────────────────────
-# Force-push HEAD to the routing branch
+# Force-push main to the routing branch
 # --force is intentional: these branches are ephemeral CI trigger targets,
 # not long-lived history branches. Every push here is a deliberate "start a
-# new release build from this exact commit".
+# new release build from main at this exact commit".
+#
+# HEAD is guaranteed to be main here because of the branch guard above, but we
+# still push main explicitly to make the source branch obvious in both the code
+# and the git command itself.
 # ────────────────────────────────────────────────────────────────────
-git push --force origin "HEAD:${BRANCH}"
+git push --force origin "main:${BRANCH}"
 
 echo ""
 echo "✅ Pushed to '${BRANCH}'. CI will now tag, build, and publish the release."

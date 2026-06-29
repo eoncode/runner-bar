@@ -138,6 +138,15 @@ public enum UpdateChecker {
         guard let releases = try? JSONDecoder().decode([Release].self, from: data) else { return nil }
         // Sort by semver descending so .first(where:) always picks the highest version,
         // regardless of the order GitHub published the releases.
+        //
+        // isNewer is a strict weak ordering for this project's tag universe:
+        //   - irreflexive: isNewer(a, than: a) == false ✓
+        //   - asymmetric and transitive for all stable and -beta.N tags ✓
+        // Tags with unrecognised pre-release suffixes (e.g. -rc.1) have a nil
+        // betaIndex and are treated as equal to each other; their relative order
+        // is then undefined. This is intentional — only stable and -beta.N tags
+        // are produced by publish.yml. If new suffix formats are introduced, extend
+        // ParsedVersion.betaIndex before extending the tag scheme.
         let sorted = releases.sorted {
             isNewer(
                 $0.tagName.trimmingCharacters(in: .init(charactersIn: "v")),
@@ -163,6 +172,18 @@ public enum UpdateChecker {
         // causing the beta-to-beta comparison to silently return false and suppress
         // the update prompt. RBVersionString is patched by publish.yml with the full
         // version string (e.g. "0.7.1-beta.2") via PlistBuddy at build time.
+        // RBVersionString is set to the development default ("0.7.0") in Info.plist and
+        // patched by publish.yml at CI build time with the full semver including any
+        // pre-release suffix (e.g. "0.7.1-beta.2"). In a local dev build it always
+        // reads the static development default, which is correct: a local build will see
+        // any newer stable or beta release as an available update, but it will never be
+        // erroneously suppressed because the key is always present.
+        //
+        // There is intentionally no fallback to CFBundleShortVersionString: macOS strips
+        // pre-release suffixes from that key, so a device running "0.7.1-beta.1" would
+        // appear as "0.7.1" and isNewer("0.7.1-beta.2", than: "0.7.1") == false, silently
+        // suppressing the beta-to-beta update. RBVersionString is the source of truth.
+        // If this guard returns nil the update check silently no-ops (best-effort).
         guard let current = Bundle.main
             .infoDictionary?["RBVersionString"] as? String else { return nil }
         guard let latest = await latestMatchingRelease(betaChannel: betaChannel) else { return nil }

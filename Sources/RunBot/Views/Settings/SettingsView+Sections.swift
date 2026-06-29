@@ -212,7 +212,7 @@ internal extension SettingsView {
         return HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Beta channel").font(.system(size: 12))
-                Text("Receive pre-release builds for early access to new features.")
+                Text("Receive pre-release builds for early access to new features. Changes take effect on the next launch.")
                     .font(.caption2).foregroundColor(Color.rbTextSecondary)
             }
             Spacer()

@@ -93,7 +93,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          CHANNEL="$GITHUB_REF_NAME"   # "beta" or "release"
+          CHANNEL="$GITHUB_REF_NAME"   # must be "beta" or "release"
+          if [[ "$CHANNEL" != "beta" && "$CHANNEL" != "release" ]]; then
+            echo "error: publish.yml must be triggered from 'beta' or 'release' branch, not '$CHANNEL'" >&2
+            exit 1
+          fi
 
           # Latest stable tag (ignore beta/rc tags)
           LATEST_STABLE=$(git tag --list 'v*' \

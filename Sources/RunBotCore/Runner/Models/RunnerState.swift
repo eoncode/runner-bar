@@ -84,6 +84,13 @@ public final class RunnerState {
     ///
     /// Using an explicit method (rather than direct property assignment) makes the
     /// single authorised write site obvious and prevents ad-hoc mutation elsewhere.
+    ///
+    /// There is intentionally no `@MainActor` on `availableUpdate` itself: the property
+    /// is written here (always called from the main actor in `AppDelegate`) and read by
+    /// `SettingsView` (also on main actor via SwiftUI). Marking the storage `@MainActor`
+    /// would require callers to `await` on a value that is always dispatched from main,
+    /// adding noise without benefit. If a background caller is added in future, annotate
+    /// then and migrate the write site to `await MainActor.run { ... }`.
     public func setAvailableUpdate(_ version: String?) {
         availableUpdate = version
     }
