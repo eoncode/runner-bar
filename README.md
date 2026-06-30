@@ -39,6 +39,16 @@
 [![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
 
+**Activity**
+
+[![Version](https://img.shields.io/github/v/release/runbot-hq/run-bot?label=version)](https://github.com/runbot-hq/run-bot/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/runbot-hq/run-bot/latest/RunBot.zip?label=downloads)](https://github.com/runbot-hq/run-bot/releases)
+[![Latest release](https://img.shields.io/github/release-date/runbot-hq/run-bot?label=latest%20release)](https://github.com/runbot-hq/run-bot/releases/latest)
+[![Open PRs](https://img.shields.io/github/issues-pr/runbot-hq/run-bot)](https://github.com/runbot-hq/run-bot/pulls)
+[![Closed PRs](https://img.shields.io/github/issues-pr-closed/runbot-hq/run-bot)](https://github.com/runbot-hq/run-bot/pulls?q=is%3Apr+is%3Aclosed)
+[![Open Issues](https://img.shields.io/github/issues/runbot-hq/run-bot)](https://github.com/runbot-hq/run-bot/issues)
+[![Closed Issues](https://img.shields.io/github/issues-closed/runbot-hq/run-bot)](https://github.com/runbot-hq/run-bot/issues?q=is%3Aissue+is%3Aclosed)
+
 ---
 
 ## Features
