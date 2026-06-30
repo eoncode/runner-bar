@@ -244,12 +244,20 @@ jobs:
             exit 1
           fi
           echo "Verifying $ZIP"
-          if ! unzip -l "$ZIP" | grep -q 'RunBot.app/Contents/MacOS/RunBot'; then
-            echo "error: RunBot.app/Contents/MacOS/RunBot not found in $ZIP" >&2
+          # The pattern is anchored to the start of the path column so that
+          # a nested archive (e.g. subdir/RunBot.app/…) does NOT pass this
+          # check. `unzip -l` output lines look like:
+          #   <size>  <date> <time>   RunBot.app/Contents/MacOS/RunBot
+          # The path starts after a fixed-width prefix; `grep -E` with `^\s+`
+          # then a literal start-of-path anchor is fragile, so we use a
+          # negative lookahead-free approach: require that nothing other than
+          # whitespace precedes "RunBot.app" on the line.
+          if ! unzip -l "$ZIP" | grep -qE '^\s+[0-9].*\s+RunBot\.app/Contents/MacOS/RunBot$'; then
+            echo "error: RunBot.app/Contents/MacOS/RunBot not found at archive root in $ZIP" >&2
             unzip -l "$ZIP" >&2
             exit 1
           fi
-          echo "Zip verified: RunBot.app/Contents/MacOS/RunBot is present."
+          echo "Zip verified: RunBot.app/Contents/MacOS/RunBot is present at archive root."
           echo "zip_path=$ZIP" >> "$GITHUB_OUTPUT"
         # Note: `id:` intentionally placed after `run:` here. GitHub Actions
         # parses it correctly regardless of position within the step block.

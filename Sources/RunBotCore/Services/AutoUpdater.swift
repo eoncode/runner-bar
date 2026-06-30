@@ -494,12 +494,14 @@ public enum AutoUpdater {
         }
 
         // ── 2. Find RunBot.app inside the unzipped contents ─────────────────
-        // `contentsOfDirectory` is intentionally shallow. publish.yml is
-        // required to place RunBot.app at the archive root (not inside a
-        // subdirectory). If a future publish.yml change wraps the app in a
-        // subdirectory this guard will fire — that is by design: the fix
-        // belongs in publish.yml (enforce root placement), not here (recursive
-        // search would silently accept malformed archives).
+        // `contentsOfDirectory` is intentionally shallow (non-recursive).
+        // The verify step in publish.yml anchors the grep pattern so that
+        // RunBot.app must sit at the archive root — a nested path such as
+        // subdir/RunBot.app/ will fail the CI verify step before a release
+        // is ever published. If the app is absent at the top level of the
+        // unzipped dir this guard fires, which is the correct signal that
+        // the archive is malformed. A recursive search is deliberately
+        // avoided because it would silently accept such malformed archives.
         guard let appInZip = (try? fm.contentsOfDirectory(
             at: tmpDir,
             includingPropertiesForKeys: nil
