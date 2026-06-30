@@ -132,6 +132,7 @@ public enum AutoUpdater {
             // would silently cache a partial or unmodified response as a valid
             // zip — a stricter check is safer here.
             if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                try? FileManager.default.removeItem(at: tempURL)
                 throw URLError(.badServerResponse)
             }
 
