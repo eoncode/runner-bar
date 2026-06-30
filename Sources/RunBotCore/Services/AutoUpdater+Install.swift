@@ -262,6 +262,14 @@ extension AutoUpdater {
         // `open -n` forces a new instance even if one is already running.
         // We do NOT await — NSApp.terminate must fire immediately after.
         //
+        // On a heavily loaded machine there is a theoretical window where the
+        // process exits before launchd has fully registered the new instance.
+        // This is the accepted pattern for macOS self-update (Sparkle uses the
+        // same ordering) and is considered safe in practice. The catch block
+        // below handles the only actionable error case (binary not found or not
+        // executable after the replaceItem swap); the launchd-registration race
+        // is not recoverable and is left to the OS.
+        //
         // Use `resultingNSURL` from `replaceItem` as the authoritative post-swap
         // bundle path, bridged to URL. On same-volume APFS this equals `bundleURL`;
         // on a cross-volume swap macOS may return a different URL. Falls back to
