@@ -319,8 +319,14 @@ extension AppDelegate: NSPopoverDelegate {
            Bundle.main.isOlderThan(version: version) {
             runnerState.rehydrateCachedUpdate(zipURL: URL(fileURLWithPath: path), version: version)
         } else {
-            // Version is no longer newer — new app is already installed (or keys are
-            // stale). Clear both keys here, in the new process, where isOlderThan
+            // Reached when ANY condition in the `if` above is false:
+            //   • cachedPath / cachedVersion is nil (keys were never written or already cleared)
+            //   • fileExists returns false (zip was deleted — e.g. by the OS under storage pressure)
+            //   • isOlderThan returns false (cached version is not newer than what is running —
+            //     i.e. the update was already installed in a previous session)
+            // In all three cases the correct action is the same: clear the stale keys.
+            // Do NOT read this as "version is no longer newer" only — a missing file is
+            // equally valid here. Clear both keys here, in the new process, where isOlderThan
             // correctly returns false. Cleaner than clearing before exit(0) in the
             // outgoing process.
             UserDefaults.standard.removeObject(forKey: AutoUpdaterDefaults.cachedUpdateZipPath)

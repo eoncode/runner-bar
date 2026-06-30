@@ -198,6 +198,13 @@ public enum UpdateChecker {
         /// when major/minor/patch are identical — without this, two betas of the same
         /// base version compare equal and `isNewer` returns `false`, silently
         /// suppressing beta-to-beta update prompts.
+        ///
+        /// - Note: Only the exact `-beta.N` form (where N is an integer) is recognised.
+        ///   Other pre-release suffixes such as `-rc.1`, `-alpha.1`, or `-beta.rc1` will
+        ///   parse as `isPrerelease = true` but `betaIndex = nil`. This is intentional:
+        ///   `publish.yml` exclusively produces `-beta.N` tags, so no other form can
+        ///   appear in the GitHub Releases feed this client reads. If the tag convention
+        ///   ever changes, the `if suffixParts[0] == "beta"` guard below must be updated.
         let betaIndex: Int?
 
         /// Parses a version string of the form `"X.Y.Z"` or `"X.Y.Z-beta.N"`.
