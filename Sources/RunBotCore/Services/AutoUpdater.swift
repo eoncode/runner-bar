@@ -155,6 +155,13 @@ public enum AutoUpdater {
         // names the newer V2 being downloaded — and tapping the button would
         // install V1 instead.
         //
+        // Also clear the persisted defaults here — not only the in-memory
+        // state. If a newer V2 supersedes a cached-but-not-yet-installed V1
+        // and the app is force-quit after the UI is cleared but before V2
+        // finishes downloading, leaving the old V1 path in UserDefaults would
+        // let performStartupSequence rehydrate and offer the superseded V1 on
+        // the next launch. Clearing the defaults up front closes that window.
+        //
         // Clearing both properties forces the UI into its ProgressView
         // (spinner) state while V2 downloads, exactly as intended.
         //
@@ -162,6 +169,7 @@ public enum AutoUpdater {
         // MainActor.run wrapper needed (Pillar 2).
         state.updateZipURL = nil
         state.cachedUpdateVersion = nil
+        clearCachedDefaults()
 
         let downloadURL = asset.browserDownloadURL
         let checksumURL = release.checksumURL
