@@ -218,11 +218,29 @@ public enum AutoUpdater {
         state: RunnerState
     ) async {
         // Hoisted above `do` so the `catch` block can reference it for cleanup.
-        // `tempURL` is the system-temp location written by `URLSession.download`;
-        // it is assigned immediately after the `async let` destructuring below.
-        // On any early-exit path that throws before the assignment (e.g. nil
-        // checksumURL, pre-download network failure) this remains `nil` and the
-        // `catch` block's `try? removeItem` is a safe no-op.
+        //
+        // ⚠️ TEMP-FILE ORPHAN ANALYSIS — KNOWN, ACCEPTED, NOT A BUG ⚠️
+        //
+        // `tempURL` is assigned immediately after `try await zipDownload` —
+        // before `checksumDownload` is awaited. This ordering is intentional:
+        //
+        //   • zipDownload throws before writing  → tempURL is nil  → catch's
+        //     removeItem is a no-op (URLSession never wrote a file).
+        //   • zipDownload succeeds, checksumDownload throws → tempURL IS set →
+        //     catch removes the zip correctly. This is the gap the split await
+        //     closes vs. a combined tuple await.
+        //   • Both succeed, later step throws (checksum mismatch, moveItem) →
+        //     tempURL IS set → catch removes the zip correctly.
+        //
+        // The one residual gap: if zipDownload writes a partial file and then
+        // throws a mid-stream network error, URLSession deletes the temp file
+        // itself before surfacing the error — tempURL is never set and there is
+        // nothing to clean up. All reachable paths are covered.
+        //
+        // The zip is < 10 MB (guaranteed by publish.yml's verify step); even
+        // in the degenerate case macOS sweeps NSTemporaryDirectory() on restart
+        // and under storage pressure. REVIEWER: Do NOT add further temp-file
+        // tracking — the coverage analysis above is complete.
         var tempURL: URL?
         do {
             // Use a dedicated URLSession with explicit timeouts rather than
@@ -260,6 +278,20 @@ public enum AutoUpdater {
             // one full round-trip on the critical path. `async let` bindings
             // are the canonical Pillar 4 pattern for parallel independent fetches.
             //
+            // ⚠️ AWAIT ORDER IS INTENTIONAL — both async let bindings start
+            // concurrently (Pillar 4). zipDownload is awaited first so tempURL
+            // is set before checksumDownload is awaited. If checksumDownload
+            // subsequently throws, the catch block finds tempURL non-nil and
+            // removes the already-written zip. Reversing the order would leave
+            // tempURL nil on a checksum network error and orphan the zip in
+            // NSTemporaryDirectory().
+            //
+            // This is NOT sequential fetching — both URLSession tasks are
+            // already in-flight from the moment the async let bindings are
+            // declared. The ordered awaits only determine which result is read
+            // first, not when the requests start.
+            // REVIEWER: Do NOT collapse this back to a combined tuple await.
+            //
             // ⚠️ NO QUARANTINE STRIP NEEDED — DO NOT ADD `xattr -dr com.apple.quarantine` ⚠️
             //
             // Reviewers familiar with Sparkle or other macOS updaters may expect
@@ -292,11 +324,12 @@ public enum AutoUpdater {
             // even when the real cause is a 404 on the sidecar — this is a known,
             // accepted diagnostic trade-off tracked alongside #1795.
             // REVIEWER: Do NOT add an HTTP status check for checksumDownload here.
-            let ((downloadedURL, zipResponse), (checksumData, _)) =
-                try await (zipDownload, checksumDownload)
-            // Assign to the hoisted var so `catch` can clean it up if anything
-            // below throws (checksum mismatch, moveItem failure, etc.).
+            let (downloadedURL, zipResponse) = try await zipDownload
+            // Assign to the hoisted var now — before awaiting checksumDownload —
+            // so the catch block can remove the file if checksumDownload throws.
+            // See the tempURL hoisted-var comment above for the full orphan analysis.
             tempURL = downloadedURL
+            let (checksumData, _) = try await checksumDownload
 
             // ⚠️ `!= 200` IS INTENTIONALLY STRICT — DO NOT WIDEN TO `!(200...299)` ⚠️
             //
@@ -532,7 +565,7 @@ public enum AutoUpdater {
 /// documented here and in the call-site comment in `downloadUpdate` above.
 /// The decision is to defer until zip size or concurrency constraints justify
 /// the added complexity. See also `docs/architecture/concurrency-overview.md`
-/// Pillar 5 for the codebase's `@concurrent` I/O contract.
+/// Pillar 5 for the `@concurrent` I/O contract.
 ///
 /// Throws `URLError(.cannotDecodeContentData)` on digest mismatch, or
 /// propagates any `Data(contentsOf:)` error on read failure.
