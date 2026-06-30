@@ -59,6 +59,11 @@ jobs:
     # at macos-15 as of mid-2026. Do not change this to a github-hosted label
     # without provisioning the build environment separately.
     runs-on: macos-26
+    # Self-hosted runner outage would otherwise queue this job indefinitely;
+    # GitHub marks stale runs after hours, not minutes. 30 minutes is generous
+    # for a build that normally completes in ~3 minutes, but tight enough to
+    # surface a hung or offline runner the same day rather than the next morning.
+    timeout-minutes: 30
 
     steps:
       # ── Checkout ───────────────────────────────────────────────────────────
