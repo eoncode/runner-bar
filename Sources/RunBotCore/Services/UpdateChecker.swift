@@ -248,7 +248,27 @@ public enum UpdateChecker {
         // REVIEWER: Do NOT add HTTP status inspection or error propagation here.
         // If you need per-status behaviour (e.g. exponential backoff on 403),
         // that is a separate feature tracked under #1794, not a bug in this line.
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        //
+        // Use a dedicated ephemeral session with explicit timeouts rather than
+        // URLSession.shared (which has no timeout configured). This check runs
+        // on the startup path inside performStartupSequence — a stalled connection
+        // (mobile hotspot, corporate proxy, flaky Wi-Fi) would block the await
+        // indefinitely, delaying the background scheduler registration that follows.
+        //
+        // timeoutIntervalForRequest:  15 s — max wait for the first byte; covers
+        //   DNS hangs, TLS stalls, and unresponsive CDN edge nodes. 15 s is
+        //   generous for a lightweight JSON response (< 10 KB).
+        // timeoutIntervalForResource: 30 s — max total fetch time. The releases
+        //   JSON is small; 30 s guarantees eventual failure rather than an
+        //   eternal hang, even on a very slow connection.
+        //
+        // This mirrors the session configuration in downloadUpdate, which documents
+        // the same rationale for the binary download path.
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.timeoutIntervalForRequest  = 15
+        sessionConfig.timeoutIntervalForResource = 30
+        let session = URLSession(configuration: sessionConfig)
+        guard let (data, _) = try? await session.data(for: request) else { return nil }
         guard let releases = try? JSONDecoder().decode([Release].self, from: data) else { return nil }
         // Sort by semver descending so .first(where:) always picks the highest version,
         // regardless of the order GitHub published the releases.
