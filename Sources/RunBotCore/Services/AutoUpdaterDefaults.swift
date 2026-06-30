@@ -33,6 +33,9 @@ public enum AutoUpdaterDefaults {
     /// elapses — this is by design, not an oversight.
     #if DEBUG
     /// 60-second interval used in DEBUG builds. Override in tests for faster QA cycles.
+    /// - Note: Marked `@MainActor` — test overrides must cross the actor boundary using
+    ///   the project's canonical pattern (see `docs/architecture/concurrency-overview.md` Pillar 2):
+    ///   `await MainActor.run { AutoUpdaterDefaults.checkInterval = N }`
     @MainActor public static var checkInterval: TimeInterval = 60
     #else
     /// 24-hour interval used in release builds.
