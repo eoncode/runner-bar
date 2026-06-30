@@ -497,7 +497,22 @@ public enum AutoUpdater {
         let relaunchTask = Process()
         relaunchTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         relaunchTask.arguments = ["-n", bundleURL.path]
-        try? relaunchTask.run()
+        do {
+            try relaunchTask.run()
+        } catch {
+            // `open -n` failed — the new binary could not be launched (e.g.
+            // the bundle path is corrupt or the binary is not executable after
+            // the ditto replace step). Do NOT terminate: the current process is
+            // still running correctly, so we surface the failure and leave the
+            // user with a working app rather than no app at all.
+            log(
+                "AutoUpdater: open -n failed, aborting relaunch: \(error.localizedDescription)",
+                category: .services
+            )
+            isInstalling = false
+            state.updateActionFailed = true
+            return
+        }
 
         NSApp.terminate(nil)
     }
