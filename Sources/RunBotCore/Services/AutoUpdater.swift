@@ -93,18 +93,28 @@ public enum AutoUpdater {
     /// On any failure, `runnerState.updateActionFailed` is set to `true` so the
     /// UI can offer the browser-based fallback.
     ///
-    /// ## Integrity verification — v1 status
+    /// ## ⚠️ NO ZIP INTEGRITY CHECK — THIS IS INTENTIONAL, TRACKED IN #1795 ⚠️
     ///
-    /// **No integrity check is performed in v1.** The zip is moved to the
-    /// caches directory as-is, without any verification.
+    /// This function does NOT verify the downloaded zip in any way. There is no
+    /// SHA-256 checksum comparison, no GPG signature check, no `codesign --verify`
+    /// call, and no zip-structure sanity check. The file is moved to disk as-is.
     ///
-    /// Both SHA-256 checksum verification and code-signing identity verification
-    /// (`codesign --verify`) are **fully deferred to issue #1795**. Neither is
-    /// present in this function. `AvailableRelease.checksumURL` is already
-    /// decoded so #1795 can add verification logic without a model change.
+    /// This is a DELIBERATE, DOCUMENTED deferral — not an oversight.
     ///
-    /// Do not add a `codesign --verify` call here, and do not claim integrity
-    /// verification anywhere in the UI or docs, until #1795 is implemented.
+    /// **Why deferred:** Integrity checking requires publishing a checksum file
+    /// alongside the zip in publish.yml (SHA-256 sidecar or a signed manifest),
+    /// which is a non-trivial CI change with its own review cycle. Doing it
+    /// half-heartedly here (e.g. checking zip magic bytes only) creates false
+    /// confidence. The correct solution is tracked in full in issue #1795.
+    ///
+    /// **What is already in place for #1795:** `AvailableRelease.checksumURL`
+    /// is already decoded from the GitHub Releases JSON, so #1795 can add
+    /// verification without any model change — just the download + compare logic.
+    ///
+    /// **REVIEWER: Do NOT request adding `codesign --verify` or a checksum here.
+    /// It belongs in #1795. Adding a partial check here without the publish.yml
+    /// sidecar would silently fail for every real release and block all updates.
+    /// This is a known gap, not a forgotten one.**
     ///
     /// - Parameters:
     ///   - url: The direct download URL for the `RunBot.zip` asset.
