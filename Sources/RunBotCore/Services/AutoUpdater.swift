@@ -62,6 +62,11 @@ public enum AutoUpdater {
             if FileManager.default.fileExists(atPath: path) {
                 state.updateZipURL = url
                 state.cachedUpdateVersion = cachedVersion
+                // Clear any stale failure flag from a prior session. Without this,
+                // a previous `updateActionFailed = true` would survive into a fresh
+                // launch where the zip is already cached and valid, causing the UI
+                // to show the Download fallback instead of Install & Relaunch.
+                state.updateActionFailed = false
                 return
             }
             // Cached path no longer exists on disk — clear stale defaults and
@@ -489,6 +494,12 @@ public enum AutoUpdater {
         }
 
         // ── 2. Find RunBot.app inside the unzipped contents ─────────────────
+        // `contentsOfDirectory` is intentionally shallow. publish.yml is
+        // required to place RunBot.app at the archive root (not inside a
+        // subdirectory). If a future publish.yml change wraps the app in a
+        // subdirectory this guard will fire — that is by design: the fix
+        // belongs in publish.yml (enforce root placement), not here (recursive
+        // search would silently accept malformed archives).
         guard let appInZip = (try? fm.contentsOfDirectory(
             at: tmpDir,
             includingPropertiesForKeys: nil
@@ -508,6 +519,30 @@ public enum AutoUpdater {
         // bundle that will not launch. `ditto` copies the *contents* of the
         // source over the destination, correctly replacing the bundle in-place
         // and preserving resource forks and symlinks.
+        //
+        // ⚠️ PARTIAL-WRITE RISK — TRACKED IN #1796 ⚠️
+        //
+        // This `ditto` call writes over the live bundle in-place. A SIGKILL
+        // (system low-memory or thermal event) mid-copy leaves the bundle
+        // partially overwritten with no rollback path. The zip and UserDefaults
+        // keys are cleared in step 4, so neither old nor new version would be
+        // recoverable without a manual reinstall.
+        //
+        // The correct fix is FileManager.replaceItem(at:withItemAt:backupItemName:
+        // options:) — an atomic swap that the OS executes as a rename at the
+        // filesystem level, so the running app either sees the old bundle or the
+        // new one. This matches Sparkle's approach and eliminates the partial-
+        // write window entirely.
+        //
+        // Not done here because `replaceItem` requires writing to a staging path
+        // first and handling backup semantics — a small but non-trivial refactor
+        // that deserves its own PR and test coverage. Tracked in #1796.
+        //
+        // In practice the window is narrow (RunBot.zip is < 10 MB and ditto on
+        // a local temp dir is fast), but "narrow" is not "zero" for a live-app
+        // replacement, so this comment exists to document the known gap.
+        //
+        // REVIEWER: Do NOT remove this comment without also filing or closing #1796.
         let replaceResult = await runCommand("/usr/bin/ditto",
                                              args: [appInZip.path, bundleURL.path])
         guard replaceResult else {
