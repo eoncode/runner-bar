@@ -121,6 +121,11 @@ extension AutoUpdater {
                         //      corruption is possible. The check fetch itself is
                         //      intentionally unguarded; only the download path
                         //      requires the isDownloading guard.
+                        // `state` is captured here from within `await MainActor.run { }`,
+                        // so this inner Task inherits @MainActor context — RunnerState's
+                        // isolation is satisfied at the capture site. No Sendable conformance
+                        // is required and Swift 6 strict concurrency emits no warning for
+                        // this pattern.
                         Task { await AutoUpdater.handle(release, state: state) }
                     }
                 }

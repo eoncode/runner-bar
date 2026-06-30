@@ -254,6 +254,16 @@ extension AutoUpdater {
         }
 
         // ── 4. Clear cached defaults so next launch starts clean ────────────────
+        // REVIEWER: The zip is deleted here, BEFORE open -n fires in step 5.
+        // This is safe — not a bug. replaceItem (step 3) is in a do/catch;
+        // any failure there sets updateActionFailed = true and returns early,
+        // so this line is only ever reached after the new .app is already
+        // atomically in place at bundleURL. At that point the zip is spent:
+        // if open -n fails on an already-swapped bundle, the zip cannot help —
+        // re-installing from it would write the same binary that just failed to
+        // launch. The Download fallback is the correct recovery path, not a retry
+        // of the in-app install. Do NOT move removeItem(at: zipURL) to after
+        // relaunchTask.run() — it would not improve recoverability.
         clearCachedDefaults()
         try? fm.removeItem(at: tmpDir)
         try? fm.removeItem(at: zipURL)
