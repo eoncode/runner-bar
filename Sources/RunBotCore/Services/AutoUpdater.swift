@@ -265,18 +265,26 @@ public enum AutoUpdater {
         scheduler.tolerance = AutoUpdaterDefaults.checkInterval * 0.2
         scheduler.qualityOfService = .background
 
+        // `NSBackgroundActivityScheduler` is not `Sendable`. The weak capture
+        // below is safe: `.shouldDefer` is only read inside this callback, which
+        // AppKit guarantees fires on the same background serial queue. The
+        // `nonisolated(unsafe)` local copy asserts that invariant to the compiler.
+        // Do NOT change to a strong capture — that would prevent the scheduler
+        // from being released when `backgroundScheduler` is set to nil.
         scheduler.schedule { [weak scheduler] completion in
-            // Honour the system's power-saving signal. `scheduler.shouldDefer`
-            // returns true when macOS is asking background tasks to pause (e.g.
-            // low battery, high CPU load). Calling `.deferred` tells the scheduler
-            // to try again at the next interval rather than proceeding now. This is
-            // the documented pattern for NSBackgroundActivityScheduler (see #1794
-            // Architecture notes, Pillar 5).
-            // Note: `shouldDefer` is a property on the *scheduler*, not on the
-            // `completion` handler — the handler is just a `(Result) -> Void`.
-            // Weak capture avoids retaining the scheduler beyond its intended
-            // lifetime; if it has been deallocated, treat as deferred.
-            guard scheduler?.shouldDefer == false else {
+            // `NSBackgroundActivityScheduler` is not `Sendable`; the weak capture
+            // is safe because `.shouldDefer` is only read inside this callback,
+            // which AppKit guarantees fires on the same background serial queue.
+            // `nonisolated(unsafe)` asserts that invariant to the Swift 6 checker.
+            // Do NOT remove — without it Swift 6 strict concurrency emits a
+            // SendableClosureCaptures warning on the `scheduler` capture.
+            nonisolated(unsafe) let s = scheduler
+            // Honour the system's power-saving signal. `s.shouldDefer` returns
+            // true when macOS is asking background tasks to pause (e.g. low
+            // battery, high CPU load). Calling `.deferred` tells the scheduler
+            // to retry at the next interval. This is the documented pattern for
+            // NSBackgroundActivityScheduler (see #1794 Architecture notes, Pillar 5).
+            guard s?.shouldDefer == false else {
                 completion(.deferred)
                 return
             }
