@@ -141,12 +141,29 @@ public enum AutoUpdater {
         state: RunnerState
     ) async {
         do {
+            // Use a dedicated URLSession with explicit timeouts rather than
+            // URLSession.shared (which has no timeout configured). On a stalled
+            // connection — mobile hotspot, corporate proxy, flaky Wi-Fi — the
+            // shared session would hang indefinitely with no cancellation path.
+            //
+            // timeoutIntervalForRequest: 30 s — max time to receive the *first*
+            //   byte after the request is sent. Covers DNS hangs, TLS stalls,
+            //   and unresponsive CDN edge nodes.
+            // timeoutIntervalForResource: 300 s — max total download time.
+            //   RunBot.zip is small (< 10 MB); 5 minutes is generous even on
+            //   a slow connection while still guaranteeing eventual failure
+            //   rather than an eternal hang.
+            let sessionConfig = URLSessionConfiguration.ephemeral
+            sessionConfig.timeoutIntervalForRequest  = 30
+            sessionConfig.timeoutIntervalForResource = 300
+            let session = URLSession(configuration: sessionConfig)
+
             // URLSession.download(from:) streams to a temp file automatically;
             // we move it to the caches directory so it persists across restarts.
             // Redirects are followed transparently — the response here is the
             // terminal response after all redirects, so statusCode reflects the
             // final server reply (not an intermediate redirect).
-            let (tempURL, response) = try await URLSession.shared.download(from: url)
+            let (tempURL, response) = try await session.download(from: url)
 
             // ⚠️ `!= 200` IS INTENTIONALLY STRICT — DO NOT WIDEN TO `!(200...299)` ⚠️
             //
