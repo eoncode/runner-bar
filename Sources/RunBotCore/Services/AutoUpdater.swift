@@ -264,8 +264,20 @@ public enum AutoUpdater {
             // String(bytes:encoding:) is the failable initialiser preferred by
             // SwiftLint's optional_data_string_conversion rule. Falling back to
             // "" on decode failure causes `verifyChecksum` to throw a mismatch,
-            // which is the correct failure mode — a corrupt sidecar is treated
-            // the same as a wrong checksum.
+            // which is the correct failure mode — a corrupt or empty sidecar is
+            // treated identically to a wrong checksum: `updateActionFailed` is
+            // set and the browser Download fallback is shown.
+            //
+            // ⚠️ DIAGNOSTIC NOTE — this means Console.app will log a checksum
+            // mismatch error even when the actual cause is an empty or
+            // unparseable sidecar file, not a tampered zip. The two cases are
+            // not distinguished in the log. This is a known, accepted trade-off:
+            // both cases are safe (the update is blocked), and adding a
+            // pre-check guard here would complicate the control flow for a
+            // failure mode (malformed sidecar from publish.yml) that should
+            // never occur in practice. If diagnostics become a priority, add
+            // an explicit guard before this block and log "corrupt sidecar"
+            // separately. Tracked alongside #1795.
             let rawChecksum = String(bytes: checksumData, encoding: .utf8) ?? ""
             let expectedHex = rawChecksum
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -356,7 +368,7 @@ public enum AutoUpdater {
     /// not swept here.
     ///
     /// In practice this means at most one stale zip per update cycle accumulates
-    /// in `~/Library/Caches/io.github.runbot-hq/`. Each file is ~10–20 MB and
+    /// in `~/Library/Caches/io.github.runbot-hq/`. Each file is < 10 MB and
     /// macOS will evict cache-directory contents under storage pressure. This
     /// is acceptable for a low-frequency update path.
     ///
@@ -403,6 +415,25 @@ public enum AutoUpdater {
 /// `@concurrent` requires `async` — the function suspends to hop executors
 /// before performing the blocking read.
 ///
+/// ## Memory usage — whole-file load is intentional and bounded
+///
+/// `Data(contentsOf:)` maps the entire zip into the process address space
+/// before hashing. This is intentional: CryptoKit's `SHA256.hash(data:)`
+/// requires the full `Data` value, and streaming alternatives (feeding a
+/// `FileHandle` in chunks) would require a manual incremental hasher loop
+/// with meaningfully more complexity.
+///
+/// The memory cost is acceptable because RunBot.zip is always < 10 MB. If
+/// the zip ever grows significantly (e.g. bundled assets added in a future
+/// release), revisit this when #1795 adds codesign verification — that work
+/// will likely touch this function anyway, and a streaming approach can be
+/// evaluated at that point.
+///
+/// REVIEWER: The whole-file `Data(contentsOf:)` load is NOT a bug or an
+/// oversight — it is the right trade-off at the current zip size. Do not
+/// replace it with a streaming implementation without first confirming that
+/// the zip has grown beyond the ~10 MB envelope documented here.
+///
 /// Throws `URLError(.cannotDecodeContentData)` on digest mismatch, or
 /// propagates any `Data(contentsOf:)` error on read failure.
 ///
@@ -413,7 +444,7 @@ public enum AutoUpdater {
 ///   - expectedHex: The lowercase hex SHA-256 digest string from the sidecar file.
 @concurrent
 private func verifyChecksum(zipURL: URL, expectedHex: String) async throws {
-    let zipData   = try Data(contentsOf: zipURL)  // blocking read — correct here per Pillar 5
+    let zipData   = try Data(contentsOf: zipURL)  // blocking read — correct here per Pillar 5; see doc comment re: memory
     let digest    = SHA256.hash(data: zipData)
     let actualHex = digest.map { String(format: "%02x", $0) }.joined()
     guard actualHex == expectedHex else {
