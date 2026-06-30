@@ -295,7 +295,7 @@ jobs:
           # shasum -a 256 produces "<hex>  <filename>" — the two-space separator
           # is intentional (BSD shasum convention). AutoUpdater.swift splits on
           # whitespace and takes the first token, so single- or double-space both work.
-          shasum -a 256 "$ZIP" > "$SIDECAR"
+          /usr/bin/shasum -a 256 "$ZIP" > "$SIDECAR"
           echo "SHA-256 sidecar: $(cat $SIDECAR)"
           echo "sidecar_path=$SIDECAR" >> "$GITHUB_OUTPUT"
 
