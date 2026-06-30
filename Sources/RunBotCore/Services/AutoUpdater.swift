@@ -304,6 +304,21 @@ public enum AutoUpdater {
                 completion(.deferred)
                 return
             }
+            // Tell the scheduler this invocation is done *before* spawning the
+            // async work. This is required because `NSBackgroundActivityScheduler`
+            // mandates that `completion` is called on the same GCD serial queue it
+            // dispatched the closure on. Calling it from inside a `Task { }` would
+            // invoke it on the Swift concurrency cooperative thread pool instead —
+            // an API contract violation that could cause missed intervals or
+            // double-fires on future OS releases.
+            //
+            // This is safe: the scheduler only needs to know when *this scheduler
+            // slot* is finished, not when the update check or download completes.
+            // The Task below is fully fire-and-forget from the scheduler's
+            // perspective — it runs independently of the scheduler's rescheduling
+            // cycle.
+            completion(.finished)
+
             // This unstructured `Task` has no actor context (it inherits the
             // GCD background queue's context, not `@MainActor`). The `await`
             // on `AppPreferencesStore.shared.betaChannel` is therefore required
@@ -317,18 +332,9 @@ public enum AutoUpdater {
                 await MainActor.run {
                     if case .updateAvailable(let release) = result {
                         state.setAvailableUpdate(release.tagName)
-                        // Fire-and-forget: handle starts the download task and
-                        // returns immediately without awaiting the download.
-                        // completion(.finished) below is correct — it tells the
-                        // system this scheduler invocation is done, which is true:
-                        // the download continues on its own detached Task.
-                        // Do NOT change this to `await AutoUpdater.handle(…)` —
-                        // that would hold the system completion until the download
-                        // finishes, unnecessarily blocking scheduler rescheduling.
                         Task { await AutoUpdater.handle(release, state: state) }
                     }
                 }
-                completion(.finished)
             }
         }
 
