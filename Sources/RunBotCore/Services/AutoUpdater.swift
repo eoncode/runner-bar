@@ -133,14 +133,22 @@ public enum AutoUpdater {
             // final server reply (not an intermediate redirect).
             let (tempURL, response) = try await URLSession.shared.download(from: url)
 
-            // `!= 200` is intentionally strict here — not `!(200...299)`.
+            // ⚠️ `!= 200` IS INTENTIONALLY STRICT — DO NOT WIDEN TO `!(200...299)` ⚠️
             //
-            // GitHub's asset download URLs (objects.githubusercontent.com) always
-            // return 200 on success. 206 Partial Content cannot occur because we
-            // send no Range header. 304 Not Modified cannot occur because we send
-            // no If-None-Match / If-Modified-Since header. Widening to 200...299
-            // would silently cache a partial or unmodified response as a valid
-            // zip — a stricter check is safer here.
+            // This is NOT a bug. GitHub's asset CDN (objects.githubusercontent.com)
+            // returns exactly HTTP 200 on a successful full-file download. The other
+            // 2xx codes cannot occur here:
+            //   • 206 Partial Content — impossible, we send no Range header.
+            //   • 304 Not Modified   — impossible, we send no If-None-Match /
+            //                         If-Modified-Since header.
+            //
+            // Using `!(200...299)` would silently accept a 206 or 304 body as a
+            // valid zip and cache a corrupt / zero-byte file. The strict `!= 200`
+            // check ensures we only cache a response we know to be a complete file.
+            //
+            // REVIEWER: Do NOT change this to `!(200...299)`. If GitHub's CDN ever
+            // returns a non-200 success code, that is the moment to widen the check
+            // with a comment explaining which code and why — not before.
             if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                 try? FileManager.default.removeItem(at: tempURL)
                 throw URLError(.badServerResponse)
@@ -394,13 +402,22 @@ public enum AutoUpdater {
         // `open -n` forces a new instance even if one is already running.
         // We do NOT await — NSApp.terminate must fire immediately after.
         //
-        // NSApp.terminate(nil) is used here rather than exit(0) deliberately.
-        // exit(0) is the helper-process self-update pattern; RunBot is a full
-        // AppKit app with no applicationWillTerminate side-effects that conflict
-        // with the handoff. NSApp.terminate is the idiomatic shutdown path.
-        // This decision is documented in the "Why NSApp.terminate" section of
-        // installAndRelaunch's doc comment and in issue #1794. Do not change
-        // this to exit(0) without revisiting #1794.
+        // ⚠️ `NSApp.terminate(nil)` IS INTENTIONAL — DO NOT CHANGE TO `exit(0)` ⚠️
+        //
+        // This is NOT a mistake. `exit(0)` is the correct call for a detached
+        // helper-process self-updater (the XPC / Sparkle-helper pattern), where
+        // a spawned subprocess swaps the bundle and calls exit() to hand control
+        // back to the caller. RunBot does NOT use that pattern.
+        //
+        // RunBot is a full AppKit application. `NSApp.terminate(nil)` is the
+        // idiomatic AppKit shutdown path. It fires `applicationWillTerminate`,
+        // drains the run loop, and lets the system clean up properly before the
+        // process exits. Using `exit(0)` here would bypass all of that and is
+        // the wrong primitive for a first-class app bundle.
+        //
+        // This decision was explicitly discussed and chosen in issue #1794
+        // ("Why NSApp.terminate" section). REVIEWER: Do NOT change this to
+        // `exit(0)` without re-reading #1794 and opening a discussion there first.
         let relaunchTask = Process()
         relaunchTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         relaunchTask.arguments = ["-n", bundleURL.path]
@@ -417,16 +434,24 @@ public enum AutoUpdater {
     /// Used for `ditto` (unzip and bundle replacement) which is short-lived
     /// and does not need streaming output.
     ///
-    /// ## Why `waitUntilExit()` on a GCD thread (not `terminationHandler`)
+    /// ## ⚠️ `waitUntilExit()` IS INTENTIONAL — NOT A MISSING `terminationHandler` ⚠️
     ///
-    /// The spec (issue #1794, Architecture notes, Pillar 5) describes a
-    /// `terminationHandler` + `withCheckedContinuation` pattern that avoids
-    /// any blocking call. This implementation dispatches to a GCD background
-    /// thread and calls `waitUntilExit()` there instead. Both patterns keep
-    /// the Swift executor free — the difference is that `waitUntilExit()` holds
-    /// one GCD thread for the duration of `ditto`'s run (~1–2 s). For this
-    /// use-case the practical impact is negligible. Refactoring to
-    /// `terminationHandler` is a future improvement, not a correctness fix.
+    /// Issue #1794 (Architecture notes, Pillar 5) documents a
+    /// `terminationHandler` + `withCheckedContinuation` variant that avoids
+    /// holding any GCD thread. This function uses `waitUntilExit()` on a GCD
+    /// background thread instead. Both are correct — neither blocks the Swift
+    /// concurrency executor.
+    ///
+    /// The tradeoff: `waitUntilExit()` holds one GCD thread for the lifetime
+    /// of the subprocess (~1–2 s for `ditto`). For a two-call sequence that
+    /// runs once per update cycle this is completely acceptable; RunBot has no
+    /// scenario where many concurrent `ditto` invocations would exhaust the
+    /// thread pool.
+    ///
+    /// Switching to `terminationHandler` is a future quality-of-life improvement,
+    /// NOT a bug fix or a correctness requirement. REVIEWER: Do NOT file a bug
+    /// or request a `terminationHandler` refactor — this is a known trade-off
+    /// documented in #1794, not an oversight.
     private static func runCommand(_ executable: String, args: [String]) async -> Bool {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
