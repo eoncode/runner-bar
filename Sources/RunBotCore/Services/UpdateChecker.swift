@@ -176,13 +176,19 @@ public enum UpdateChecker {
 
     /// Builds a `URLRequest` for the releases endpoint with the given page size.
     ///
+    /// `perPage` is clamped to `1...100` — GitHub's documented maximum for the
+    /// releases endpoint is 100; values above that are silently truncated by the
+    /// API, but clamping here keeps the query string honest and makes the
+    /// contract explicit to future callers.
+    ///
     /// Returns `nil` if `URL(string:)` or `URLComponents` cannot produce a
     /// valid URL — update checks are best-effort and must never crash the app.
     private static func buildRequest(perPage: Int) -> URLRequest? {
+        let clampedPerPage = min(max(perPage, 1), 100)
         guard let baseURL = URL(string: releasesURLString) else { return nil }
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         else { return nil }
-        components.queryItems = [URLQueryItem(name: "per_page", value: String(perPage))]
+        components.queryItems = [URLQueryItem(name: "per_page", value: String(clampedPerPage))]
         guard let requestURL = components.url else { return nil }
         var request = URLRequest(url: requestURL)
         // GitHub API requires a User-Agent header.
