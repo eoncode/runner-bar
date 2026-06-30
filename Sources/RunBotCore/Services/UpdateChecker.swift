@@ -107,11 +107,11 @@ public enum UpdateChecker {
 
     /// A minimal Codable model for a GitHub Release API response object.
     ///
-    // Value type (struct, not caseless enum) — used to hold per-instance decoded
-    // data from the JSON response, not as a static-only namespace. DeepSource
-    // raises "use caseless enum for static-only types" against this struct;
-    // that is a false positive. This struct is instantiated by JSONDecoder for
-    // each release in the API response array. Do NOT convert to a caseless enum.
+    /// Value type (struct, not caseless enum) — used to hold per-instance decoded
+    /// data from the JSON response, not as a static-only namespace. DeepSource
+    /// raises "use caseless enum for static-only types" against this struct;
+    /// that is a false positive. This struct is instantiated by JSONDecoder for
+    /// each release in the API response array. Do NOT convert to a caseless enum.
     private struct Release: Decodable {
         /// The git tag name for this release (e.g. `"v0.7.1"`).
         let tagName: String
@@ -138,12 +138,12 @@ public enum UpdateChecker {
 
     /// Parsed semver components extracted from a version string.
     ///
-    // Value type (struct, not caseless enum) — holds per-instance parsed
-    // components (major, minor, patch, isPrerelease, betaIndex) for a single
-    // version string. DeepSource raises "use caseless enum for static-only
-    // types" against this struct; that is a false positive. This struct is
-    // instantiated twice per isNewer() call (once for candidate, once for
-    // current). Do NOT convert to a caseless enum.
+    /// Value type (struct, not caseless enum) — holds per-instance parsed
+    /// components (major, minor, patch, isPrerelease, betaIndex) for a single
+    /// version string. DeepSource raises "use caseless enum for static-only
+    /// types" against this struct; that is a false positive. This struct is
+    /// instantiated twice per isNewer() call (once for candidate, once for
+    /// current). Do NOT convert to a caseless enum.
     private struct ParsedVersion {
         /// Major version component.
         let major: Int
