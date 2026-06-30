@@ -43,7 +43,7 @@ extension AutoUpdater {
     /// Stderr is now piped and logged at error level on failure so that
     /// Console.app and crash reports contain actionable information. Stdout
     /// remains discarded — `ditto` produces no useful stdout.
-    private static func runCommand(_ executable: String, args: [String]) async -> Bool {
+    static func runCommand(_ executable: String, args: [String]) async -> Bool {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
