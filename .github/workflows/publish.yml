@@ -8,8 +8,9 @@
 #   3. Patch Info.plist with the computed version + incremented build number.
 #   4. Build + zip via build.sh.
 #   5. Verify the zip contains RunBot.app/Contents/MacOS/RunBot.
-#   6. Tag + push (skipped on dry_run).
-#   7. Create GitHub Release (skipped on dry_run).
+#   6. Generate SHA-256 sidecar (RunBot.zip.sha256).
+#   7. Tag + push (skipped on dry_run).
+#   8. Create GitHub Release, uploading both zip and sidecar (skipped on dry_run).
 
 name: Publish
 
@@ -31,10 +32,10 @@ on:
 
 # cancel-in-progress: true is intentional and safe here.
 #
-# The duplicate-tag guard (step 2) runs *before* "Tag and push" (step 6),
+# The duplicate-tag guard (step 2) runs *before* "Tag and push" (step 7),
 # so in the common case a cancelled run has not yet pushed a tag and
 # leaves nothing behind. The only window where an orphaned tag could exist
-# is if a run is cancelled *after* step 6 but *before* step 7 (Create
+# is if a run is cancelled *after* step 7 but *before* step 8 (Create
 # GitHub Release). That window is narrow (~seconds) and recoverable:
 #   git tag -d <tag> && git push origin --delete <tag>
 # then re-run publish.sh. See docs/RELEASING.md § Rollback procedure.
@@ -246,6 +247,7 @@ jobs:
 
       # ── Verify zip ────────────────────────────────────────────────────────
       - name: Verify zip
+        id: verify
         run: |
           set -euo pipefail
           ZIP=$(find dist -name '*.zip' | head -1)
@@ -269,10 +271,28 @@ jobs:
           fi
           echo "Zip verified: RunBot.app/Contents/MacOS/RunBot is present at archive root."
           echo "zip_path=$ZIP" >> "$GITHUB_OUTPUT"
-        # Note: `id:` intentionally placed after `run:` here. GitHub Actions
-        # parses it correctly regardless of position within the step block.
-        # The zip_path output is consumed by the "Create GitHub Release" step below.
-        id: verify
+
+      # ── Generate SHA-256 sidecar ───────────────────────────────────────────
+      # AutoUpdater.downloadUpdate fetches checksumURL from the release assets
+      # and treats a missing sidecar as a hard failure (URLError.resourceUnavailable),
+      # falling back to the browser Download button for every user. This step
+      # generates RunBot.zip.sha256 and passes its path to the release step so
+      # it is uploaded alongside the zip. The sidecar format is:
+      #   <hex-digest>  RunBot.zip
+      # which matches the output of `shasum -a 256` and is what verifyChecksum
+      # in AutoUpdater.swift parses (splits on whitespace, takes first token).
+      - name: Generate SHA-256 sidecar
+        id: checksum
+        run: |
+          set -euo pipefail
+          ZIP="${{ steps.verify.outputs.zip_path }}"
+          SIDECAR="${ZIP}.sha256"
+          # shasum -a 256 produces "<hex>  <filename>" — the two-space separator
+          # is intentional (BSD shasum convention). AutoUpdater.swift splits on
+          # whitespace and takes the first token, so single- or double-space both work.
+          shasum -a 256 "$ZIP" > "$SIDECAR"
+          echo "SHA-256 sidecar: $(cat $SIDECAR)"
+          echo "sidecar_path=$SIDECAR" >> "$GITHUB_OUTPUT"
 
       # ── Tag + push ────────────────────────────────────────────────────────
       # Note on the dry_run condition: when this workflow fires from a `push`
@@ -292,6 +312,12 @@ jobs:
           echo "Pushed tag $TAG."
 
       # ── Create GitHub Release ─────────────────────────────────────────────
+      # Both the zip and the .sha256 sidecar are uploaded as release assets.
+      # UpdateChecker decodes checksumURL from the asset list by matching the
+      # ".sha256" suffix; AutoUpdater.downloadUpdate fetches it and passes the
+      # hex digest to verifyChecksum. Omitting the sidecar here would cause
+      # checksumURL to be nil, which downloadUpdate treats as a hard failure,
+      # leaving every user on the browser Download fallback permanently.
       - name: Create GitHub Release
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
@@ -301,6 +327,7 @@ jobs:
           TAG="${{ steps.tag.outputs.tag }}"
           CHANNEL="${{ steps.tag.outputs.channel }}"
           ZIP="${{ steps.verify.outputs.zip_path }}"
+          SIDECAR="${{ steps.checksum.outputs.sidecar_path }}"
 
           # Build the flags array explicitly to avoid unquoted-variable word-splitting.
           # An empty string in $PRERELEASE_FLAG / $LATEST_FLAG would expand safely
@@ -314,6 +341,7 @@ jobs:
 
           gh release create "$TAG" \
             "$ZIP" \
+            "$SIDECAR" \
             --title "$TAG" \
             --generate-notes \
             "${FLAGS[@]}"
