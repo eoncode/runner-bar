@@ -44,21 +44,32 @@ extension AppDelegate {
 
     // MARK: Image helper
 
-    /// Returns the SF Symbol image for the given aggregate status.
+    /// Returns the menu-bar icon for the given aggregate status.
     ///
-    /// Uses a double-fallback chain to guarantee a non-nil `NSImage`:
-    /// 1. `status.symbolName` — the correct SF Symbol for the current status.
-    /// 2. `"circle"` — a safe generic fallback if the symbol name is unavailable
-    ///    (e.g. running on an older OS that doesn’t have the symbol).
-    /// 3. `NSImage(named: "MenuBarFallback")` — a bundled asset that keeps the
-    ///    status-bar icon visible even when all SF Symbols are unavailable;
-    ///    falls back to `NSImage()` (empty/invisible) only if the asset is also missing.
+    /// Prefers the bundled `MenuBarLogo` asset (a template PNG rasterised from
+    /// `logo.svg`).  Falls back to the SF Symbol chain when the asset is missing,
+    /// preserving the original triple-fallback behaviour for safety.
+    ///
+    /// - Note: `status` is used only by the SF Symbol fallback chain (steps 2–3).
+    ///   `MenuBarLogo` is a static brand image and is status-agnostic; `status`
+    ///   is intentionally ignored in the happy path.
+    ///
+    /// Fallback chain:
+    /// 1. `NSImage(named: "MenuBarLogo")` — bundled logo asset (template image).
+    /// 2. `status.symbolName`             — correct SF Symbol for the current status.
+    /// 3. `"circle"`                      — safe generic SF Symbol.
+    /// 4. `NSImage(named: "MenuBarFallback")` — last-resort bundled asset.
+    /// 5. `NSImage()`                     — empty/invisible (should never be reached).
     func menuBarImage(for status: AggregateStatus) -> NSImage {
-        NSImage(systemSymbolName: status.symbolName, accessibilityDescription: nil)
+        if let logo = NSImage(named: "MenuBarLogo") {
+            logo.isTemplate = true  // belt-and-suspenders on top of Contents.json
+            return logo
+        }
+        return NSImage(systemSymbolName: status.symbolName, accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
             ?? {
                 #if DEBUG
-                assertionFailure("MenuBarFallback asset missing from Assets.xcassets — add it to keep the status-bar icon visible on SF Symbol failure")
+                assertionFailure("MenuBarLogo and MenuBarFallback assets missing from Assets.xcassets — add them to keep the status-bar icon visible")
                 #endif
                 return NSImage(named: "MenuBarFallback")
             }()
