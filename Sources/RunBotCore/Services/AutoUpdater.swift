@@ -363,9 +363,17 @@ public enum AutoUpdater {
             defaults.set(destination.path, forKey: AutoUpdaterDefaults.cachedUpdateZipPath)
 
             // Push to RunnerState on the MainActor — Views observe this.
+            // updateActionFailed is explicitly cleared here: if a prior download
+            // attempt failed (setting updateActionFailed = true and showing the
+            // "Download" fallback), the background scheduler will retry on its
+            // next 24-hour tick. Without clearing the flag on success the UI
+            // would remain permanently stuck on the fallback button even though
+            // the zip is now cached and valid. This mirrors the identical reset
+            // in the cache-hit path (step 1 of handle()).
             await MainActor.run {
                 state.updateZipURL = destination
                 state.cachedUpdateVersion = version
+                state.updateActionFailed = false  // clear any prior failure — zip is now good
                 isDownloading = false
             }
         } catch {
