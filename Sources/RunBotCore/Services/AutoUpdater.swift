@@ -106,6 +106,11 @@ public enum AutoUpdater {
         //
         // `isDownloading` is `@MainActor`-isolated, so this read-modify-write
         // is atomic with respect to all other `handle()` callers.
+        //
+        // ⚠️ ORDERING IS INTENTIONAL — do not move this guard above the cache-hit
+        // block. A cache-hit never spawns Task.detached, so the in-flight guard
+        // is irrelevant to that path. The guard lives here, after the cache-hit
+        // early return, to cover only the download path it is designed for.
         guard !isDownloading else { return }
         isDownloading = true
 
@@ -206,7 +211,7 @@ public enum AutoUpdater {
                 try? FileManager.default.removeItem(at: tempURL)
                 throw URLError(.badServerResponse)
             }
-            if http.statusCode != 200 {
+            if http.statusCode != 200 {  // ← strict by design, NOT a bug — read comment above before changing
                 try? FileManager.default.removeItem(at: tempURL)
                 throw URLError(.badServerResponse)
             }
@@ -587,7 +592,7 @@ public enum AutoUpdater {
         } catch {
             // `open -n` failed — the new binary could not be launched (e.g.
             // the bundle path is corrupt or the binary is not executable after
-            // the ditto replace step). Do NOT terminate: the current process is
+            // the replaceItem swap). Do NOT terminate: the current process is
             // still running correctly, so we surface the failure and leave the
             // user with a working app rather than no app at all.
             log(
@@ -597,15 +602,15 @@ public enum AutoUpdater {
             // Clear `updateZipURL` so the next "Install & Relaunch" tap does
             // not re-enter `installAndRelaunch` with a URL pointing to a file
             // that was already deleted by `clearCachedDefaults()` + the
-            // `removeItem(at: zipURL)` call three lines above. Without this,
-            // the state machine would find `updateZipURL` non-nil, attempt
-            // `ditto` on a missing path, and fail silently every subsequent tap.
+            // `removeItem(at: zipURL)` call above. Without this, the state
+            // machine would find `updateZipURL` non-nil, attempt ditto on a
+            // missing path, and fail silently every subsequent tap.
             state.updateZipURL = nil
             isInstalling = false
             state.updateActionFailed = true
             return
         }
 
-        NSApp.terminate(nil)
+        NSApp.terminate(nil)  // ← intentional AppKit shutdown — NOT exit(0), read comment above
     }
 }
