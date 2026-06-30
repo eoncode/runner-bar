@@ -1,5 +1,5 @@
 // UpdateChecker.swift
-// RunBotCore
+// RunBot
 import Foundation
 
 // MARK: - ReleaseAsset
@@ -155,9 +155,14 @@ public enum UpdateChecker {
         /// The binary assets attached to this release.
         ///
         /// Decoded so `AutoUpdater` can locate `RunBot.zip` by name without
-        /// a second network round-trip. Defaults to `[]` on older releases
-        /// whose JSON pre-dates asset publishing — the `JSONDecoder` default
-        /// for a missing key is used; no custom `init(from:)` needed.
+        /// a second network round-trip.
+        ///
+        /// `assets` must be present in the JSON — `JSONDecoder` does **not**
+        /// provide default values for missing required keys; a missing key
+        /// would cause the entire `Release` to fail decoding (the `try?` in
+        /// `latestMatchingRelease` would swallow the error and return `nil`).
+        /// In practice the GitHub Releases API always returns `assets: []` so
+        /// this is never nil in production, but `assets` is not optional here.
         let assets: [ReleaseAsset]
 
         /// Maps snake_case JSON keys to Swift property names.

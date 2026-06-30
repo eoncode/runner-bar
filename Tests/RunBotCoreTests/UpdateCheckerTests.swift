@@ -1,5 +1,5 @@
 // UpdateCheckerTests.swift
-// RunBotCoreTests
+// RunBot
 import Testing
 @testable import RunBotCore
 

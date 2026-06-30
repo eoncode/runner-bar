@@ -1,5 +1,5 @@
 // Bundle+Version.swift
-// RunBotCore
+// RunBot
 import Foundation
 
 /// Convenience accessors for the running bundle's version string.

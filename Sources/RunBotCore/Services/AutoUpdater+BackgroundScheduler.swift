@@ -1,5 +1,5 @@
 // AutoUpdater+BackgroundScheduler.swift
-// RunBotCore
+// RunBot
 import AppKit
 import Foundation
 

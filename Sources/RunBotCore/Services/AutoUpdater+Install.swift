@@ -1,5 +1,5 @@
 // AutoUpdater+Install.swift
-// RunBotCore
+// RunBot
 
 import AppKit
 import Foundation

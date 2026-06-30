@@ -1,5 +1,5 @@
 // AutoUpdater+ProcessHelper.swift
-// RunBotCore
+// RunBot
 import Foundation
 
 /// Process-launching helper for ``AutoUpdater``.

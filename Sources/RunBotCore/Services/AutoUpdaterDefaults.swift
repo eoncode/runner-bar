@@ -1,5 +1,5 @@
 // AutoUpdaterDefaults.swift
-// RunBotCore
+// RunBot
 import Foundation
 
 // MARK: - AutoUpdaterDefaults

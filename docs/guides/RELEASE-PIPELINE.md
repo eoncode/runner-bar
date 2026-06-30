@@ -24,9 +24,12 @@ routing branch. That push is the trigger.
 4. **Build** — `bash build.sh <version>` compiles arm64, assembles `.app`,
    signs ad-hoc, zips to `dist/RunBot.zip`
 5. **Verify** — confirms the binary is actually present inside the zip
-6. **Tag + push** — creates an annotated git tag and pushes it
-7. **Create GitHub Release** — attaches the zip, with `--prerelease` for
-   beta or `--latest` for stable
+6. **Generate SHA-256 sidecar** — computes a `shasum -a 256` digest and writes
+   `RunBot.zip.sha256` alongside the zip; both are uploaded with the release so
+   `AutoUpdater` can verify integrity before installing
+7. **Tag + push** — creates an annotated git tag and pushes it
+8. **Create GitHub Release** — attaches both the zip and the SHA-256 sidecar,
+   with `--prerelease` for beta or `--latest` for stable
 
 ## Versioning
 
