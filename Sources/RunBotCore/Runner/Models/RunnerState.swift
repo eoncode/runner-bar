@@ -115,7 +115,7 @@ public final class RunnerState {
     /// Local file URL of the cached `RunBot-update.zip`, or `nil` while the
     /// download is in progress or has not started yet.
     ///
-    /// The Install & Relaunch button is shown only when this is non-`nil`.
+    /// The Install & Relaunch button is shown only when this is non-nil.
     public internal(set) var updateZipURL: URL?
 
     /// Version string of the cached update zip (e.g. `"v0.8.0"`), or `nil`
@@ -138,6 +138,13 @@ public final class RunnerState {
 
     /// Moves to the "downloading" state: clears any cached zip URL / version and
     /// both fallback flags so the host shows a spinner while the new zip downloads.
+    ///
+    /// Do NOT call this from `clearDownloadState()`. The two methods share the same
+    /// field-nil operations but carry different semantics: `setDownloadStarted()`
+    /// signals that a spinner should appear; `clearDownloadState()` signals that
+    /// stale zip state should be cleared without starting a spinner. The explicit
+    /// override of `clearDownloadState()` in `RunnerState+AppUpdater.swift`
+    /// duplicates these field assignments intentionally to preserve that distinction.
     public func setDownloadStarted() {
         updateZipURL = nil
         cachedUpdateVersion = nil
