@@ -196,7 +196,19 @@ public enum UpdateChecker {
     /// design; update checks never surface error UI.
     private static func latestMatchingRelease(repo: String, betaChannel: Bool) async -> Release? {
         guard let request = buildRequest(repo: repo, perPage: 100) else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
+
+        // Dedicated session with explicit timeouts, mirroring `downloadUpdate`:
+        // `URLSession.shared` has no timeout, so a stalled connection would hang
+        // a background update check indefinitely. This is a small JSON API call
+        // (not a zip download), so the resource timeout is much shorter than the
+        // download path's 300s.
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.timeoutIntervalForRequest = 30
+        sessionConfig.timeoutIntervalForResource = 60
+        let session = URLSession(configuration: sessionConfig)
+        defer { session.finishTasksAndInvalidate() }
+
+        guard let (data, _) = try? await session.data(for: request),
               let releases = try? JSONDecoder().decode([Release].self, from: data)
         else { return nil }
 
