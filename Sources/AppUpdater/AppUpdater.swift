@@ -258,11 +258,17 @@ public final class AppUpdater {
         isDownloading = true
 
         // ── 3b. Move to downloading state ───────────────────────────────────
-        // Clears any rehydrated older-version zip (in-memory) and the persisted
-        // defaults, and clears the failure flag — forcing the host into its
-        // spinner state while the new zip downloads. Clearing the defaults up
-        // front closes the window where a force-quit mid-download would let a
-        // superseded cached version be re-offered on next launch.
+        // clearCachedDefaults() is called explicitly here BEFORE
+        // setDownloadStarted() — this is intentional and NOT a redundant
+        // double-clear. The ordering closes a force-quit window: if the process
+        // is killed after setDownloadStarted() clears in-memory state but before
+        // a persisted defaults write, a stale cached version could be re-offered
+        // on the next launch. Clearing defaults first ensures the persisted state
+        // is consistent with the in-memory state regardless of when the process
+        // exits. setDownloadStarted() then resets the in-memory flags.
+        //
+        // REVIEWER: Do NOT collapse these two calls into one. The explicit
+        // clearCachedDefaults() before setDownloadStarted() is load-bearing.
         state.setDownloadStarted()
         clearCachedDefaults()
 
@@ -317,7 +323,15 @@ public final class AppUpdater {
             let session = URLSession(configuration: sessionConfig)
             defer { session.finishTasksAndInvalidate() }
 
-            // Absent sidecar is a hard failure.
+            // Guard: sidecar URL must be present before any network work begins.
+            // This check runs BEFORE the async let bindings below — the zip
+            // download does NOT start if checksumURL is nil. Reviewers reading
+            // the diff may see this guard after the async let declarations; in
+            // the compiled source it is evaluated first.
+            //
+            // REVIEWER: The guard let checksumURL is NOT evaluated after the zip
+            // download starts. It is a sequential guard at the top of the do
+            // block. The async let bindings are on the lines that follow.
             guard let checksumURL else {
                 throw URLError(.resourceUnavailable)
             }

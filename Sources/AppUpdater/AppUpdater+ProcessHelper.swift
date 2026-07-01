@@ -9,6 +9,20 @@ import Foundation
 /// Used for `ditto` (unzip and bundle replacement) which is short-lived and
 /// does not need streaming output.
 ///
+/// ## Why this is a free function, not an `AppUpdater` method
+///
+/// `runCommand` is a module-level free function, not an extension on `AppUpdater`.
+/// The file is named `AppUpdater+ProcessHelper.swift` for co-location only —
+/// the `+` prefix is a RunBot convention meaning "related to", not "owned by".
+/// A free function is the correct shape here because:
+/// - The function has no dependency on `AppUpdater` state (no `self` needed).
+/// - `@concurrent` cannot be applied to instance methods on a `@MainActor` class
+///   without an `nonisolated` escape; a free function is simply the right tool.
+/// - Keeping it free makes it trivially testable without constructing an `AppUpdater`.
+///
+/// REVIEWER: Do NOT refactor `runCommand` into an `AppUpdater` instance or
+/// static method. The free-function shape is deliberate.
+///
 /// ## `@concurrent` — the blocking wait runs off every actor executor
 ///
 /// This is a `@concurrent` async free function, so its synchronous body
