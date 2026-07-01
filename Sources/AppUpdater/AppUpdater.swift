@@ -77,6 +77,15 @@ public final class AppUpdater {
     /// Scoped `UserDefaults` key names, derived from `schedulerIdentifier`.
     let keys: AppUpdaterDefaults
 
+    /// The release-fetch abstraction. Defaults to `GitHubReleaseProvider`.
+    ///
+    /// Injected at `init` time; immutable after construction (AppUpdater's
+    /// immutable-configuration model — all dependencies are `let`).
+    /// This is a conscious divergence from s1ntoneli/AppUpdater where
+    /// `provider` is a mutable `var` — runtime swapping is not needed
+    /// because tests inject via `init` directly.
+    let provider: any ReleaseProvider
+
     // MARK: - Runtime flags
 
     /// `true` while `installAndRelaunch` is mid-flight — guards a double-tap.
@@ -113,13 +122,21 @@ public final class AppUpdater {
     ///   - userDefaults: Suite for persisted cache state. Defaults to `.standard`.
     ///   - betaChannelProvider: Returns the host's beta-channel preference.
     ///     Defaults to always-`false` (stable channel only).
-    public init(
+    ///   - releaseProvider: The `ReleaseProvider` to use for fetching releases.
+    ///     Defaults to `GitHubReleaseProvider()`. Override in tests by passing a
+    ///     `MockReleaseProvider` — no live network required.
+    ///
+    /// The generic `<P: ReleaseProvider>` constraint enforces `Sendable` at the
+    /// call site. Storage as `any ReleaseProvider` is standard Swift 6 practice
+    /// — constraint at call site, existential for storage.
+    public init<P: ReleaseProvider>(
         repo: String,
         currentVersion: String,
         assetName: @escaping (String) -> String,
         schedulerIdentifier: String,
         userDefaults: UserDefaults = .standard,
-        betaChannelProvider: @escaping @MainActor () -> Bool = { false }
+        betaChannelProvider: @escaping @MainActor () -> Bool = { false },
+        releaseProvider: P = GitHubReleaseProvider()
     ) {
         precondition(!repo.isEmpty, "AppUpdater: repo must not be empty (expected \"owner/repo\")")
         precondition(!schedulerIdentifier.isEmpty, "AppUpdater: schedulerIdentifier must not be empty (expected a reverse-DNS string)")
@@ -130,6 +147,7 @@ public final class AppUpdater {
         self.defaults = userDefaults
         self.betaChannelProvider = betaChannelProvider
         self.keys = AppUpdaterDefaults(domain: schedulerIdentifier)
+        self.provider = releaseProvider
     }
 
     deinit {
@@ -163,20 +181,30 @@ public final class AppUpdater {
         }
     }
 
-    /// Runs a channel-aware update check against the configured repo.
+    /// Runs a channel-aware update check via the injected `ReleaseProvider`.
+    ///
+    /// Fetches via `provider.fetchLatestRelease` and performs the `isNewer`
+    /// comparison here in `AppUpdater`. `UpdateChecker.checkForUpdate` remains
+    /// `public` as an escape hatch for callers who need a raw `UpdateCheckResult`
+    /// without constructing an `AppUpdater` instance.
     ///
     /// Intentionally `internal` — `checkAndHandle` is the designed public entry
-    /// point for host apps. Hosts that need raw `UpdateCheckResult` values
-    /// (e.g. to drive custom UI before calling `handle(_:state:)`) should call
-    /// the lower-level `UpdateChecker.checkForUpdate(repo:currentVersion:betaChannel:assetName:)`
-    /// directly rather than going through this instance method.
+    /// point for host apps.
     func checkForUpdate(betaChannel: Bool) async -> UpdateCheckResult {
-        await UpdateChecker.checkForUpdate(
+        guard !currentVersion.isEmpty else {
+            return .failed(UpdateCheckError.missingVersionKey)
+        }
+        guard let latest = await provider.fetchLatestRelease(
             repo: repo,
-            currentVersion: currentVersion,
             betaChannel: betaChannel,
             assetName: assetName
-        )
+        ) else {
+            return .failed(UpdateCheckError.noReleasesFound)
+        }
+        guard UpdateChecker.isNewer(latest.tagName, than: currentVersion) else {
+            return .upToDate
+        }
+        return .updateAvailable(release: latest)
     }
 
     /// Rehydrates cached download state on launch, if a newer zip is cached.
