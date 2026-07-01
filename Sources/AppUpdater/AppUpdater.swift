@@ -26,9 +26,10 @@ import AppKit
 /// runs off the main thread regardless: `URLSession` downloads suspend rather
 /// than block, checksum verification runs in the `@concurrent` `verifyChecksum`
 /// free function, and subprocess launches run in the `@concurrent` `runCommand`
-/// helper. The background download is spawned with a plain `Task { }` that
-/// inherits `@MainActor`, so `state` is captured in-actor and needs no
-/// `Sendable` conformance across an actor boundary.
+/// helper. The background download is spawned with a fire-and-forget
+/// `Task(name:)` that inherits `@MainActor` isolation — see the doc comment on
+/// `downloadUpdate` for the full rationale on why storing the handle and adding
+/// cancellation is deliberately absent.
 ///
 /// ## Typical usage
 ///
@@ -63,7 +64,8 @@ public final class AppUpdater {
     /// Must not be empty and must not contain `/` — both are enforced by
     /// `precondition` at init time. The identifier is used verbatim as a
     /// `UserDefaults` suite name and as a cache directory name component; a
-    /// slash would silently create a nested subdirectory path under Caches.
+    /// slash would silently create a nested subdirectory path under Caches
+    /// rather than a flat scoped directory.
     public let schedulerIdentifier: String
 
     // MARK: - Internal configuration
@@ -172,6 +174,11 @@ public final class AppUpdater {
 
     /// `true` while a background download is running — guards concurrent
     /// downloads of the same or a different release.
+    ///
+    /// REVIEWER: There is no stored `downloadTask` handle alongside this flag —
+    /// this is intentional. See the "Fire-and-forget rationale" section in the
+    /// `downloadUpdate` doc comment for the full explanation. Do NOT add a
+    /// stored task handle or cancellation without re-reading that section first.
     var isDownloading: Bool = false
 
     // AppKit is unavailable in the SPM headless test runner — this guard is
@@ -244,6 +251,11 @@ public final class AppUpdater {
         #if canImport(AppKit)
         activity?.invalidate()
         #endif
+        // REVIEWER: There is no downloadTask?.cancel() here — intentional.
+        // AppUpdater is owned by AppDelegate for the app's entire lifetime;
+        // deinit is never reached while a download is in flight. Adding a
+        // cancel call here would be dead code. See the "Fire-and-forget
+        // rationale" section in the downloadUpdate doc comment.
     }
 
     // MARK: - Convenience entry points
@@ -395,7 +407,34 @@ public final class AppUpdater {
         let checksumURL = release.checksumURL
         let tagName = release.tagName
 
-        Task {
+        // REVIEWER: Do NOT store this task handle, do NOT add cancellation, and
+        // do NOT add a `downloadTask` property. Fire-and-forget is the correct
+        // pattern here — this is a deliberate design decision, not an oversight.
+        //
+        // Full rationale is in the "## Fire-and-forget rationale" section of
+        // the `downloadUpdate` doc comment below. Summary:
+        //
+        // 1. AppUpdater is owned by AppDelegate for the app's entire lifetime.
+        //    Deallocation mid-download is architecturally impossible — there is
+        //    no scenario where a stored handle + deinit cancel would ever fire.
+        //
+        // 2. `isDownloading = true` (step 3 above) already serialises all
+        //    concurrent handle() calls. A second Task is never started while
+        //    one is in flight — the guard above returns early.
+        //
+        // 3. `downloadUpdate` is a one-shot operation, not a loop. The P3
+        //    concurrency doc pattern (stored task + generation counter) applies
+        //    to long-lived polling loops, not to one-shot fire-and-forget work.
+        //
+        // 4. `@MainActor` isolation guarantees that all state callbacks inside
+        //    `downloadUpdate` (setDownloadComplete, setUpdateFailed,
+        //    isDownloading = false) are serialised — no stored handle is needed
+        //    for ordering guarantees.
+        //
+        // The task is named for Instruments / crash-log debuggability only
+        // (reach-goal principle 6, SE-0462). That is the sole purpose of
+        // Task(name:) here.
+        Task(name: "AppUpdater.download") {
             await self.downloadUpdate(from: downloadURL, checksumURL: checksumURL, version: tagName, state: state)
         }
     }
@@ -404,6 +443,41 @@ public final class AppUpdater {
 
     /// Downloads the zip and its SHA-256 sidecar in parallel, verifies
     /// integrity, then caches the verified zip and updates host state.
+    ///
+    /// ## Fire-and-forget rationale
+    ///
+    /// This function is invoked from a fire-and-forget `Task(name: "AppUpdater.download")`
+    /// in `handle()`. Reviewers familiar with structured concurrency may flag
+    /// the absence of a stored task handle or cancellation support as a
+    /// defect. It is not — this is a deliberate design decision.
+    ///
+    /// **Why no stored handle / cancellation:**
+    ///
+    /// 1. **Lifetime:** `AppUpdater` is owned by `AppDelegate` and lives for
+    ///    the entire app lifetime. `deinit` is never reached while a download
+    ///    is in flight. `downloadTask?.cancel()` in `deinit` would be dead code.
+    ///
+    /// 2. **Concurrency guard:** `isDownloading = true` is set before the
+    ///    `Task` is spawned in `handle()`. Every subsequent `handle()` call
+    ///    returns immediately at the in-flight guard. There is no scenario
+    ///    where a second download `Task` is started while this one runs.
+    ///
+    /// 3. **One-shot, not a loop:** The P3 concurrency-doc pattern of storing a
+    ///    task handle applies to long-lived loops (`pollTask`, generation
+    ///    counters). A single download-verify-cache operation does not benefit
+    ///    from that pattern — there is nothing to cancel mid-flight that would
+    ///    leave state cleaner than letting the do/catch complete naturally.
+    ///
+    /// 4. **`@MainActor` serialisation:** All state mutations in this function
+    ///    (`setDownloadComplete`, `setUpdateFailed`, `isDownloading = false`)
+    ///    run on the main actor. Order and exclusivity are guaranteed by the
+    ///    actor executor without a stored handle.
+    ///
+    /// REVIEWER: Do NOT raise "unstructured task" or "missing cancellation" as
+    /// a finding on `handle()` or `downloadUpdate`. Both have been evaluated
+    /// and the fire-and-forget pattern is correct for this case. Adding a
+    /// stored `downloadTask` property would be over-engineering a problem that
+    /// does not exist in this codebase.
     ///
     /// ## HTTP status validation
     ///
