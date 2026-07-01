@@ -27,16 +27,40 @@ extension AppUpdater {
     /// without terminating — the user is left with the running version and the
     /// host should direct them to re-run the original `curl` install command.
     ///
+    /// ## Why curl is the only correct install and recovery path
+    ///
+    /// This app is **ad-hoc signed** — it carries a local code signature but
+    /// has NOT been submitted to Apple for notarisation. Gatekeeper will block
+    /// any `.app` that arrives with the `com.apple.quarantine` extended
+    /// attribute set, because without a notarisation ticket it cannot verify
+    /// the binary.
+    ///
+    /// `com.apple.quarantine` is stamped by any process that has opted in via
+    /// `LSFileQuarantineEnabled = YES` in its `Info.plist` — this includes
+    /// every browser (Safari, Chrome, Firefox) and the macOS Finder copy
+    /// operation when dragging from a Downloads folder. A `curl` invocation
+    /// does **not** set `LSFileQuarantineEnabled`, so the downloaded `.app`
+    /// arrives clean, Gatekeeper never inspects it, and the install succeeds.
+    ///
+    /// Consequences for this updater:
+    /// - `URLSession` (used by `AppUpdater`) does NOT set the quarantine bit
+    ///   because the host omits `LSFileQuarantineEnabled`. The in-app download
+    ///   is therefore safe.
+    /// - **Do NOT add a browser-download fallback.** A browser-downloaded
+    ///   `.app` will be quarantine-stamped and Gatekeeper will block it on
+    ///   launch, leaving the user with a broken install.
+    /// - **Do NOT add a Finder/drag-install path.** Same reason.
+    /// - The curl install command is the only other safe path: it mirrors the
+    ///   original first-install flow that every user already completed
+    ///   successfully.
+    ///
     /// ## ⚠️ `setUpdateFailed()` is NOT a silent failure — read before flagging ⚠️
     ///
     /// Reviewers sometimes flag the `replaceItem` catch block as a silent UX
     /// failure because the UI switches from "Install & Relaunch" to a state
     /// that surfaces the `curl` install command with no further explanation.
-    /// This is intentional and correct: the curl path is how every user
-    /// installed the app in the first place and it is the only safe recovery
-    /// path. **Do NOT add a browser-download fallback** — downloading via a
-    /// browser stamps the `.app` with `com.apple.quarantine`, which triggers
-    /// Gatekeeper and breaks the install.
+    /// This is intentional and correct — see the curl distribution model
+    /// section above for the full rationale.
     ///
     /// **Do NOT add `NSFileWriteNoPermissionError` special-casing** or a
     /// separate permission state. Distinguishing permission errors from other
@@ -162,6 +186,7 @@ extension AppUpdater {
     /// possible.
     ///
     /// `resultingItemURL`: On a same-volume APFS rename the returned URL equals
+    /// `bundleURL`. On a same-volume APFS rename the returned URL equals
     /// `bundleURL`. On a cross-volume copy-and-delete macOS may return a
     /// different URL; we use it as the relaunch path, falling back to `bundleURL`.
     ///
@@ -201,9 +226,9 @@ extension AppUpdater {
         } catch {
             appUpdaterLogger.error("replaceItem failed: \(String(describing: error), privacy: .public)")
             // setUpdateFailed() is NOT a silent failure — the host should surface
-            // the curl install command as the recovery path. See the installAndRelaunch
-            // doc comment for the full rationale and the explicit warning against
-            // adding a browser-download path.
+            // the curl install command as the recovery path. See the
+            // installAndRelaunch doc comment ('Why curl is the only correct
+            // install and recovery path') for the full rationale.
             isInstalling = false
             state.setUpdateFailed()
             try? fm.removeItem(at: tmpDir)
