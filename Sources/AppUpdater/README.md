@@ -5,6 +5,13 @@ for macOS apps distributed outside the Mac App Store. Zero host-specific
 dependencies — all host values (repo slug, asset name, scheduler identifier,
 beta-channel preference, UI state model) are injected by the caller.
 
+## Caveats
+
+- macOS 26+ only
+- Non-sandboxed apps only
+- GitHub Releases as the distribution source (no other providers)
+- No built-in UI — the host owns all update state and surfaces it however it likes
+
 ## Flow
 
 ```
@@ -69,3 +76,8 @@ The verified zip is cached at `~/Library/Caches/<schedulerIdentifier>/update-<ve
 
 Messages appear in Console.app under subsystem `io.github.appupdater`, category `AppUpdater`.
 `.debug` calls are elided at zero cost in release builds when no one is streaming.
+
+## Alternatives
+
+- [Sparkle](https://github.com/sparkle-project/Sparkle) — the standard choice; supports sandboxed apps, Appcast XML, delta updates, and built-in UI
+- [s1ntoneli/AppUpdater](https://github.com/s1ntoneli/AppUpdater) — GitHub Releases-based like this library but with SwiftUI UI, code-sign validation, and localized changelogs
