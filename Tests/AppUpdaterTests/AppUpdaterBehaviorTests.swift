@@ -116,4 +116,60 @@ struct AppUpdaterBehaviorTests {
         #expect(state.downloadStartedCount == 0)
         #expect(updater.isDownloading == false)
     }
+
+    // MARK: - rehydrateCachedUpdateIfNewer fall-through
+
+    /// When the cached zip path is recorded but the file no longer exists on
+    /// disk, `rehydrateCachedUpdateIfNewer` must NOT rehydrate or set an
+    /// available-update label, and MUST clear the stale scoped keys.
+    @Test func rehydrateClearsWhenCachedPathMissingOnDisk() throws {
+        let domain = "test.rehydrate.missingfile.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+
+        // Point the keys at a newer version but a path that does not exist.
+        let keys = AppUpdaterDefaults(domain: domain)
+        let missingPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("does-not-exist-\(UUID().uuidString).zip").path
+        defaults.set("v9.9.9", forKey: keys.cachedUpdateVersion)
+        defaults.set(missingPath, forKey: keys.cachedUpdateZipPath)
+
+        let updater = makeUpdater(domain: domain, defaults: defaults)
+        let state = MockUpdateState()
+
+        updater.rehydrateCachedUpdateIfNewer(state: state)
+
+        #expect(state.rehydrateCount == 0)
+        #expect(state.availableUpdates.isEmpty)
+        #expect(defaults.string(forKey: keys.cachedUpdateVersion) == nil)
+        #expect(defaults.string(forKey: keys.cachedUpdateZipPath) == nil)
+    }
+
+    /// When a cached zip exists on disk but its version is no longer newer than
+    /// `currentVersion` (already installed), `rehydrateCachedUpdateIfNewer` must
+    /// NOT rehydrate or set an available-update label, and MUST clear the keys.
+    @Test func rehydrateClearsWhenCachedVersionNotNewer() throws {
+        let domain = "test.rehydrate.notnewer.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+
+        // Write a real file, but record a version <= currentVersion ("1.0.0").
+        let keys = AppUpdaterDefaults(domain: domain)
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notnewer-\(UUID().uuidString).zip")
+        try Data("zip".utf8).write(to: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        defaults.set("v0.9.0", forKey: keys.cachedUpdateVersion)
+        defaults.set(tmp.path, forKey: keys.cachedUpdateZipPath)
+
+        let updater = makeUpdater(domain: domain, defaults: defaults)
+        let state = MockUpdateState()
+
+        updater.rehydrateCachedUpdateIfNewer(state: state)
+
+        #expect(state.rehydrateCount == 0)
+        #expect(state.availableUpdates.isEmpty)
+        #expect(defaults.string(forKey: keys.cachedUpdateVersion) == nil)
+        #expect(defaults.string(forKey: keys.cachedUpdateZipPath) == nil)
+    }
 }
