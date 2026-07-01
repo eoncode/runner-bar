@@ -95,8 +95,8 @@ extension AppUpdater {
                     // from a check result alone and the zip was never downloaded
                     // (or was evicted by the OS under storage pressure).
                     let zipPath = updater.defaults.string(forKey: updater.keys.cachedUpdateZipPath)
-                    let zipExists = zipPath.map {
-                        FileManager.default.fileExists(atPath: $0)
+                    let zipExists = zipPath.map { path in
+                        FileManager.default.fileExists(atPath: path)
                     } ?? false
                     if !zipExists {
                         state.setAvailableUpdate(nil)

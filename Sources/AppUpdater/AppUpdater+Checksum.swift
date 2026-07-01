@@ -54,8 +54,8 @@ extension AppUpdater {
         // bytes without silently truncating the tag, making the resulting
         // filename both safe and still human-readable.
         let allowedSet = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_"))
-        let safe = version.unicodeScalars.map {
-            allowedSet.contains($0) ? String($0) : "-"
+        let safe = version.unicodeScalars.map { scalar in
+            allowedSet.contains(scalar) ? String(scalar) : "-"
         }.joined()
         return dir.appendingPathComponent("update-\(safe).zip")
     }
