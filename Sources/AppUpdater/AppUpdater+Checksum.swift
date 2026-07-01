@@ -37,7 +37,7 @@ extension AppUpdater {
     ///             .forEach { try? fm.removeItem(at: $0) }
     ///
     /// REVIEWER: The absence of this sweep is intentional, not an oversight.
-    func cachedZipDestination(version: String) throws -> URL {
+    private func cachedZipDestination(version: String) throws -> URL {
         let caches = try FileManager.default.url(
             for: .cachesDirectory,
             in: .userDomainMask,
@@ -64,7 +64,7 @@ extension AppUpdater {
     ///
     /// Called when the cached path is stale (file deleted externally) to
     /// prevent an infinite no-op loop on subsequent launches.
-    func clearCachedDefaults() {
+    private func clearCachedDefaults() {
         defaults.removeObject(forKey: keys.cachedUpdateVersion)
         defaults.removeObject(forKey: keys.cachedUpdateZipPath)
     }

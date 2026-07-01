@@ -194,14 +194,6 @@ extension AppUpdater {
     /// is in a do/catch so this point is only reached after the new .app is
     /// atomically in place. The zip is spent at that point — re-installing
     /// would write the same binary that is about to launch.
-    ///
-    /// ## setDownloadStarted() in the open -n failure branch
-    /// `setDownloadStarted()` is intentionally reused for its side-effects
-    /// (clears updateZipURL + cachedUpdateVersion) — not to signal a new
-    /// download is beginning. A dedicated `clearDownloadState()` was considered
-    /// but rejected: it would be a breaking protocol change with an identical
-    /// implementation. If `setDownloadStarted()` ever gains download-UI
-    /// side-effects (e.g. a spinner), split it into a separate protocol method.
     private func replaceAndRelaunch( // skipcq: SW-R1002 — reviewed; sequential install steps, complexity is inherent
         appInZip: URL,
         bundleURL: URL,
@@ -254,9 +246,10 @@ extension AppUpdater {
         } catch {
             appUpdaterLogger.error("open -n failed, aborting relaunch: \(error.localizedDescription, privacy: .public)")
             isInstalling = false
-            // Side-effect-only use of setDownloadStarted() — see doc comment
-            // above ('setDownloadStarted() in the open -n failure branch').
-            state.setDownloadStarted()
+            // clearDownloadState() resets updateZipURL + cachedUpdateVersion
+            // (now invalid — the zip was deleted above) without signalling that
+            // a new download is beginning. See UpdateStateProviding.clearDownloadState().
+            state.clearDownloadState()
             state.setUpdateFailed()
             return
         }

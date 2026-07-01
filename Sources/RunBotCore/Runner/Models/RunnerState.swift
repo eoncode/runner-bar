@@ -154,10 +154,14 @@ public final class RunnerState {
         updateActionFailed = false
     }
 
-    /// Flags a failed download or install attempt so the curl-install
-    /// fallback is shown.
+    /// Flags a failed download or install attempt so the curl-install fallback
+    /// is shown. Also clears `updateAssetMissing` to avoid a simultaneous
+    /// dual-failure state: if a prior session left `updateAssetMissing = true`
+    /// and the current session fails a download, both flags would otherwise be
+    /// `true` simultaneously.
     public func setUpdateFailed() {
         updateActionFailed = true
+        updateAssetMissing = false
     }
 
     /// Flags that the discovered release carries no matching asset, so the
@@ -174,8 +178,10 @@ public final class RunnerState {
     ///
     /// Set via `setAssetMissing()` when `AppUpdater.handle(_:state:)` finds no
     /// matching asset; cleared by `setDownloadStarted()` (a fresh download began,
-    /// so the asset is now present) and `rehydrateCachedUpdate(zipURL:version:)`
-    /// (a cached zip exists, which is mutually exclusive with a missing asset).
+    /// so the asset is now present), `setUpdateFailed()` (a download/install
+    /// failure supersedes the asset-missing signal), and
+    /// `rehydrateCachedUpdate(zipURL:version:)` (a cached zip exists, which is
+    /// mutually exclusive with a missing asset).
     /// When `true` the UI falls back to a **Download** button that surfaces the
     /// curl install command.
     public internal(set) var updateAssetMissing: Bool = false

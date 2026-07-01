@@ -32,7 +32,7 @@ import Foundation
 ///
 /// `isDownloading` is intentionally NOT part of this protocol. Whether a
 /// spinner is shown is a host-app UI detail; `AppUpdater` tracks in-flight
-/// downloads with its own instance flag. The host only needs the four mutation
+/// downloads with its own instance flag. The host only needs the mutation
 /// hooks below to render a correct UI.
 ///
 /// ## Why the protocol also refines `Sendable`
@@ -76,25 +76,41 @@ public protocol UpdateStateProviding: AnyObject, Sendable {
     /// is shown.
     func setDownloadStarted()
 
+    /// Clears stale cached-download state without signalling that a new download
+    /// is starting.
+    ///
+    /// Called when a post-install recovery path needs to reset `updateZipURL`
+    /// and `cachedUpdateVersion` (which are now invalid — the zip was deleted as
+    /// part of the install) without implying a download is about to begin.
+    ///
+    /// The default implementation calls `setDownloadStarted()` because the
+    /// underlying field writes are identical. **Conformers that give
+    /// `setDownloadStarted()` visible download-UI side-effects (e.g. showing a
+    /// spinner) must override this method** to perform only the field clears,
+    /// so the spinner is not shown during a post-install failure recovery.
+    func clearDownloadState()
+
     /// Signals that a download completed and was integrity-verified. The zip is
     /// now cached at `zipURL` for `version`; the host should surface its
     /// install affordance.
     func setDownloadComplete(zipURL: URL, version: String)
 
     /// Signals that a download or install attempt failed. Implementations
-    /// should set `updateActionFailed` so the curl-install fallback shows.
+    /// should set `updateActionFailed` and clear `updateAssetMissing` so the
+    /// curl-install fallback shows and the prior asset-missing signal is not
+    /// left stale from a previous session.
     func setUpdateFailed()
 
     /// Signals that the discovered release carries no matching downloadable
-    /// asset. Implementations should set `updateAssetMissing` so the
-    /// curl-install fallback shows. Distinct from `setUpdateFailed()`:
-    /// nothing was attempted and failed — there was simply nothing to download.
+    /// asset. Implementations should set `updateAssetMissing` and clear
+    /// `updateActionFailed` so the curl-install fallback shows. Distinct from
+    /// `setUpdateFailed()`: nothing was attempted and failed — there was simply
+    /// nothing to download.
     ///
-    /// Implementations must also clear `updateActionFailed` to avoid a
-    /// simultaneous dual-failure state: if a prior session left
-    /// `updateActionFailed = true` and the current release has no asset,
-    /// both flags would otherwise be `true` at the same time — a state the
-    /// protocol does not define.
+    /// Implementations must clear `updateActionFailed` to avoid a simultaneous
+    /// dual-failure state: if a prior session left `updateActionFailed = true`
+    /// and the current release has no asset, both flags would otherwise be
+    /// `true` at the same time — a state the protocol does not define.
     func setAssetMissing()
 
     /// Rehydrates cached download state on launch: the zip at `zipURL` for
@@ -103,4 +119,16 @@ public protocol UpdateStateProviding: AnyObject, Sendable {
     /// clear any stale `updateActionFailed` / `updateAssetMissing` flags from a
     /// prior session.
     func rehydrateCachedUpdate(zipURL: URL, version: String)
+}
+
+// MARK: - Default implementations
+
+public extension UpdateStateProviding {
+
+    /// Default implementation: delegates to `setDownloadStarted()` because the
+    /// field writes are identical. Override if `setDownloadStarted()` has
+    /// download-UI side-effects (e.g. a spinner) that must not fire here.
+    func clearDownloadState() {
+        setDownloadStarted()
+    }
 }
