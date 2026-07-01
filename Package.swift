@@ -23,12 +23,6 @@ let package = Package(
             dependencies: [],
             path: "Sources/AppUpdater",
             exclude: ["README.md"],
-            // Valid per-target API since swift-tools-version:5.4 (used here with 6.2).
-            // The package-level platforms: [.macOS(.v26)] already covers this target by
-            // inheritance — this declaration is intentionally redundant: it makes the
-            // macOS-only requirement self-documenting on the target itself so the constraint
-            // travels with AppUpdater if it is ever extracted into a standalone repo.
-            platforms: [.macOS(.v26)],
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
@@ -69,8 +63,6 @@ let package = Package(
                 "AppUpdater"
             ],
             path: "Tests/AppUpdaterTests",
-            // See comment on AppUpdater target above — same rationale.
-            platforms: [.macOS(.v26)],
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
