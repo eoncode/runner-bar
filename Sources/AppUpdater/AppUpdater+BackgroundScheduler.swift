@@ -27,6 +27,21 @@ extension AppUpdater {
     /// stops the check). It runs on a background queue and bridges back to
     /// `MainActor` for any host-state mutations.
     ///
+    /// ## Retain cycle and teardown
+    ///
+    /// `self.activity` retains the `NSBackgroundActivityScheduler`, which retains
+    /// the `schedule` closure, which captures `updater` (a strong reference to
+    /// `self`). This forms an intentional retain cycle that keeps the scheduler
+    /// alive for the process lifetime — releasing `AppUpdater` early would
+    /// silently stop update checks.
+    ///
+    /// As a consequence, `deinit`'s `activity?.invalidate()` call is unreachable
+    /// via the normal ARC path. **`cancelBackgroundCheck()` is the only correct
+    /// teardown path.** Callers that do not use `AppUpdater` as a process-lifetime
+    /// singleton must call `cancelBackgroundCheck()` explicitly before releasing
+    /// their reference, or the scheduler will continue firing until the process
+    /// exits.
+    ///
     /// - Parameter state: The host update-state object to update.
     @MainActor
     public func scheduleBackgroundCheck(state: any UpdateStateProviding) { // skipcq: SW-R1002 — reviewed; complexity acceptable for this scheduler setup
@@ -124,6 +139,12 @@ extension AppUpdater {
     /// API — without it a repeating scheduler fires until the process exits.
     /// After invalidation the `activity` property is nilled so a subsequent
     /// `scheduleBackgroundCheck` can install a fresh scheduler safely.
+    ///
+    /// This is the **only correct teardown path** for the scheduler. Because
+    /// `scheduleBackgroundCheck` forms an intentional retain cycle
+    /// (`self → activity → closure → self`), `deinit` is not reachable via
+    /// ARC — callers must invoke this method explicitly when they no longer
+    /// need background update checks.
     @MainActor
     public func cancelBackgroundCheck() {
         // AppKit is unavailable in the SPM headless test runner — this guard is
