@@ -196,12 +196,17 @@ extension AppUpdater {
             // was already deleted (step 4) so updateZipURL must be cleared to
             // prevent the next "Install & Relaunch" tap from entering ditto on a
             // nonexistent file and cycling into setUpdateFailed() permanently.
-            // setDownloadStarted() clears updateZipURL + cachedUpdateVersion per
-            // its protocol contract, fully resetting state before setUpdateFailed()
-            // surfaces the browser-download fallback.
+            //
+            // setDownloadStarted() is intentionally reused here for its side-
+            // effects (clears updateZipURL + cachedUpdateVersion) — not to signal
+            // a new download is beginning. A dedicated clearDownloadState() method
+            // was considered but rejected: it would be a breaking protocol change
+            // with an identical implementation to setDownloadStarted(). If
+            // setDownloadStarted() ever gains download-UI side-effects (e.g. a
+            // spinner), split it into a separate protocol method at that point.
             appUpdaterLogger.error("open -n failed, aborting relaunch: \(error.localizedDescription, privacy: .public)")
             isInstalling = false
-            state.setDownloadStarted() // clears updateZipURL — zip was already deleted above
+            state.setDownloadStarted()
             state.setUpdateFailed()
             return
         }
