@@ -40,7 +40,15 @@ public struct AppUpdaterDefaults: Sendable {
     /// scheduler only fires after the first interval elapses.
     #if DEBUG
     /// 60-second interval used in DEBUG builds. Override in tests for faster QA cycles.
-    @MainActor public static var checkInterval: TimeInterval = 60
+    ///
+    /// `nonisolated(unsafe)` (mirroring the `activity` scheduler binding in
+    /// `AppUpdater`) rather than `@MainActor`: a `@MainActor`-isolated mutable
+    /// static would force any non-`@MainActor` caller — e.g. a background unit
+    /// test overriding the interval — into a Swift 6 isolation error. This is a
+    /// test-only DEBUG knob that is never mutated concurrently in production
+    /// (release builds use the `let` below), so opting out of isolation checking
+    /// is safe.
+    nonisolated(unsafe) public static var checkInterval: TimeInterval = 60
     #else
     /// 24-hour interval used in release builds.
     public static let checkInterval: TimeInterval = 24 * 60 * 60
