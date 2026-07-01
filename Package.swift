@@ -63,6 +63,9 @@ let package = Package(
                 "AppUpdater"
             ],
             path: "Tests/AppUpdaterTests",
+            resources: [
+                .copy("Fixtures")
+            ],
             swiftSettings: [
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
