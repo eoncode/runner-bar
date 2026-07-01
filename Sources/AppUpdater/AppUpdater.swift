@@ -61,7 +61,11 @@ public final class AppUpdater {
     /// Injected so hosts can use a fixed name (`{ _ in "App.zip" }`) or a
     /// versioned one (`{ v in "App-\(v).zip" }`). The SHA-256 sidecar is
     /// expected at `<assetName>.sha256`.
-    let assetName: (String) -> String
+    ///
+    /// `@Sendable` is required because `fetchLatestRelease` (on `ReleaseProvider`)
+    /// declares its `assetName` parameter as `@Sendable` — the stored closure
+    /// must match so it can be forwarded without a concurrency warning.
+    let assetName: @Sendable (String) -> String
 
     /// Reverse-DNS identifier for the background scheduler; also the domain
     /// used to scope this updater's `UserDefaults` keys.
@@ -132,7 +136,7 @@ public final class AppUpdater {
     public init<P: ReleaseProvider>(
         repo: String,
         currentVersion: String,
-        assetName: @escaping (String) -> String,
+        assetName: @escaping @Sendable (String) -> String,
         schedulerIdentifier: String,
         userDefaults: UserDefaults = .standard,
         betaChannelProvider: @escaping @MainActor () -> Bool = { false },
