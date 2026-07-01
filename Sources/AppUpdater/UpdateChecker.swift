@@ -193,7 +193,9 @@ public enum UpdateChecker {
     /// A `nil` result is returned for every failure mode (network error,
     /// non-200 status, decode failure, empty list, no channel match). All are
     /// indistinguishable from "already up to date" — the intended best-effort
-    /// design; update checks never surface error UI.
+    /// design; update checks never surface error UI. Non-200 HTTP status codes
+    /// are logged at debug level so misconfiguration (bad repo slug, rate limit)
+    /// is visible in Console.app without surfacing UI.
     private static func latestMatchingRelease(repo: String, betaChannel: Bool) async -> Release? {
         guard let request = buildRequest(repo: repo, perPage: 100) else { return nil }
 
@@ -208,9 +210,19 @@ public enum UpdateChecker {
         let session = URLSession(configuration: sessionConfig)
         defer { session.finishTasksAndInvalidate() }
 
-        guard let (data, _) = try? await session.data(for: request),
-              let releases = try? JSONDecoder().decode([Release].self, from: data)
-        else { return nil }
+        guard let (data, response) = try? await session.data(for: request) else { return nil }
+
+        // Log non-200 responses at debug level so misconfiguration (e.g. a 403
+        // rate-limit, 404 bad repo slug, or 429 throttle) is visible in
+        // Console.app. Without this the entire failure was a silent nil — a
+        // developer black hole when first configuring an AppUpdater instance.
+        if let httpResponse = response as? HTTPURLResponse,
+           httpResponse.statusCode != 200 {
+            appUpdaterLogger.debug("releases API returned \(httpResponse.statusCode, privacy: .public) for \(repo, privacy: .public)")
+            return nil
+        }
+
+        guard let releases = try? JSONDecoder().decode([Release].self, from: data) else { return nil }
 
         let sorted = releases.sorted { isNewer($0.tagName, than: $1.tagName) }
         return sorted.first(where: { betaChannel ? true : !$0.prerelease })
