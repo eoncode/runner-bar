@@ -129,7 +129,6 @@ public final class AppUpdater {
     /// The generic `<P: ReleaseProvider>` constraint enforces `Sendable` at the
     /// call site. Storage as `any ReleaseProvider` is standard Swift 6 practice
     /// — constraint at call site, existential for storage.
-    // swiftlint:disable:next function_parameter_count
     public init<P: ReleaseProvider>(
         repo: String,
         currentVersion: String,
