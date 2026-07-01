@@ -98,9 +98,12 @@ public final class AppUpdater {
     ///
     /// - Parameters:
     ///   - repo: `"owner/name"` GitHub repository slug (e.g. `"runbot-hq/run-bot"`).
+    ///     Must not be empty — an empty string produces a malformed API URL.
     ///   - currentVersion: The running app's version string.
     ///   - assetName: Maps a tag name to the expected zip asset filename.
     ///   - schedulerIdentifier: Reverse-DNS scheduler id / `UserDefaults` domain.
+    ///     Must not be empty — an empty string causes `UserDefaults` key
+    ///     collisions between instances (keys degrade to bare dot-prefixed strings).
     ///   - userDefaults: Suite for persisted cache state. Defaults to `.standard`.
     ///   - betaChannelProvider: Returns the host's beta-channel preference.
     ///     Defaults to always-`false` (stable channel only).
@@ -112,6 +115,8 @@ public final class AppUpdater {
         userDefaults: UserDefaults = .standard,
         betaChannelProvider: @escaping @MainActor () -> Bool = { false }
     ) {
+        precondition(!repo.isEmpty, "AppUpdater: repo must not be empty (expected \"owner/repo\")")
+        precondition(!schedulerIdentifier.isEmpty, "AppUpdater: schedulerIdentifier must not be empty (expected a reverse-DNS string)")
         self.repo = repo
         self.currentVersion = currentVersion
         self.assetName = assetName
@@ -124,6 +129,8 @@ public final class AppUpdater {
     deinit {
         // NSBackgroundActivityScheduler must be explicitly invalidated;
         // failing to do so leaks the activity registration system-wide.
+        // NSBackgroundActivityScheduler.invalidate() is thread-safe per Apple
+        // docs — safe to call from a nonisolated deinit.
         #if canImport(AppKit)
         activity?.invalidate()
         #endif
@@ -200,7 +207,7 @@ public final class AppUpdater {
     public func handle(_ release: AvailableRelease, state: any UpdateStateProviding) async {
         state.setAvailableUpdate(release.tagName)
 
-        // ── 1. Already cached? ──────────────────────────────────────────────
+        // ── 1. Already cached? ────────────────────────────────────────────
         let cachedVersion = defaults.string(forKey: keys.cachedUpdateVersion)
         let cachedPath = defaults.string(forKey: keys.cachedUpdateZipPath)
         if let cachedVersion, cachedVersion == release.tagName, let path = cachedPath {
