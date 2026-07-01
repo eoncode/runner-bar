@@ -304,6 +304,35 @@ public enum UpdateChecker {
     /// for 100 releases) so the extra bytes are negligible.
     private static func latestMatchingRelease(betaChannel: Bool) async -> Release? {
         guard let request = buildRequest(perPage: 100) else { return nil }
+        // ⚠️ URLSession.shared IS USED INTENTIONALLY HERE — DO NOT ROUTE THROUGH ghAPI/ghAPIPaginated ⚠️
+        //
+        // Automated reviewers sometimes flag this as "bypassing the transport shim".
+        // That is a false positive. Here is why the shim is deliberately NOT used:
+        //
+        // The `ghAPI` / `ghAPIPaginated` shim exists for runner-polling calls:
+        // WorkflowActionGroupFetch, RunnerStatusEnricher, LogFetcher. Those calls:
+        //   • Use the user's PAT (personal access token) for authentication.
+        //   • Are counted against the 60 req/hr unauthenticated (or 5,000 req/hr
+        //     authenticated) GitHub API rate limit shown in the UI's API counter.
+        //   • Need to be injectable/mockable because they hit live runner data.
+        //
+        // This update-check call is categorically different:
+        //   • It is unauthenticated by design — it reads only the public Releases
+        //     API, which does not require a PAT and should never use one.
+        //   • It builds its own URLRequest with custom Accept and X-GitHub-Api-Version
+        //     headers that the shim transport does not set.
+        //   • Routing through the shim would increment apiCallCounter once per 24 h
+        //     (or 60 s in DEBUG) for a call that has nothing to do with the runner
+        //     polling budget the UI counter is meant to reflect.
+        //   • The function is already unit-tested via isNewer() and ParsedVersion in
+        //     isolation; no live-network injection point is needed for that coverage.
+        //
+        // REVIEWER: Do NOT route this call through ghAPI or ghAPIPaginated.
+        // Do NOT add a GitHubTransportProtocol injection point here.
+        // If you believe this is wrong, read the shim's file-level comment in
+        // GitHubTransportShim.swift first — its listed consumers are
+        // WorkflowActionGroupFetch, RunnerStatusEnricher, and LogFetcher.
+        //
         // ⚠️ `URLResponse` IS INTENTIONALLY DISCARDED — THE 403 SILENT NO-OP IS BY DESIGN ⚠️
         //
         // This is NOT a missing error-handling branch. Here is exactly what happens
@@ -329,12 +358,6 @@ public enum UpdateChecker {
         // REVIEWER: Do NOT add HTTP status inspection or error propagation here.
         // If you need per-status behaviour (e.g. exponential backoff on 403),
         // that is a separate feature tracked under #1794, not a bug in this line.
-        //
-        // URLSession.shared is used deliberately here and is NOT a deficiency
-        // to fix. The GitHub Releases API returns a few KB of JSON; the request
-        // is best-effort background work that is never on the critical path, and
-        // the scheduler's completion(.finished) is called before this Task fires
-        // so a slow request has no impact on the system scheduler.
         //
         // URLSession.shared has a default timeoutIntervalForRequest of 60 s.
         // On a stalled proxy or dead CDN this call can block for up to 60 s

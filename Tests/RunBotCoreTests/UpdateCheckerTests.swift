@@ -90,4 +90,18 @@ struct UpdateCheckerTests {
     @Test func vPrefixedCurrent() {
         #expect(UpdateChecker.isNewer("0.8.0", than: "v0.7.0") == true)
     }
+
+    // MARK: - ParsedVersion empty-input guard (regression)
+
+    /// `"v"` stripped of its prefix yields `""` — `String.split` returns `[]`,
+    /// so `parts[0]` would crash without the `parts.isEmpty ? "" : …` guard.
+    /// Result must be `false` (a bare "v" is not newer than any real version).
+    @Test func barePrefixOnlyCandidate() {
+        #expect(UpdateChecker.isNewer("v", than: "0.7.0") == false)
+    }
+
+    /// Passing an empty string directly must not crash and must return `false`.
+    @Test func emptyStringCandidate() {
+        #expect(UpdateChecker.isNewer("", than: "0.7.0") == false)
+    }
 }
