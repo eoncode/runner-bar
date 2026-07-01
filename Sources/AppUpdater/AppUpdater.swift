@@ -2,6 +2,8 @@
 // AppUpdater
 import CryptoKit
 import Foundation
+// AppKit is unavailable in the SPM headless test runner — this guard is
+// required for `swift test` even though the package is macOS(.v26)-only.
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -84,6 +86,10 @@ public final class AppUpdater {
     /// downloads of the same or a different release.
     var isDownloading: Bool = false
 
+    // AppKit is unavailable in the SPM headless test runner — this guard is
+    // required for `swift test` even though the package is macOS(.v26)-only.
+    // Only deinit may access `activity` from a nonisolated context (invalidate
+    // is thread-safe per Apple docs); all other reads/writes must be @MainActor.
     #if canImport(AppKit)
     /// Retains the `NSBackgroundActivityScheduler` for the app's lifetime.
     ///
@@ -207,7 +213,7 @@ public final class AppUpdater {
     public func handle(_ release: AvailableRelease, state: any UpdateStateProviding) async {
         state.setAvailableUpdate(release.tagName)
 
-        // ── 1. Already cached? ────────────────────────────────────────────
+        // ── 1. Already cached? ──────────────────────────────────────────────
         let cachedVersion = defaults.string(forKey: keys.cachedUpdateVersion)
         let cachedPath = defaults.string(forKey: keys.cachedUpdateZipPath)
         if let cachedVersion, cachedVersion == release.tagName, let path = cachedPath {

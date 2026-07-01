@@ -1,63 +1,45 @@
 # AppUpdater
 
-A standalone, host-agnostic Swift package target that drives an in-app
-auto-update flow for macOS apps distributed outside the Mac App Store.
+A host-agnostic Swift library that drives an in-app auto-update flow
+for macOS apps distributed outside the Mac App Store. Zero host-specific
+dependencies — all host values (repo slug, asset name, scheduler identifier,
+beta-channel preference, UI state model) are injected by the caller.
 
-`AppUpdater` has **zero dependency on RunBotCore** (or any host code). All
-host-specific values — the GitHub repo slug, the zip asset name, the scheduler
-identifier, the beta-channel preference, and the UI state model — are injected by
-the caller. The library reads no `Bundle`, holds no singletons, and ships no
-resources.
+## Caveats
+
+- macOS 26+ only
+- Non-sandboxed apps only
+- GitHub Releases as the distribution source (no other providers)
+- No built-in UI — the host owns all update state and surfaces it however it likes
 
 ## Flow
 
 ```
 GitHub Releases poll → semver compare (incl. beta.N) → zip download
-   → SHA-256 sidecar verification → cache → host state mutation
-   → install & relaunch on user confirmation
+    → SHA-256 sidecar verification → cache → host state mutation
+    → install & relaunch on user confirmation
 ```
 
-## Concurrency model
+## Quick start
 
-`AppUpdater` is a `@MainActor final class`, so its flags (`isInstalling`,
-`isDownloading`) and the retained `NSBackgroundActivityScheduler` are race-free
-without extra locking. Blocking work is kept off the main thread regardless:
-
-- `URLSession` downloads suspend rather than block.
-- Checksum verification runs in the `@concurrent` `verifyChecksum` free function.
-- Subprocess launches (`ditto`, `open`) run in the `@concurrent` `runCommand`
-  helper (no `DispatchQueue` / `withCheckedContinuation`).
-
-The background download is spawned with a plain `Task { }` that inherits
-`@MainActor`, so the host state existential is captured in-actor and needs no
-`Sendable` conformance across an actor boundary.
-
-`NSBackgroundActivityScheduler` and other AppKit usage are guarded by
-`#if canImport(AppKit)` so the target still compiles where AppKit is absent.
-
-## Host integration
-
-### 1. Conform your UI state model to `UpdateStateProviding`
-
-The protocol is entirely `@MainActor`. Properties are read-only `{ get }`; all
-mutations go through named methods so no caller can set `updateZipURL` without
-also setting the paired version (the write is encapsulated in
-`setDownloadComplete`). `isDownloading` is intentionally **not** part of the
-protocol — whether a spinner shows is a host UI detail.
+### 1. Conform your state model to `UpdateStateProviding`
 
 ```swift
 extension MyUpdateState: UpdateStateProviding {}
 ```
 
-### 2. Construct the updater with host-specific configuration
+All properties are read-only `{ get }`; mutations go through named methods
+(`setDownloadComplete`, `setUpdateFailed`, etc.) so no caller can write
+`updateZipURL` without also setting the paired version.
+
+### 2. Construct the updater
 
 ```swift
 let updater = AppUpdater(
     repo: "your-org/your-repo",
-    currentVersion: Bundle.main.rbVersionString,
-    assetName: { _ in "YourApp.zip" },              // sidecar expected at "<assetName>.sha256"
-    schedulerIdentifier: "com.your-org.update-check", // also scopes UserDefaults keys
-    betaChannelProvider: { MyPrefs.shared.betaChannel }
+    currentVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+    assetName: { _ in "YourApp.zip" },               // SHA-256 sidecar expected at "<assetName>.sha256"
+    schedulerIdentifier: "com.your-org.update-check" // also scopes UserDefaults keys
 )
 ```
 
@@ -67,35 +49,36 @@ let updater = AppUpdater(
 updater.rehydrateCachedUpdateIfNewer(state: myState) // offline-ready, before any network
 await updater.checkAndHandle(state: myState)          // channel-aware check + download/cache
 updater.scheduleBackgroundCheck(state: myState)       // daily background re-check
+
 // From the "Install & Relaunch" button:
 await updater.installAndRelaunch(state: myState)
 ```
 
+## Distribution assumptions
+
+- The release archive carries exactly one `.app` at its root.
+- Each release attaches a `<assetName>.sha256` sidecar. A missing sidecar is a hard failure.
+- On any download or install failure `setUpdateFailed()` is called. The host should direct
+  the user to re-run the original `curl` install command — **not** open a browser download.
+  Downloading via a browser stamps the `.app` with `com.apple.quarantine`, which triggers
+  Gatekeeper and breaks the install. The curl path intentionally bypasses this.
+
 ## Persisted state
 
-Two `UserDefaults` keys, scoped by `schedulerIdentifier` via
-`AppUpdaterDefaults(domain:)`, survive a relaunch so a downloaded-but-not-yet-
-installed update is offered again on next launch:
+Two `UserDefaults` keys scoped by `schedulerIdentifier` survive a relaunch so a
+downloaded-but-not-yet-installed update is offered again on next launch:
 
 - `<domain>.cachedUpdateZipPath`
 - `<domain>.cachedUpdateVersion`
 
-The verified zip is cached at
-`~/Library/Caches/<schedulerIdentifier>/update-<version>.zip`.
-
-## Distribution assumptions
-
-- The release archive carries exactly one `.app` bundle at its root. The install
-  path locates the first `*.app` (non-recursive) and swaps the running bundle via
-  `FileManager.replaceItem` (atomic).
-- Each release attaches a `<assetName>.sha256` sidecar. A missing sidecar is a
-  hard failure — the download is aborted and the host failure state is set.
-- On any download/install failure the host's failure flag is set so the app can
-  surface a browser-download fallback. This is a designed recovery path, not a
-  silent failure.
+The verified zip is cached at `~/Library/Caches/<schedulerIdentifier>/update-<version>.zip`.
 
 ## Logging
 
-Messages appear in Console.app under subsystem `io.github.appupdater`, category
-`AppUpdater`. `.debug` calls are elided at zero cost in release builds when no
-one is streaming.
+Messages appear in Console.app under subsystem `io.github.appupdater`, category `AppUpdater`.
+`.debug` calls are elided at zero cost in release builds when no one is streaming.
+
+## Alternatives
+
+- [Sparkle](https://github.com/sparkle-project/Sparkle) — the standard choice; supports sandboxed apps, Appcast XML, delta updates, and built-in UI
+- [s1ntoneli/AppUpdater](https://github.com/s1ntoneli/AppUpdater) — GitHub Releases-based like this library but with SwiftUI UI, code-sign validation, and localized changelogs

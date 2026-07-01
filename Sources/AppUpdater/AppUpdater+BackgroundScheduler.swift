@@ -1,5 +1,8 @@
 // AppUpdater+BackgroundScheduler.swift
 // AppUpdater
+
+// AppKit is unavailable in the SPM headless test runner — this guard is
+// required for `swift test` even though the package is macOS(.v26)-only.
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -123,6 +126,8 @@ extension AppUpdater {
     /// `scheduleBackgroundCheck` can install a fresh scheduler safely.
     @MainActor
     public func cancelBackgroundCheck() {
+        // AppKit is unavailable in the SPM headless test runner — this guard is
+        // required for `swift test` even though the package is macOS(.v26)-only.
         #if canImport(AppKit)
         activity?.invalidate()
         activity = nil

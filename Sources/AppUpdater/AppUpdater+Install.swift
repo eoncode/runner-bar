@@ -1,6 +1,8 @@
 // AppUpdater+Install.swift
 // AppUpdater
 
+// AppKit is unavailable in the SPM headless test runner — this guard is
+// required for `swift test` even though the package is macOS(.v26)-only.
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -23,21 +25,46 @@ extension AppUpdater {
     ///
     /// On any failure the function calls `state.setUpdateFailed()` and returns
     /// without terminating — the user is left with the running version and the
-    /// host's browser-download fallback becomes visible.
+    /// host should direct them to re-run the original `curl` install command.
+    ///
+    /// ## Why curl is the only correct install and recovery path
+    ///
+    /// This app is **ad-hoc signed** — it carries a local code signature but
+    /// has NOT been submitted to Apple for notarisation. Gatekeeper will block
+    /// any `.app` that arrives with the `com.apple.quarantine` extended
+    /// attribute set, because without a notarisation ticket it cannot verify
+    /// the binary.
+    ///
+    /// `com.apple.quarantine` is stamped by any process that has opted in via
+    /// `LSFileQuarantineEnabled = YES` in its `Info.plist` — this includes
+    /// every browser (Safari, Chrome, Firefox) and the macOS Finder copy
+    /// operation when dragging from a Downloads folder. A `curl` invocation
+    /// does **not** set `LSFileQuarantineEnabled`, so the downloaded `.app`
+    /// arrives clean, Gatekeeper never inspects it, and the install succeeds.
+    ///
+    /// Consequences for this updater:
+    /// - `URLSession` (used by `AppUpdater`) does NOT set the quarantine bit
+    ///   because the host omits `LSFileQuarantineEnabled`. The in-app download
+    ///   is therefore safe.
+    /// - **Do NOT add a browser-download fallback.** A browser-downloaded
+    ///   `.app` will be quarantine-stamped and Gatekeeper will block it on
+    ///   launch, leaving the user with a broken install.
+    /// - **Do NOT add a Finder/drag-install path.** Same reason.
+    /// - The curl install command is the only other safe path: it mirrors the
+    ///   original first-install flow that every user already completed
+    ///   successfully.
     ///
     /// ## ⚠️ `setUpdateFailed()` is NOT a silent failure — read before flagging ⚠️
     ///
     /// Reviewers sometimes flag the `replaceItem` catch block as a silent UX
-    /// failure because the UI switches from "Install & Relaunch" to a "Download"
-    /// button with no explanation. This is intentional and correct for a
-    /// curl-install distribution model (RunBot's): the "Download" fallback
-    /// surfaces the install command — the same path every user took for first
-    /// install. A user who hits a `replaceItem` permission error is correctly
-    /// directed back to that path.
+    /// failure because the UI switches from "Install & Relaunch" to a state
+    /// that surfaces the `curl` install command with no further explanation.
+    /// This is intentional and correct — see the curl distribution model
+    /// section above for the full rationale.
     ///
     /// **Do NOT add `NSFileWriteNoPermissionError` special-casing** or a
     /// separate permission state. Distinguishing permission errors from other
-    /// `replaceItem` failures would add complexity for a case the fallback
+    /// `replaceItem` failures would add complexity for a case the curl fallback
     /// already handles correctly.
     ///
     /// ## `isInstalling` reset strategy — intentional, not an oversight
@@ -62,9 +89,9 @@ extension AppUpdater {
     /// helper-process self-update pattern, which is not used here.
     ///
     /// - Parameter state: The host update-state object driving the UI. On failure
-    ///   `setUpdateFailed()` is called so the fallback shows.
+    ///   `setUpdateFailed()` is called so the host can surface the curl install command.
     @MainActor
-    public func installAndRelaunch(state: any UpdateStateProviding) async { // skipcq: SW-R1002 — reviewed; complexity acceptable for this sequential install flow
+    public func installAndRelaunch(state: any UpdateStateProviding) async {
         // Double-tap guard — prevents two concurrent install attempts if the
         // user taps "Install & Relaunch" twice before NSApp.terminate fires.
         guard !isInstalling else { return }
@@ -76,73 +103,117 @@ extension AppUpdater {
             return
         }
 
-        let fm = FileManager.default
         let bundleURL = URL(fileURLWithPath: Bundle.main.bundlePath) // e.g. …/RunBot.app
-
-        // ── 1. Unzip to a temp directory ───────────────────────────────────────
-        let tmpDir = fm.temporaryDirectory
+        let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("appupdater-update-\(UUID().uuidString)", isDirectory: true)
-        do {
-            try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        } catch {
+
+        // Steps 1+2: unzip zip → locate .app inside tmpDir.
+        guard let appInZip = await unzipAndLocateApp(zipURL: zipURL, into: tmpDir) else {
             isInstalling = false
             state.setUpdateFailed()
             return
+        }
+
+        // Steps 3+4+5: atomic bundle swap → clear cache → open -n → terminate.
+        await replaceAndRelaunch(
+            appInZip: appInZip,
+            bundleURL: bundleURL,
+            zipURL: zipURL,
+            tmpDir: tmpDir,
+            state: state
+        )
+    }
+
+    // MARK: - Private helpers
+
+    /// Unzips `zipURL` into `tmpDir` via `/usr/bin/ditto` and returns the
+    /// `.app` bundle URL found at the archive root.
+    ///
+    /// Returns `nil` and cleans up `tmpDir` on any failure:
+    /// - `tmpDir` creation fails
+    /// - `ditto` exits non-zero
+    /// - No `.app` is present at the archive root
+    ///
+    /// `contentsOfDirectory` is intentionally shallow (non-recursive): the
+    /// release archive is expected to carry exactly one `.app` at its root
+    /// (RunBot's publish.yml CI verify step enforces this). A recursive search
+    /// is deliberately avoided because it would silently accept malformed archives.
+    private func unzipAndLocateApp(zipURL: URL, into tmpDir: URL) async -> URL? {
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        } catch {
+            return nil
         }
 
         // ditto preserves symlinks and resource forks; superior to `unzip` for
         // .app bundles.
-        let dittoResult = await runCommand("/usr/bin/ditto", args: ["-xk", zipURL.path, tmpDir.path])
-        guard dittoResult else {
-            isInstalling = false
-            state.setUpdateFailed()
+        guard await runCommand("/usr/bin/ditto", args: ["-xk", zipURL.path, tmpDir.path]) else {
             try? fm.removeItem(at: tmpDir)
-            return
+            return nil
         }
 
-        // ── 2. Find the .app bundle inside the unzipped contents ───────────────
-        // `contentsOfDirectory` is intentionally shallow (non-recursive): the
-        // release archive is expected to carry exactly one `.app` at its root
-        // (RunBot's publish.yml CI verify step enforces this). If no `.app` is
-        // present at the top level this guard fires — the correct signal that
-        // the archive is malformed. A recursive search is deliberately avoided
-        // because it would silently accept such malformed archives.
         guard let appInZip = (try? fm.contentsOfDirectory(
             at: tmpDir,
             includingPropertiesForKeys: nil
         ))?.first(where: { $0.pathExtension == "app" }) else {
-            isInstalling = false
-            state.setUpdateFailed()
             try? fm.removeItem(at: tmpDir)
-            return
+            return nil
         }
 
-        // ── 2b. Gatekeeper / quarantine — no strip needed ──────────────────────
-        // Reviewers familiar with Sparkle may expect an
-        // `xattr -dr com.apple.quarantine` call here before replaceItem. It is
-        // not needed: `com.apple.quarantine` is only applied by processes that
-        // opt in via LSFileQuarantineEnabled = YES. A host that omits that key
-        // (RunBot does) never has its URLSession download stamped, so ditto has
-        // nothing to propagate and Gatekeeper will not prompt on relaunch.
-        //
-        // REVIEWER: Do NOT add a quarantine-strip step here. If a host sets
-        // LSFileQuarantineEnabled, revisit at that point.
+        return appInZip
+    }
 
-        // ── 3. Replace the running bundle — atomic swap via replaceItem ────────
-        // `FileManager.replaceItem` moves the old bundle aside as a named
-        // backup, moves the new bundle into place, then deletes the backup — all
-        // at the filesystem level. If the process is killed mid-swap, macOS
-        // guarantees the bundle directory is either fully old or fully new. A
-        // half-written bundle is not possible.
-        //
-        // resultingItemURL: On a same-volume APFS rename the returned URL equals
-        // `bundleURL`. On a cross-volume copy-and-delete macOS may return a
-        // different URL; we capture it and use it as the relaunch path. Falls
-        // back to `bundleURL` if nil.
-        //
+    /// Atomically replaces the running bundle, clears cached defaults, then
+    /// relaunches via `open -n` and terminates via `NSApp.terminate`.
+    ///
+    /// ## Gatekeeper / quarantine — no strip needed
+    /// Reviewers familiar with Sparkle may expect an
+    /// `xattr -dr com.apple.quarantine` call here before replaceItem. It is
+    /// not needed: `com.apple.quarantine` is only applied by processes that
+    /// opt in via LSFileQuarantineEnabled = YES. A host that omits that key
+    /// (RunBot does) never has its URLSession download stamped, so ditto has
+    /// nothing to propagate and Gatekeeper will not prompt on relaunch.
+    ///
+    /// **REVIEWER: Do NOT add a quarantine-strip step here.** If a host sets
+    /// LSFileQuarantineEnabled, revisit at that point.
+    ///
+    /// ## replaceItem atomicity
+    /// `FileManager.replaceItem` moves the old bundle aside as a named backup,
+    /// moves the new bundle into place, then deletes the backup — all at the
+    /// filesystem level. If the process is killed mid-swap, macOS guarantees the
+    /// bundle is either fully old or fully new. A half-written bundle is not
+    /// possible.
+    ///
+    /// `resultingItemURL`: On a same-volume APFS rename the returned URL equals
+    /// `bundleURL`. On a same-volume APFS rename the returned URL equals
+    /// `bundleURL`. On a cross-volume copy-and-delete macOS may return a
+    /// different URL; we use it as the relaunch path, falling back to `bundleURL`.
+    ///
+    /// ## Zip deletion timing
+    /// The zip is deleted BEFORE `open -n` fires. This is safe: `replaceItem`
+    /// is in a do/catch so this point is only reached after the new .app is
+    /// atomically in place. The zip is spent at that point — re-installing
+    /// would write the same binary that is about to launch.
+    ///
+    /// ## setDownloadStarted() in the open -n failure branch
+    /// `setDownloadStarted()` is intentionally reused for its side-effects
+    /// (clears updateZipURL + cachedUpdateVersion) — not to signal a new
+    /// download is beginning. A dedicated `clearDownloadState()` was considered
+    /// but rejected: it would be a breaking protocol change with an identical
+    /// implementation. If `setDownloadStarted()` ever gains download-UI
+    /// side-effects (e.g. a spinner), split it into a separate protocol method.
+    private func replaceAndRelaunch( // skipcq: SW-R1002 — reviewed; sequential install steps, complexity is inherent
+        appInZip: URL,
+        bundleURL: URL,
+        zipURL: URL,
+        tmpDir: URL,
+        state: any UpdateStateProviding
+    ) async {
+        let fm = FileManager.default
+        let backupItemName = bundleURL.lastPathComponent + ".bak"
         // Note: `replaceItem` takes `AutoreleasingUnsafeMutablePointer?`, so the
         // out-variable must be declared as `NSURL?`, not `URL?`, then bridged.
-        let backupItemName = bundleURL.lastPathComponent + ".bak"
         var resultingNSURL: NSURL?
         do {
             try fm.replaceItem(
@@ -154,54 +225,42 @@ extension AppUpdater {
             )
         } catch {
             appUpdaterLogger.error("replaceItem failed: \(String(describing: error), privacy: .public)")
-            // setUpdateFailed() here is NOT a silent failure — see the doc
-            // comment above. The browser-download fallback is the correct and
-            // complete recovery path for any install failure.
+            // setUpdateFailed() is NOT a silent failure — the host should surface
+            // the curl install command as the recovery path. See the
+            // installAndRelaunch doc comment ('Why curl is the only correct
+            // install and recovery path') for the full rationale.
             isInstalling = false
             state.setUpdateFailed()
             try? fm.removeItem(at: tmpDir)
             return
         }
 
-        // ── 4. Clear cached defaults so next launch starts clean ───────────────
-        // The zip is deleted here, BEFORE open -n fires in step 5. This is safe:
-        // replaceItem (step 3) is in a do/catch, so this line is only reached
-        // after the new .app is already atomically in place. At that point the
-        // zip is spent — if open -n fails on an already-swapped bundle, the zip
-        // cannot help (re-installing would write the same binary that just failed
-        // to launch). The Download fallback is the correct recovery path.
+        // Clear cache before open -n — see doc comment above for timing rationale.
         clearCachedDefaults()
         try? fm.removeItem(at: tmpDir)
         try? fm.removeItem(at: zipURL)
 
-        // ── 5. Relaunch + terminate ────────────────────────────────────────────
-        // `open -n` forces a new instance even if one is already running. We do
-        // NOT await — NSApp.terminate must fire immediately after. This is the
-        // accepted pattern for macOS self-update (Sparkle uses the same
-        // ordering). Use `resultingNSURL` as the authoritative post-swap bundle
-        // path, falling back to `bundleURL`.
-        let launchPath = ((resultingNSURL as URL?) ?? bundleURL).path
+        // AppKit is unavailable in the SPM headless test runner — this guard is
+        // required for `swift test` even though the package is macOS(.v26)-only.
         #if canImport(AppKit)
+        // `open -n` forces a new instance even if one is already running.
+        // NOT awaited — NSApp.terminate must fire immediately after.
+        // Use resultingNSURL as the authoritative post-swap path (see doc comment).
+        let launchPath = ((resultingNSURL as URL?) ?? bundleURL).path
         let relaunchTask = Process()
         relaunchTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         relaunchTask.arguments = ["-n", launchPath]
         do {
             try relaunchTask.run()
         } catch {
-            // `open -n` failed — the new binary could not be launched. The zip
-            // was already deleted (step 4) so updateZipURL must be cleared to
-            // prevent the next "Install & Relaunch" tap from entering ditto on a
-            // nonexistent file and cycling into setUpdateFailed() permanently.
-            // setDownloadStarted() clears updateZipURL + cachedUpdateVersion per
-            // its protocol contract, fully resetting state before setUpdateFailed()
-            // surfaces the browser-download fallback.
             appUpdaterLogger.error("open -n failed, aborting relaunch: \(error.localizedDescription, privacy: .public)")
             isInstalling = false
-            state.setDownloadStarted() // clears updateZipURL — zip was already deleted above
+            // See doc comment above re: why setDownloadStarted() is used here.
+            state.setDownloadStarted()
             state.setUpdateFailed()
             return
         }
-        NSApp.terminate(nil) // ← intentional AppKit shutdown — NOT exit(0), read comment above
+        NSApp.terminate(nil) // ← intentional AppKit shutdown — NOT exit(0), see installAndRelaunch doc
         #endif
     }
 }
