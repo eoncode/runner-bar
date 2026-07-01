@@ -25,6 +25,9 @@ struct AppUpdaterBehaviorTests {
         )
     }
 
+    /// Creates a `ReleaseAsset` with the given filename, using an
+    /// `https://example.com/<name>` download URL. Throws if the URL cannot be
+    /// constructed (which in practice never happens for these fixture values).
     private func makeAsset(_ name: String) throws -> ReleaseAsset {
         ReleaseAsset(
             name: name,
@@ -122,6 +125,10 @@ struct AppUpdaterBehaviorTests {
     /// When the cached zip path is recorded but the file no longer exists on
     /// disk, `rehydrateCachedUpdateIfNewer` must NOT rehydrate or set an
     /// available-update label, and MUST clear the stale scoped keys.
+    /// When the cached zip path is recorded in `UserDefaults` but the file is
+    /// no longer present on disk, `rehydrateCachedUpdateIfNewer` must skip
+    /// rehydration, leave the available-update label unset, and clear both
+    /// stale scoped keys so they don't persist across launches.
     @Test func rehydrateClearsWhenCachedPathMissingOnDisk() throws {
         let domain = "test.rehydrate.missingfile.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: domain))
@@ -145,9 +152,11 @@ struct AppUpdaterBehaviorTests {
         #expect(defaults.string(forKey: keys.cachedUpdateZipPath) == nil)
     }
 
-    /// When a cached zip exists on disk but its version is no longer newer than
-    /// `currentVersion` (already installed), `rehydrateCachedUpdateIfNewer` must
-    /// NOT rehydrate or set an available-update label, and MUST clear the keys.
+    /// When a cached zip exists on disk but its version is not newer than
+    /// `currentVersion` — meaning the update was already installed — 
+    /// `rehydrateCachedUpdateIfNewer` must skip rehydration, leave the
+    /// available-update label unset, and clear both scoped keys so the
+    /// already-applied update is not offered again.
     @Test func rehydrateClearsWhenCachedVersionNotNewer() throws {
         let domain = "test.rehydrate.notnewer.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: domain))
