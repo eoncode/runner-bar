@@ -19,9 +19,12 @@ extension AppUpdater {
     /// ## Flow
     /// 1. Unzip the cached zip into a temporary directory via `/usr/bin/ditto`.
     /// 2. Locate the `.app` bundle inside the unzipped contents.
-    /// 3. Replace the running bundle via `FileManager.replaceItem` (atomic swap).
-    /// 4. Relaunch the new binary with `/usr/bin/open`.
-    /// 5. Terminate this process via `NSApp.terminate`.
+    /// 3. (Optional) If `skipCodeSignValidation` is `false`: verify that the
+    ///    running bundle and the downloaded bundle share the same `codesign`
+    ///    `Authority=` identity. A mismatch calls `setUpdateFailed()` and aborts.
+    /// 4. Replace the running bundle via `FileManager.replaceItem` (atomic swap).
+    /// 5. Relaunch the new binary with `/usr/bin/open`.
+    /// 6. Terminate this process via `NSApp.terminate`.
     ///
     /// On any failure the function calls `state.setUpdateFailed()` and returns
     /// without terminating — the user is left with the running version and the
@@ -114,7 +117,27 @@ extension AppUpdater {
             return
         }
 
-        // Steps 3+4+5: atomic bundle swap → clear cache → open -n → terminate.
+        // Step 3 (optional): code-sign identity verification.
+        // Only runs when skipCodeSignValidation = false (external signed consumers).
+        // Wrapped in #if canImport(AppKit) because Bundle.codeSigningIdentity()
+        // is defined in AppUpdater+CodeSign.swift which is also AppKit-gated.
+        #if canImport(AppKit)
+        if !skipCodeSignValidation {
+            let runningIdentity = await Bundle.main.codeSigningIdentity()
+            let updateIdentity = await Bundle(path: appInZip.path).codeSigningIdentity()
+            guard let runningIdentity,
+                  let updateIdentity,
+                  runningIdentity == updateIdentity else {
+                appUpdaterLogger.error("code-sign identity mismatch — aborting install")
+                isInstalling = false
+                state.setUpdateFailed()
+                try? FileManager.default.removeItem(at: tmpDir)
+                return
+            }
+        }
+        #endif
+
+        // Steps 4+5+6: atomic bundle swap → clear cache → open -n → terminate.
         await replaceAndRelaunch(
             appInZip: appInZip,
             bundleURL: bundleURL,

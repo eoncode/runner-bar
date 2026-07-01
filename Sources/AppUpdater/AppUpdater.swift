@@ -90,6 +90,35 @@ public final class AppUpdater {
     /// because tests inject via `init` directly.
     let provider: any ReleaseProvider
 
+    // MARK: - Trust model
+
+    /// When `false`, `installAndRelaunch` verifies that the running bundle and
+    /// the downloaded bundle share the same `codesign` `Authority=` identity
+    /// before performing the atomic bundle swap.
+    ///
+    /// Default `true` — RunBot's unsigned distribution model relies solely on
+    /// the SHA-256 sidecar for integrity. External consumers distributing
+    /// Developer ID-signed apps should set this to `false` so mismatched
+    /// signing identities (e.g. a compromised build pipeline) are caught before
+    /// the swap.
+    ///
+    /// ## Unsigned path (`skipCodeSignValidation = true`)
+    /// - Download integrity guaranteed by SHA-256 sidecar only.
+    /// - No `codesign` invocation on the downloaded bundle.
+    /// - Correct for apps distributed without a Developer ID signature.
+    ///
+    /// ## Signed path (`skipCodeSignValidation = false`)
+    /// - SHA-256 verification runs first (always).
+    /// - After checksum passes, `codesign -dvvv` is run on both the running
+    ///   bundle and the downloaded bundle.
+    /// - `Authority=` identity strings must match; a mismatch calls
+    ///   `setUpdateFailed()` and aborts the install.
+    /// - For external consumers distributing Developer ID-signed apps.
+    ///
+    /// REVIEWER: The default `true` is intentional for RunBot. Do NOT change
+    /// the default to `false` without updating the host's `AppDelegate` setup.
+    public var skipCodeSignValidation: Bool = true
+
     // MARK: - Runtime flags
 
     /// `true` while `installAndRelaunch` is mid-flight — guards a double-tap.
