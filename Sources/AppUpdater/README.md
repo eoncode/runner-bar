@@ -54,6 +54,23 @@ updater.scheduleBackgroundCheck(state: myState)       // daily background re-che
 await updater.installAndRelaunch(state: myState)
 ```
 
+## Choosing an entry point
+
+The library exposes two public entry-point shapes. Use `AppUpdater` for
+virtually every case; `UpdateChecker` is a narrow escape hatch.
+
+| | `AppUpdater.checkAndHandle(state:)` | `UpdateChecker.checkForUpdate(...)` |
+|---|---|---|
+| **What it does** | Full pipeline: check → download → cache → state mutation | Check only: returns a raw `UpdateCheckResult`; no download, no state |
+| **Requires `UpdateStateProviding`** | Yes | No |
+| **Works with `scheduleBackgroundCheck`** | Yes (designed for it) | No |
+| **Use when** | You want the complete update flow | You need to know whether an update exists without side effects — e.g. displaying a badge without triggering a download, or in a CLI tool that manages its own install step |
+
+If you find yourself calling `UpdateChecker.checkForUpdate` and then
+manually downloading the result, switch to `AppUpdater` instead — that
+pipeline is already implemented, tested, and handles the scheduler,
+cache, and failure paths for you.
+
 ## Trust model
 
 `AppUpdater` supports two distribution paths, controlled by the
