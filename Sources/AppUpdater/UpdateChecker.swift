@@ -42,7 +42,16 @@ public enum UpdateCheckResult: Sendable {
 
 public enum UpdateCheckError: Error, Sendable {
     case missingVersionKey
+    /// The releases API returned no releases, or the request/decode failed.
+    /// Distinct from `noChannelMatch` — this means we could not determine
+    /// the release list at all.
     case noReleasesFound
+    /// Releases were fetched and decoded successfully, but none of them
+    /// matched the requested channel (e.g. `betaChannel: false` and every
+    /// release on the repository is a pre-release). The caller is already on
+    /// the latest version they are eligible for; this is not an error in the
+    /// traditional sense and should be treated like `.upToDate` for UI purposes.
+    case noChannelMatch
 }
 
 // MARK: - UpdateChecker
@@ -98,7 +107,7 @@ public enum UpdateChecker {
     ///
     /// ## ⚠️ 100-release ceiling
     ///
-    /// `latestMatchingRelease` makes exactly one request with `per_page=100`.
+    /// `fetchAndDecodeReleases` makes exactly one request with `per_page=100`.
     /// If a repository has published more than 100 releases the oldest releases
     /// (by GitHub's default sort, newest first) are never seen. For most repos
     /// this is not a problem — the newest release is always in the first page.
@@ -120,12 +129,14 @@ public enum UpdateChecker {
         return request
     }
 
-    /// Fetches the releases list for `repo`, sorts by semver, and returns the
-    /// highest release matching `betaChannel`, or `nil` on any failure.
+    /// Fetches and decodes the releases list for `repo`.
     ///
-    /// Fetches at most 100 releases (one request, `per_page=100`). See
-    /// `buildRequest` for the 100-release ceiling caveat.
-    private static func latestMatchingRelease(repo: String, betaChannel: Bool) async -> Release? {
+    /// Returns `nil` on any network, HTTP, or JSON-decode failure. An empty
+    /// array means the repository exists but has no published releases.
+    /// This is intentionally separate from channel filtering — a `nil` return
+    /// here means "we could not determine the release list", whereas an empty
+    /// filtered result means "releases exist but none match the channel".
+    private static func fetchAndDecodeReleases(repo: String) async -> [Release]? {
         guard let request = buildRequest(repo: repo, perPage: 100) else { return nil }
 
         let sessionConfig = URLSessionConfiguration.ephemeral
@@ -142,8 +153,21 @@ public enum UpdateChecker {
             return nil
         }
 
-        guard let releases = try? JSONDecoder().decode([Release].self, from: data) else { return nil }
+        return try? JSONDecoder().decode([Release].self, from: data)
+    }
 
+    /// Sorts `releases` by semver (newest first) and returns the first entry
+    /// that matches `betaChannel`.
+    ///
+    /// Returns `nil` when no release matches the channel filter — i.e. the
+    /// caller is on the stable channel and every release is a pre-release.
+    /// This `nil` means **no channel match**, not a fetch failure; the two
+    /// cases are kept separate so callers can map them to different outcomes
+    /// (`.upToDate` vs `.failed`).
+    private static func latestMatchingRelease(
+        from releases: [Release],
+        betaChannel: Bool
+    ) -> Release? {
         let sorted = releases.sorted { isNewer($0.tagName, than: $1.tagName) }
         return sorted.first(where: { betaChannel ? true : !$0.prerelease })
     }
@@ -153,7 +177,8 @@ public enum UpdateChecker {
         betaChannel: Bool,
         assetName: (String) -> String
     ) async -> AvailableRelease? {
-        guard let latest = await latestMatchingRelease(repo: repo, betaChannel: betaChannel)
+        guard let releases = await fetchAndDecodeReleases(repo: repo) else { return nil }
+        guard let latest = latestMatchingRelease(from: releases, betaChannel: betaChannel)
         else { return nil }
         let checksumAssetName = assetName(latest.tagName) + ".sha256"
         let checksumAsset = latest.assets.first(where: { $0.name == checksumAssetName })
@@ -195,6 +220,20 @@ public enum UpdateChecker {
         return false
     }
 
+    /// Checks for an available update for `repo`.
+    ///
+    /// ## Return values
+    ///
+    /// - `.upToDate` — the latest eligible release is not newer than
+    ///   `currentVersion`, **or** releases were fetched successfully but none
+    ///   matched the requested channel (e.g. `betaChannel: false` and the
+    ///   repository only has pre-releases). In both cases the caller is already
+    ///   on the latest version they are eligible for.
+    /// - `.updateAvailable` — a newer eligible release was found.
+    /// - `.failed(.missingVersionKey)` — `currentVersion` is empty.
+    /// - `.failed(.noReleasesFound)` — the releases API request failed, the
+    ///   HTTP response was non-200, or the response body could not be decoded.
+    ///   This does **not** mean "no channel match" — see `.upToDate` above.
     public static func checkForUpdate(
         repo: String,
         currentVersion: String,
@@ -204,16 +243,29 @@ public enum UpdateChecker {
         guard !currentVersion.isEmpty else {
             return .failed(UpdateCheckError.missingVersionKey)
         }
-        guard let release = await fetchLatestAvailableRelease(
-            repo: repo,
-            betaChannel: betaChannel,
-            assetName: assetName
-        ) else {
+
+        // Step 1: fetch and decode. nil here means a genuine fetch/decode failure.
+        guard let releases = await fetchAndDecodeReleases(repo: repo) else {
             return .failed(UpdateCheckError.noReleasesFound)
         }
-        guard isNewer(release.tagName, than: currentVersion) else {
+
+        // Step 2: filter by channel. nil here means releases exist but none
+        // match the channel — the user is already on the latest eligible version.
+        guard let release = latestMatchingRelease(from: releases, betaChannel: betaChannel) else {
             return .upToDate
         }
-        return .updateAvailable(release: release)
+
+        let checksumAssetName = assetName(release.tagName) + ".sha256"
+        let checksumAsset = release.assets.first(where: { $0.name == checksumAssetName })
+        let availableRelease = AvailableRelease(
+            tagName: release.tagName,
+            assets: release.assets,
+            checksumURL: checksumAsset?.browserDownloadURL
+        )
+
+        guard isNewer(availableRelease.tagName, than: currentVersion) else {
+            return .upToDate
+        }
+        return .updateAvailable(release: availableRelease)
     }
 }
