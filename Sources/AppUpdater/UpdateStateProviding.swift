@@ -123,6 +123,8 @@ public protocol UpdateStateProviding: AnyObject, Sendable {
 
 // MARK: - Default implementations
 
+/// Default implementations for optional `UpdateStateProviding` requirements.
+/// Conformers may override any of these to customise behaviour.
 public extension UpdateStateProviding {
 
     /// Default implementation: delegates to `setDownloadStarted()` because the
