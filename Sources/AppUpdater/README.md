@@ -54,6 +54,61 @@ updater.scheduleBackgroundCheck(state: myState)       // daily background re-che
 await updater.installAndRelaunch(state: myState)
 ```
 
+## Trust model
+
+`AppUpdater` supports two distribution paths, controlled by the
+`skipCodeSignValidation` flag on `AppUpdater`.
+
+### Unsigned path — `skipCodeSignValidation = true` (default, RunBot)
+
+Download integrity is guaranteed by the SHA-256 sidecar only:
+
+- The release zip is downloaded and verified against the `.sha256` sidecar asset.
+- No `codesign` invocation is performed on the downloaded bundle.
+- The atomic bundle swap proceeds immediately after checksum verification passes.
+- **Correct for apps distributed without a Developer ID signature.** RunBot is
+  ad-hoc signed (no Developer ID, no notarisation), so Gatekeeper cannot validate
+  a codesign identity — skipping the check is both safe and required.
+
+```swift
+let updater = AppUpdater(
+    repo: "your-org/your-repo",
+    currentVersion: "1.2.3",
+    assetName: { _ in "YourApp.zip" },
+    schedulerIdentifier: "com.your-org.update-check"
+)
+// skipCodeSignValidation defaults to true — no extra configuration needed
+```
+
+### Signed path — `skipCodeSignValidation = false` (external signed consumers)
+
+For apps distributed with a Developer ID signature, enable identity verification:
+
+1. **SHA-256 verification** runs first (always). A checksum mismatch aborts the
+   install before any codesign check is attempted.
+2. **`codesign -dvvv`** is run on both the running bundle (`Bundle.main`) and the
+   freshly unzipped candidate bundle.
+3. The `Authority=` identity strings (leaf certificate common name, e.g.
+   `"Developer ID Application: Acme Corp (XXXXXXXX)"`) must match exactly.
+4. A mismatch calls `state.setUpdateFailed()` and aborts the install. No bundle
+   swap is performed.
+
+```swift
+let updater = AppUpdater(
+    repo: "your-org/your-repo",
+    currentVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+    assetName: { _ in "YourApp.zip" },
+    schedulerIdentifier: "com.your-org.update-check"
+)
+updater.skipCodeSignValidation = false // enable identity check for Developer ID builds
+```
+
+> **Why `codesign -dvvv` instead of the Security framework?**
+> The subprocess approach avoids Hardened Runtime entitlement requirements and
+> produces the same `Authority=` string that developers already see in Console.app.
+> `SecCode`/`SecRequirement` would require additional entitlements and add
+> framework complexity for equivalent security guarantees.
+
 ## Distribution assumptions
 
 - The release archive carries exactly one `.app` at its root.
