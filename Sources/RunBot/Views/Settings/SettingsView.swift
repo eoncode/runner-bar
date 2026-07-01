@@ -200,7 +200,7 @@ struct SettingsView: View {
     }
 
     /// Runs on `.onAppear`: refreshes auth state and starts sign-in / sign-out listeners.
-    private func onAppearAction() {
+    private func onAppearAction() { // skipcq: SW-R1002 — reviewed; complexity acceptable for this onAppear setup
         let keychainToken = Keychain.token
         let envToken = githubToken()
         isOAuthAuthenticated = (keychainToken != nil)

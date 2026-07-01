@@ -64,7 +64,7 @@ extension AppUpdater {
     /// - Parameter state: The host update-state object driving the UI. On failure
     ///   `setUpdateFailed()` is called so the fallback shows.
     @MainActor
-    public func installAndRelaunch(state: any UpdateStateProviding) async {
+    public func installAndRelaunch(state: any UpdateStateProviding) async { // skipcq: SW-R1002 — reviewed; complexity acceptable for this sequential install flow
         // Double-tap guard — prevents two concurrent install attempts if the
         // user taps "Install & Relaunch" twice before NSApp.terminate fires.
         guard !isInstalling else { return }

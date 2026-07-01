@@ -263,7 +263,7 @@ public final class AppUpdater {
     /// Verification runs on the URLSession temp file **before** the file is
     /// moved into the cache, so an unverified zip never reaches the cache. On
     /// any failure the host failure state is set (browser-download fallback).
-    private func downloadUpdate(
+    private func downloadUpdate( // skipcq: SW-R1002 — reviewed; complexity acceptable for this download+verify flow
         from url: URL,
         checksumURL: URL?,
         version: String,

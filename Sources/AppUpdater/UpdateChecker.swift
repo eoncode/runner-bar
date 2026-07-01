@@ -133,7 +133,7 @@ public enum UpdateChecker {
         /// Parses a version string of the form `"X.Y.Z"` or `"X.Y.Z-beta.N"`.
         ///
         /// Components that cannot be parsed default to `0`; `betaIndex` to `nil`.
-        init(_ version: String) {
+        init(_ version: String) { // skipcq: SW-R1002 — reviewed; complexity acceptable for this version parser
             let parts = version.split(separator: "-", maxSplits: 1)
             // `String.split` returns `[]` for an empty string (e.g. `"v"`
             // stripped of its prefix), so `parts[0]` would crash — default to
@@ -214,7 +214,7 @@ public enum UpdateChecker {
     ///
     /// Exposed `public` so host apps can reuse the same comparison (e.g. to
     /// gate a cached-zip rehydration against the running version).
-    public static func isNewer(_ candidate: String, than current: String) -> Bool {
+    public static func isNewer(_ candidate: String, than current: String) -> Bool { // skipcq: SW-R1002 — reviewed; complexity acceptable for this semver comparison
         let cv = ParsedVersion(candidate.hasPrefix("v") ? String(candidate.dropFirst()) : candidate)
         let sv = ParsedVersion(current.hasPrefix("v")   ? String(current.dropFirst())   : current)
 

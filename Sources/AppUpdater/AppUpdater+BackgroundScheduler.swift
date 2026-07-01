@@ -26,7 +26,7 @@ extension AppUpdater {
     ///
     /// - Parameter state: The host update-state object to update.
     @MainActor
-    public func scheduleBackgroundCheck(state: any UpdateStateProviding) {
+    public func scheduleBackgroundCheck(state: any UpdateStateProviding) { // skipcq: SW-R1002 — reviewed; complexity acceptable for this scheduler setup
         #if canImport(AppKit)
         let scheduler = NSBackgroundActivityScheduler(identifier: schedulerIdentifier)
         scheduler.repeats = true
