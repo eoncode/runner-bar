@@ -275,14 +275,14 @@ jobs:
           echo "zip_path=$ZIP" >> "$GITHUB_OUTPUT"
 
       # ── Generate SHA-256 sidecar ───────────────────────────────────────────
-      # AutoUpdater.downloadUpdate fetches checksumURL from the release assets
+      # AppUpdater.downloadUpdate fetches checksumURL from the release assets
       # and treats a missing sidecar as a hard failure (URLError.resourceUnavailable),
       # falling back to the browser Download button for every user. This step
       # generates RunBot.zip.sha256 and passes its path to the release step so
       # it is uploaded alongside the zip. The sidecar format is:
       #   <hex-digest>  RunBot.zip
       # which matches the output of `shasum -a 256` and is what verifyChecksum
-      # in AutoUpdater.swift parses (splits on whitespace, takes first token).
+      # in AppUpdater+Checksum.swift parses (splits on whitespace, takes first token).
       - name: Generate SHA-256 sidecar
         id: checksum
         run: |
@@ -290,7 +290,7 @@ jobs:
           ZIP="${{ steps.verify.outputs.zip_path }}"
           SIDECAR="${ZIP}.sha256"
           # shasum -a 256 produces "<hex>  <filename>" — the two-space separator
-          # is intentional (BSD shasum convention). AutoUpdater.swift splits on
+          # is intentional (BSD shasum convention). AppUpdater+Checksum.swift splits on
           # whitespace and takes the first token, so single- or double-space both work.
           /usr/bin/shasum -a 256 "$ZIP" > "$SIDECAR"
           echo "SHA-256 sidecar: $(cat $SIDECAR)"
@@ -316,7 +316,7 @@ jobs:
       # ── Create GitHub Release ─────────────────────────────────────────────
       # Both the zip and the .sha256 sidecar are uploaded as release assets.
       # UpdateChecker decodes checksumURL from the asset list by matching the
-      # ".sha256" suffix; AutoUpdater.downloadUpdate fetches it and passes the
+      # ".sha256" suffix; AppUpdater.downloadUpdate fetches it and passes the
       # hex digest to verifyChecksum. Omitting the sidecar here would cause
       # checksumURL to be nil, which downloadUpdate treats as a hard failure,
       # leaving every user on the browser Download fallback permanently.

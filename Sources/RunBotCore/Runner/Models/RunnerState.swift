@@ -18,8 +18,10 @@ import Observation
 /// `{ get set }` requirement — see `RunnerViewModelProtocol` for the rationale.
 /// Only `LocalRunnerStore` (in `RunBotCore`) writes them in practice.
 /// The auto-update download properties (`updateZipURL`, `cachedUpdateVersion`,
-/// `updateAssetMissing`, `updateActionFailed`) are `public internal(set)` — only
-/// `AutoUpdater` (same `RunBotCore` module) writes them via `await MainActor.run`.
+/// `updateAssetMissing`, `updateActionFailed`) are `public internal(set)` for
+/// reads, but are written by `AppUpdater` (in the `AppUpdater` module) through
+/// the `UpdateStateProviding` mutation methods below. `RunnerState` conforms to
+/// that protocol in `RunnerState+AppUpdater.swift`.
 /// Views and app-layer code are read-only consumers of all properties.
 @Observable
 @MainActor
@@ -89,7 +91,7 @@ public final class RunnerState {
     /// default argument fails to compile.
     public init() {}
 
-    // MARK: - Auto-update state (pushed by AutoUpdater)
+    // MARK: - Auto-update state (driven by AppUpdater via UpdateStateProviding)
 
     /// The latest available version string if a newer version exists, or `nil` if
     /// up to date.
@@ -99,9 +101,9 @@ public final class RunnerState {
 
     /// Sets `availableUpdate`.
     ///
-    /// Called from `AutoUpdater.handle(_:state:)` on every `.updateAvailable` result
+    /// Called from `AppUpdater.handle(_:state:)` on every `.updateAvailable` result
     /// (including the launch-time check in `AppDelegate+PanelSetup`) and from
-    /// `AutoUpdater.scheduleBackgroundCheck` to clear a stale row on `.upToDate`
+    /// `AppUpdater.scheduleBackgroundCheck` to clear a stale row on `.upToDate`
     /// or `.failed` results (when no zip is cached).
     ///
     /// Using an explicit method (rather than direct property assignment) keeps
@@ -113,7 +115,7 @@ public final class RunnerState {
     /// Local file URL of the cached `RunBot-update.zip`, or `nil` while the
     /// download is in progress or has not started yet.
     ///
-    /// The Install & Relaunch button is shown only when this is non-`nil`.
+    /// The Install & Relaunch button is shown only when this is non-nil.
     public internal(set) var updateZipURL: URL?
 
     /// Version string of the cached update zip (e.g. `"v0.8.0"`), or `nil`
@@ -122,22 +124,77 @@ public final class RunnerState {
 
     /// Rehydrates cached download state from `UserDefaults` on startup.
     ///
-    /// Called by `AppDelegate+PanelSetup` after verifying that the cached zip
-    /// still exists on disk and the cached version is newer than the installed app.
+    /// Called by `AppUpdater.rehydrateCachedUpdateIfNewer` after verifying the
+    /// cached zip still exists on disk and its version is newer than the running
+    /// app. Clears any stale `updateActionFailed` / `updateAssetMissing` flags
+    /// from a prior session so a ready-to-install cached update is not masked by
+    /// the curl fallback.
     public func rehydrateCachedUpdate(zipURL: URL, version: String) {
         updateZipURL = zipURL
         cachedUpdateVersion = version
+        updateActionFailed = false
+        updateAssetMissing = false
+    }
+
+    /// Moves to the "downloading" state: clears any cached zip URL / version and
+    /// both fallback flags so the host shows a spinner while the new zip downloads.
+    ///
+    /// Do NOT call this from `clearDownloadState()`. The two methods share the same
+    /// field-nil operations but carry different semantics: `setDownloadStarted()`
+    /// signals that a spinner should appear; `clearDownloadState()` signals that
+    /// stale zip state should be cleared without starting a spinner. The explicit
+    /// override of `clearDownloadState()` in `RunnerState+AppUpdater.swift`
+    /// duplicates these field assignments intentionally to preserve that distinction.
+    public func setDownloadStarted() {
+        updateZipURL = nil
+        cachedUpdateVersion = nil
+        updateActionFailed = false
+        updateAssetMissing = false
+    }
+
+    /// Records a completed, integrity-verified download. The zip is cached at
+    /// `zipURL` for `version`; clears the failure flag so the install
+    /// affordance is shown.
+    public func setDownloadComplete(zipURL: URL, version: String) {
+        updateZipURL = zipURL
+        cachedUpdateVersion = version
+        updateActionFailed = false
+    }
+
+    /// Flags a failed download or install attempt so the curl-install fallback
+    /// is shown. Also clears `updateAssetMissing` to avoid a simultaneous
+    /// dual-failure state: if a prior session left `updateAssetMissing = true`
+    /// and the current session fails a download, both flags would otherwise be
+    /// `true` simultaneously.
+    public func setUpdateFailed() {
+        updateActionFailed = true
+        updateAssetMissing = false
+    }
+
+    /// Flags that the discovered release carries no matching asset, so the
+    /// curl-install fallback is shown. Also clears `updateActionFailed` to
+    /// avoid a simultaneous dual-failure state: if a prior session left
+    /// `updateActionFailed = true` and the current release has no asset,
+    /// both flags would otherwise be `true` simultaneously.
+    public func setAssetMissing() {
+        updateAssetMissing = true
+        updateActionFailed = false
     }
 
     /// `true` when the latest release exists but its `RunBot.zip` asset is absent.
     ///
-    /// When `true` the UI falls back to a **Download** button that opens the
-    /// releases page in the browser instead of triggering an in-app install.
+    /// Set via `setAssetMissing()` when `AppUpdater.handle(_:state:)` finds no
+    /// matching asset; cleared by `setDownloadStarted()` (a fresh download began,
+    /// so the asset is now present), `setUpdateFailed()` (a download/install
+    /// failure supersedes the asset-missing signal), and
+    /// `rehydrateCachedUpdate(zipURL:version:)` (a cached zip exists, which is
+    /// mutually exclusive with a missing asset).
+    /// When `true` the UI falls back to a **Download** button that surfaces the
+    /// curl install command.
     public internal(set) var updateAssetMissing: Bool = false
 
     /// `true` when a download **or** an install attempt has failed.
     ///
-    /// The Download fallback button is shown whenever
-    /// `updateAssetMissing || updateActionFailed`.
+    /// The curl fallback is shown whenever `updateAssetMissing || updateActionFailed`.
     public internal(set) var updateActionFailed: Bool = false
 }
