@@ -282,7 +282,9 @@ internal extension SettingsView {
             Spacer()
             if runnerState.updateAssetMissing || runnerState.updateActionFailed {
                 Button("Download") {
-                    guard let url = URL(string: "https://github.com/runbot-hq/run-bot/releases/latest") else {
+                    // URL is derived from autoUpdater.repo so it stays correct
+                    // if the repository slug ever changes.
+                    guard let url = URL(string: "https://github.com/\(autoUpdater.repo)/releases/latest") else {
                         return
                     }
                     NSWorkspace.shared.open(url)

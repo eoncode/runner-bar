@@ -214,10 +214,12 @@ public final class AppUpdater {
     /// 3. Otherwise starts a background download; the host state is updated on
     ///    the main actor when it completes.
     ///
-    /// The visible version label is set first so the host is never in a state
-    /// where a cached zip is present but no version label is shown.
+    /// `setAvailableUpdate` is called AFTER the `isDownloading` guard (step 3)
+    /// so the version label and the cached zip always agree. Calling it before
+    /// the guard would let the label advance to a newer version while the
+    /// in-flight download completes for an older one — a stale label until the
+    /// next check cycle.
     public func handle(_ release: AvailableRelease, state: any UpdateStateProviding) async {
-        state.setAvailableUpdate(release.tagName)
 
         // ── 1. Already cached? ──────────────────────────────────────────────
         let cachedVersion = defaults.string(forKey: keys.cachedUpdateVersion)
@@ -226,6 +228,7 @@ public final class AppUpdater {
             if FileManager.default.fileExists(atPath: path) {
                 // `rehydrateCachedUpdate` sets the zip URL + version and clears
                 // any stale failure flag from a prior session.
+                state.setAvailableUpdate(release.tagName)
                 state.rehydrateCachedUpdate(zipURL: URL(fileURLWithPath: path), version: cachedVersion)
                 return
             }
@@ -243,6 +246,7 @@ public final class AppUpdater {
         // preserves the more precise reason for the host UI.
         let wantedAsset = assetName(release.tagName)
         guard let asset = release.assets.first(where: { $0.name == wantedAsset }) else {
+            state.setAvailableUpdate(release.tagName)
             state.setAssetMissing()
             return
         }
@@ -254,8 +258,18 @@ public final class AppUpdater {
         // isDownloading is true a prior failure cannot be pending (the failure
         // path clears the flag atomically with setUpdateFailed), so returning
         // early here leaves no stale state to reconcile.
+        //
+        // setAvailableUpdate is intentionally NOT called before this guard.
+        // If it were, a background scheduler firing during a v1.1.0 download
+        // with v1.2.0 now available would advance the label to v1.2.0 while
+        // the zip that lands is v1.1.0 — stale label until the next cycle.
+        // Calling it only on the path that proceeds to a new download ensures
+        // the label and the zip always agree.
         guard !isDownloading else { return }
         isDownloading = true
+
+        // Label and download now start together — they will always agree.
+        state.setAvailableUpdate(release.tagName)
 
         // ── 3b. Move to downloading state ───────────────────────────────────
         // clearCachedDefaults() is called explicitly here BEFORE
