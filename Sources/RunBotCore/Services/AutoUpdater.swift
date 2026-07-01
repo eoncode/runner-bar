@@ -19,13 +19,14 @@ import Foundation
 /// ```
 /// // In AppDelegate+PanelSetup, after UpdateChecker resolves:
 /// case .updateAvailable(let release):
-///     runnerState.setAvailableUpdate(release.tagName)
 ///     await AutoUpdater.handle(release, state: runnerState)
 /// ```
 ///
-/// `handle` returns immediately after starting the download task — it does
-/// not await the download itself. The download runs on a detached `Task` so
-/// it does not block the startup sequence.
+/// `handle` sets `runnerState.availableUpdate` internally before starting
+/// the background download — callers must not call `setAvailableUpdate`
+/// themselves. `handle` returns immediately after starting the download
+/// task — it does not await the download itself. The download runs on a
+/// detached `Task` so it does not block the startup sequence.
 ///
 /// ## ⚠️ type_body_length — NOT a lint violation, do not split this file ⚠️
 ///
